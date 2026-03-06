@@ -305,7 +305,7 @@ setPast(format(pastFeatured).slice(0, 3));      // Shows up to 3
           <div className="max-w-7xl mx-auto px-4 sm:px-6 relative z-20">
             <div className="flex justify-between items-end mb-10 sm:mb-20">
               <h2 className="text-4xl sm:text-5xl md:text-7xl font-black uppercase italic tracking-tighter text-white drop-shadow-2xl">
-                Event <span className="text-brandRed">Glimpse Test</span>
+                Event <span className="text-brandRed">Glimpse</span>
               </h2>
               <Link href="/events" className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500 hover:text-brandRed transition-all whitespace-nowrap ml-4">
                 View All Series
