@@ -12,7 +12,7 @@ export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
-
+  const [hasUpcoming, setHasUpcoming] = useState(false);
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -34,6 +34,19 @@ export default function Navbar() {
       subscription.unsubscribe();
     };
   }, [supabase]);
+
+  useEffect(() => {
+    const checkEvents = async () => {
+      try {
+        const res = await fetch('/api/events/manage'); // Calling the GET method we added
+        const data = await res.json();
+        setHasUpcoming(data.hasUpcoming);
+      } catch (e) {
+        console.error("Signal check failed");
+      }
+    };
+    checkEvents();
+  }, []);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -88,6 +101,13 @@ export default function Navbar() {
                   }`}>
                     {link.name}
                   </span>
+                  {/* DYNAMIC NOTIFICATION DOT */}
+      {link.name === 'Events' && hasUpcoming && (
+        <span className="absolute -top-0.5 -right-2 flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brandRed opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-brandRed shadow-[0_0_10px_#FF0000]"></span>
+        </span>
+      )}
                   {isActive && (
                     <motion.div
                       layoutId="activeTab"
@@ -201,6 +221,14 @@ export default function Navbar() {
                       }`}
                     >
                       {link.name.toUpperCase()}
+                     {/* GLOWING LINE INDICATOR FOR MOBILE */}
+  {link.name === 'Events' && hasUpcoming && (
+    <motion.div 
+      animate={{ opacity: [0.4, 1, 0.4] }}
+      transition={{ duration: 2, repeat: Infinity }}
+      className="w-8 h-[2px] bg-brandRed shadow-[0_0_8px_#FF0000]" 
+    />
+  )}
                     </Link>
                   );
                 })}

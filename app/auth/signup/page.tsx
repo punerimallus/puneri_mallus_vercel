@@ -50,7 +50,7 @@ export default function SignupPage() {
 
   const maxDobDate = useMemo(() => {
     const date = new Date();
-    date.setFullYear(date.getFullYear() - 18);
+    date.setFullYear(date.getFullYear() - 16);
     return date.toISOString().split("T")[0];
   }, []);
 
@@ -63,7 +63,7 @@ export default function SignupPage() {
     if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
       age--;
     }
-    return age >= 18;
+    return age >= 16;
   }, [dob]);
 
   useEffect(() => {
@@ -82,7 +82,7 @@ export default function SignupPage() {
     e.preventDefault();
 
     if (step === 1 && dob && !isAdult) {
-      setMessage("MEMBERSHIP DENIED: YOU MUST BE 18+ TO JOIN.");
+      setMessage("MEMBERSHIP DENIED: YOU MUST BE 16+ TO JOIN.");
       return;
     }
 
@@ -108,8 +108,8 @@ export default function SignupPage() {
 
       if (error) {
         // CATCHING TRIGGER EXCEPTION: If the Supabase trigger returns an age error
-        if (error.message.toLowerCase().includes("18") || error.message.toLowerCase().includes("denied")) {
-          setMessage("MEMBERSHIP DENIED: AGE MUST BE 18 OR OLDER.");
+        if (error.message.toLowerCase().includes("16") || error.message.toLowerCase().includes("denied")) {
+          setMessage("MEMBERSHIP DENIED: AGE MUST BE 16 OR OLDER.");
         } else {
           setMessage(error.message);
         }
@@ -282,7 +282,7 @@ export default function SignupPage() {
               {!isAdult && dob && (
                 <div className="flex flex-col items-center gap-1 animate-pulse">
                   <p className="text-[8px] font-black uppercase text-center text-brandRed tracking-widest">
-                    Restricted: Age must be 18+
+                    Restricted: Age must be 16+
                   </p>
                   <div className="h-[1px] w-12 bg-brandRed/30" />
                 </div>
