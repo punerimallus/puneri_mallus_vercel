@@ -28,6 +28,10 @@ export default function SignupPage() {
   const [timer, setTimer] = useState(0);
   const dateInputRef = useRef<HTMLInputElement>(null);
 
+  // Validation Logic
+  const isPhoneValid = useMemo(() => phone.length === 10, [phone]);
+  const showPhoneError = useMemo(() => phone.length > 0 && phone.length < 10, [phone]);
+
   const PUNE_AREAS = [
     "Pune", "Shivajinagar", "Kothrud", "Karve Nagar", "Erandwane", "Deccan", 
     "Sadashiv Peth", "Swargate", "Bibwewadi", "Dhankawadi", "Sahakar Nagar", 
@@ -81,6 +85,11 @@ export default function SignupPage() {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!isPhoneValid) {
+      setMessage("INVALID PHONE: 10 DIGITS REQUIRED");
+      return;
+    }
+
     if (step === 1 && dob && !isAdult) {
       setMessage("MEMBERSHIP DENIED: YOU MUST BE 16+ TO JOIN.");
       return;
@@ -107,7 +116,6 @@ export default function SignupPage() {
       });
 
       if (error) {
-        // CATCHING TRIGGER EXCEPTION: If the Supabase trigger returns an age error
         if (error.message.toLowerCase().includes("16") || error.message.toLowerCase().includes("denied")) {
           setMessage("MEMBERSHIP DENIED: AGE MUST BE 16 OR OLDER.");
         } else {
@@ -129,8 +137,7 @@ export default function SignupPage() {
   };
 
   return (
-    // UPDATED: Changed items-center to items-end and added pb-12 to push the card down
-    <div className="min-h-screen bg-black flex items-end justify-center p-6 pb-12 relative overflow-hidden">
+    <div className="min-h-screen bg-black flex items-center justify-center p-6 pt-32 pb-12 relative overflow-hidden">
       
       <div className="absolute inset-0 z-0 flex items-center justify-center">
         <Image 
@@ -218,20 +225,27 @@ export default function SignupPage() {
                       className="w-full bg-black border border-white/10 p-4 pl-11 rounded-xl font-bold text-[11px] tracking-widest focus:border-brandRed transition-all outline-none text-white appearance-none cursor-pointer"
                       value={location} onChange={(e) => setLocation(e.target.value)}
                     >
-                      <option value="" disabled className="bg-zinc-900">SELECT PUNE AREA</option>
+                      <option value="" disabled className="bg-zinc-900">SELECT AREA</option>
                       {PUNE_AREAS.map(area => (
                         <option key={area} value={area} className="bg-zinc-900">{area}</option>
                       ))}
                     </select>
                   </div>
 
-                  <div className="relative group">
-                    <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={14} />
-                    <input 
-                      type="tel" placeholder="PHONE NUMBER" required
-                      className="w-full bg-black/40 border border-white/10 p-4 pl-11 rounded-xl font-bold text-[11px] tracking-widest focus:border-brandRed transition-all outline-none text-white"
-                      value={phone} onChange={(e) => setPhone(e.target.value)}
-                    />
+                  <div className="space-y-1.5">
+                    <div className="relative group">
+                        <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={14} />
+                        <input 
+                        type="tel" placeholder="PHONE NUMBER" required maxLength={10}
+                        className={`w-full bg-black/40 border p-4 pl-11 rounded-xl font-bold text-[11px] tracking-widest focus:border-brandRed transition-all outline-none text-white ${showPhoneError ? 'border-brandRed/50' : 'border-white/10'}`}
+                        value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
+                        />
+                    </div>
+                    {showPhoneError && (
+                        <p className="text-[8px] font-black uppercase text-brandRed tracking-widest ml-4 animate-pulse">
+                        Invalid Number: 10 Digits Required
+                        </p>
+                    )}
                   </div>
 
                   <div className="relative group">
@@ -272,7 +286,6 @@ export default function SignupPage() {
                 </div>
               )}
 
-              {/* DYNAMIC ERROR/SUCCESS MESSAGE */}
               {message && (
                 <p className={`text-[9px] font-black uppercase text-center py-2 px-4 rounded-lg bg-black/50 border ${message.includes('SUCCESSFUL') ? 'text-green-500 border-green-500/20' : 'text-brandRed border-brandRed/20'}`}>
                   {message}
@@ -289,9 +302,9 @@ export default function SignupPage() {
               )}
 
               <button 
-                disabled={Boolean(loading || (step === 1 && dob && !isAdult))} 
+                disabled={Boolean(loading || (step === 1 && dob && !isAdult) || (phone.length > 0 && !isPhoneValid))} 
                 className={`w-full py-4 text-white font-black uppercase tracking-[0.3em] rounded-xl transition-all shadow-xl active:scale-95 text-[10px] flex items-center justify-center gap-2 mt-4 ${
-                  (step === 1 && dob && !isAdult) ? "bg-zinc-800 cursor-not-allowed opacity-50" : "bg-brandRed hover:bg-white hover:text-black"
+                  (loading || (step === 1 && dob && !isAdult) || (phone.length > 0 && !isPhoneValid)) ? "bg-zinc-800 cursor-not-allowed opacity-50" : "bg-brandRed hover:bg-white hover:text-black"
                 }`}
               >
                 {loading ? 'Processing...' : step === 1 ? 'Tap to Verify' : 'Join Tribe'} <ArrowRight size={14} />

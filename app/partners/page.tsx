@@ -55,18 +55,18 @@ export default function PartnersPage() {
   return (
     <div className="min-h-screen bg-[#030303] text-white relative selection:bg-brandRed/30 overflow-x-hidden">
       
-      {/* 1. FIXED BRANDED BACKGROUND */}
-      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden bg-[#030303]">
+      {/* 1. FIXED BRANDED BACKGROUND - OPACITY INCREASED */}
+      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden bg-black">
         <Image 
           src="/events/main3.jpg" 
           alt="Branded Atmosphere"
           fill
           priority
-          className="object-cover object-center opacity-[0.28] brightness-[0.85] saturate-[1.1] contrast-[1.05]" 
+          className="object-cover object-center opacity-[0.45] brightness-[1.1] saturate-[1.2] contrast-[1.1]" 
         />
         <div className="absolute inset-0 bg-gradient-radial from-transparent via-zinc-950/20 to-[#030303] z-[1]" />
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#030303] z-[1]" />
-        <div className="absolute inset-0 opacity-[0.03] bg-[url('https://grainy-gradients.vercel.app/noise.svg')] mix-blend-overlay z-[2]" />
+        <div className="absolute inset-0 opacity-[0.04] bg-[url('https://grainy-gradients.vercel.app/noise.svg')] mix-blend-overlay z-[2]" />
       </div>
 
       <div className="max-w-7xl mx-auto relative z-10 pt-40 pb-20 px-6">

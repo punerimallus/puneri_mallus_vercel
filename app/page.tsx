@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { 
@@ -44,21 +44,19 @@ export default function Home() {
         }
 
         const upcomingNodes = allEvents
-  .filter((e: any) => e.isUpcoming === true && e.featured === true)
-  // Sort by date so the closest event appears first
-  .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+          .filter((e: any) => e.isUpcoming === true && e.featured === true)
+          .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-const pastFeatured = allEvents
-  .filter((e: any) => e.isUpcoming === false && e.featured === true);
+        const pastFeatured = allEvents
+          .filter((e: any) => e.isUpcoming === false && e.featured === true);
 
-const format = (list: any[]) => list.map(e => ({ 
-  ...e, 
-  id: e._id || e.id
-}));
+        const format = (list: any[]) => list.map(e => ({ 
+          ...e, 
+          id: e._id || e.id
+        }));
 
-// 2. Apply the specific limits for the Home Page layout
-setUpcoming(format(upcomingNodes).slice(0, 2)); // Now shows up to 2
-setPast(format(pastFeatured).slice(0, 3));      // Shows up to 3
+        setUpcoming(format(upcomingNodes).slice(0, 2));
+        setPast(format(pastFeatured).slice(0, 3));
 
       } catch (err) {
         console.error("Pulse Link Interrupted:", err);
@@ -91,76 +89,74 @@ setPast(format(pastFeatured).slice(0, 3));      // Shows up to 3
   return (
     <div className="flex flex-col min-h-screen bg-[#030303] text-white selection:bg-brandRed/30 relative overflow-x-hidden w-full">
       
-      {/* 1. FIXED BRANDED BACKGROUND - PINNED TO GLASS */}
-<div className="fixed inset-0 z-0 pointer-events-none overflow-hidden bg-black">
-  <Image 
-    src="/events/main4.jpg" 
-    alt="Branded Atmosphere"
-    fill
-    priority
-    className="object-cover object-center opacity-[0.28] brightness-[0.85] saturate-[1.1] contrast-[1.05]" 
-  />
-  
-  {/* Subtle Vignette to blend into the bottom of the page */}
-  <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#030303] z-[1]" />
-  
-  {/* Noise Texture */}
-  <div className="absolute inset-0 opacity-[0.03] bg-[url('https://grainy-gradients.vercel.app/noise.svg')] mix-blend-overlay z-[2]" />
-</div>
+      {/* 1. FIXED BRANDED BACKGROUND - OPACITY INCREASED */}
+      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden bg-black">
+        <Image 
+          src="/events/main4.jpg" 
+          alt="Branded Atmosphere"
+          fill
+          priority
+          className="object-cover object-center opacity-[0.45] brightness-[1.1] saturate-[1.2] contrast-[1.1]" 
+        />
+        
+        {/* Lighter Gradient for more visibility */}
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#030303]/80 z-[1]" />
+        
+        <div className="absolute inset-0 opacity-[0.04] bg-[url('https://grainy-gradients.vercel.app/noise.svg')] mix-blend-overlay z-[2]" />
+      </div>
+
       <div className="relative z-10">
         
         {/* HERO SECTION */}
         <section className="relative h-screen w-full overflow-hidden bg-[#030303] z-20 flex flex-col items-center justify-center">
           {slides.length > 0 ? (
             slides.map((slide, index) => (
-  <div 
-    key={index} 
-    className={`absolute inset-0 transition-all duration-1000 ease-in-out 
-      ${index === currentSlide 
-        ? 'opacity-100 scale-100 z-20 pointer-events-auto' 
-        : 'opacity-0 scale-110 z-0 pointer-events-none'
-      }`}
-  >
-    {/* BACKGROUND MEDIA LAYER */}
-    <div className="absolute inset-0 z-0">
-      {isVideo(slide.mediaUrl) ? (
-        <video 
-          autoPlay 
-          loop 
-          muted 
-          playsInline 
-          className="w-full h-full object-cover transition-opacity duration-700"
-          
-          style={{ 
-            opacity: (slide.visibility || 60) / 100, 
-            objectPosition: `50% ${slide.vOffset || 50}%` 
-          }}
-        >
-          <source src={slide.mediaUrl} type="video/mp4" />
-        </video>
-      ) : (
-        <Image 
-          src={slide.mediaUrl} 
-          alt="Slide" 
-          fill 
-          
-          className="object-cover transition-opacity duration-700" 
-          style={{ 
-            opacity: (slide.visibility || 60) / 100, 
-            objectPosition: `50% ${slide.vOffset || 50}%` 
-          }}
-          priority={index === 0} 
-        />
-      )}
-      {/* GRADIENT OVERLAY (Keep this to ensure text contrast) */}
-      <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black z-10" />
-    </div>
+              <div 
+                key={index} 
+                className={`absolute inset-0 transition-all duration-1000 ease-in-out 
+                  ${index === currentSlide 
+                    ? 'opacity-100 scale-100 z-20 pointer-events-auto' 
+                    : 'opacity-0 scale-110 z-0 pointer-events-none'
+                  }`}
+              >
+                <div className="absolute inset-0 z-0">
+                  {isVideo(slide.mediaUrl) ? (
+                    <video 
+                      autoPlay 
+                      loop 
+                      muted 
+                      playsInline 
+                      className="w-full h-full object-cover transition-opacity duration-700"
+                      style={{ 
+                        // Increased visibility logic (adding 20% to user setting)
+                        opacity: Math.min(((slide.visibility || 60) + 20) / 100, 1), 
+                        objectPosition: `50% ${slide.vOffset || 50}%` 
+                      }}
+                    >
+                      <source src={slide.mediaUrl} type="video/mp4" />
+                    </video>
+                  ) : (
+                    <Image 
+                      src={slide.mediaUrl} 
+                      alt="Slide" 
+                      fill 
+                      className="object-cover transition-opacity duration-700" 
+                      style={{ 
+                        opacity: Math.min(((slide.visibility || 60) + 20) / 100, 1), 
+                        objectPosition: `50% ${slide.vOffset || 50}%` 
+                      }}
+                      priority={index === 0} 
+                    />
+                  )}
+                  {/* Lighter overlay for text legibility without killing the background */}
+                  <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/80 z-10" />
+                </div>
 
                 <div className="relative z-30 h-full flex flex-col items-center justify-center text-center px-4 sm:px-6">
                   <div className="space-y-4 sm:space-y-6 max-w-5xl w-full">
                     <h1 className="text-3xl sm:text-4xl md:text-6xl font-black uppercase tracking-tighter text-white/90">{slide.title}</h1>
                     <h2 className="text-4xl sm:text-5xl md:text-8xl font-black uppercase tracking-tighter italic text-brandRed drop-shadow-[0_0_25px_rgba(255,0,0,0.4)]">{slide.subtitle}</h2>
-                    <p className="text-base sm:text-lg md:text-2xl text-zinc-500 font-bold uppercase tracking-[0.3em] sm:tracking-[0.5em] pt-2 sm:pt-4">{slide.description}</p>
+                    <p className="text-base sm:text-lg md:text-2xl text-zinc-300 font-bold uppercase tracking-[0.3em] sm:tracking-[0.5em] pt-2 sm:pt-4">{slide.description}</p>
                     
                     {slide.buttonText && (
                       <div className="pt-8 sm:pt-12">
@@ -186,15 +182,15 @@ setPast(format(pastFeatured).slice(0, 3));      // Shows up to 3
                   src="/hero-bg.jpeg"
                   alt="Puneri Mallus Background"
                   fill
-                  className={`object-cover grayscale-[20%] transition-opacity duration-1000 ${heroVideo ? 'opacity-0' : 'opacity-60'}`}
+                  className={`object-cover transition-opacity duration-1000 ${heroVideo ? 'opacity-0' : 'opacity-85'}`}
                   priority
                 />
                 {heroVideo && (
-                  <video autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover opacity-60 grayscale-[10%] animate-in fade-in duration-1000">
+                  <video autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover opacity-85 animate-in fade-in duration-1000">
                     <source src="/videos/hero-video.mp4" type="video/mp4" />
                   </video>
                 )}
-                <div className="absolute inset-0 bg-gradient-to-b from-black via-transparent to-black z-10" />
+                <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/80 z-10" />
               </div>
 
               <div className="relative z-20 text-center space-y-8 sm:space-y-12 px-4 sm:px-6 w-full">
@@ -206,7 +202,7 @@ setPast(format(pastFeatured).slice(0, 3));      // Shows up to 3
                     <h2 className="text-4xl sm:text-5xl md:text-8xl font-black uppercase tracking-tighter leading-none italic">
                       <span className="text-brandRed drop-shadow-[0_0_25px_rgba(255,0,0,0.6)]">Zero Divides</span>
                     </h2>
-                    <p className="text-base sm:text-lg md:text-2xl text-zinc-500 font-bold uppercase tracking-[0.3em] sm:tracking-[0.7em] pt-2 sm:pt-4">
+                    <p className="text-base sm:text-lg md:text-2xl text-zinc-300 font-bold uppercase tracking-[0.3em] sm:tracking-[0.7em] pt-2 sm:pt-4">
                       Together For Growth
                     </p>
                   </div>
@@ -231,7 +227,7 @@ setPast(format(pastFeatured).slice(0, 3));      // Shows up to 3
                 <button 
                   key={i} 
                   onClick={() => setCurrentSlide(i)} 
-                  className={`cursor-pointer h-1.5 transition-all duration-500 rounded-full ${i === currentSlide ? 'w-10 sm:w-12 bg-brandRed' : 'w-3 sm:w-4 bg-white/20'}`} 
+                  className={`cursor-pointer h-1.5 transition-all duration-500 rounded-full ${i === currentSlide ? 'w-10 sm:w-12 bg-brandRed' : 'w-3 sm:w-4 bg-white/40'}`} 
                 />
               ))}
             </div>
@@ -240,65 +236,57 @@ setPast(format(pastFeatured).slice(0, 3));      // Shows up to 3
 
         <LaserDivider />
 
-        
-       
-{/* 2. UPCOMING EXPERIENCE SPOTLIGHT */}
-<section className="relative py-24 sm:py-32 md:py-40 overflow-hidden">
-  <div className="max-w-7xl mx-auto px-4 sm:px-6 relative z-20">
-    <div className="text-center mb-16 sm:mb-24">
-        <div className="flex items-center justify-center gap-4 mb-6">
-            <div className="h-px w-8 bg-brandRed/50" />
-            <span className="text-brandRed font-mono text-[9px] tracking-[0.5em] uppercase">upcoming pulse</span>
-            <div className="h-px w-8 bg-brandRed/50" />
-        </div>
-        <h2 className="text-6xl sm:text-7xl md:text-[120px] font-black uppercase italic leading-[0.75] tracking-[-0.05em] text-white">
-            Next<br /><span className="text-brandRed">Experience</span>
-        </h2>
-    </div>
+        {/* 2. UPCOMING EXPERIENCE SPOTLIGHT */}
+        <section className="relative py-24 sm:py-32 md:py-40 overflow-hidden">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 relative z-20">
+            <div className="text-center mb-16 sm:mb-24">
+                <div className="flex items-center justify-center gap-4 mb-6">
+                    <div className="h-px w-8 bg-brandRed/50" />
+                    <span className="text-brandRed font-mono text-[9px] tracking-[0.5em] uppercase">upcoming pulse</span>
+                    <div className="h-px w-8 bg-brandRed/50" />
+                </div>
+                <h2 className="text-6xl sm:text-7xl md:text-[120px] font-black uppercase italic leading-[0.75] tracking-[-0.05em] text-white">
+                    Next<br /><span className="text-brandRed">Experience</span>
+                </h2>
+            </div>
 
-    {upcoming.length > 0 ? (
-      <div className="space-y-24">
-        {/* FLEX WRAP + JUSTIFY-CENTER: 
-            This ensures 1 card is centered, while 2 cards go left/right 
-        */}
-        <div className="flex flex-wrap justify-center gap-12 lg:gap-16 items-start">
-          {upcoming.map((event) => (
-            <div key={event.id} className="group relative flex flex-col items-center w-full lg:w-[calc(50%-32px)] max-w-[550px]">
-              <div className="w-full relative">
-                {/* Status Badge */}
-                <div className="absolute -top-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 bg-black border border-white/10 px-4 py-2 rounded-full shadow-2xl">
-                  <div className="w-1.5 h-1.5 rounded-full bg-brandRed animate-ping" />
-                  <span className="text-white font-mono text-[8px] tracking-[0.3em] uppercase whitespace-nowrap">
-                    {event.title} · Live 2026
-                  </span>
+            {upcoming.length > 0 ? (
+              <div className="space-y-24">
+                <div className="flex flex-wrap justify-center gap-12 lg:gap-16 items-start">
+                  {upcoming.map((event) => (
+                    <div key={event.id} className="group relative flex flex-col items-center w-full lg:w-[calc(50%-32px)] max-w-[550px]">
+                      <div className="w-full relative">
+                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 bg-black border border-white/10 px-4 py-2 rounded-full shadow-2xl">
+                          <div className="w-1.5 h-1.5 rounded-full bg-brandRed animate-ping" />
+                          <span className="text-white font-mono text-[8px] tracking-[0.3em] uppercase whitespace-nowrap">
+                            {event.title} · Live 2026
+                          </span>
+                        </div>
+
+                        <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-zinc-950/60 backdrop-blur-xl shadow-2xl group-hover:border-brandRed/30 transition-all duration-500">
+                          <EventCard {...event} isUpcoming={true} showDescription={true} />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
 
-                {/* Event Card Wrapper */}
-                <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-zinc-950/60 backdrop-blur-xl shadow-2xl group-hover:border-brandRed/30 transition-all duration-500">
-                  <EventCard {...event} isUpcoming={true} showDescription={true} />
+                <div className="flex flex-col items-center gap-6">
+                  <div className="w-12 h-px bg-white/10" />
+                  <Link href="/events" className="group/link text-zinc-400 hover:text-white font-mono text-[10px] tracking-[0.4em] uppercase transition-colors duration-300 flex items-center gap-3">
+                    Explore Full Series <span className="group-hover:translate-x-2 transition-transform duration-300 text-brandRed">→</span>
+                  </Link>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ) : (
+              <div className="text-center py-20">
+                <span className="text-white/10 font-black italic text-9xl uppercase tracking-tighter">Soon</span>
+              </div>
+            )}
+          </div>
+        </section>
 
-        {/* Explore Link: Centered below the cards */}
-        <div className="flex flex-col items-center gap-6">
-          <div className="w-12 h-px bg-white/10" />
-          <Link href="/events" className="group/link text-white/20 hover:text-white font-mono text-[10px] tracking-[0.4em] uppercase transition-colors duration-300 flex items-center gap-3">
-            Explore Full Series <span className="group-hover:translate-x-2 transition-transform duration-300 text-brandRed">→</span>
-          </Link>
-        </div>
-      </div>
-    ) : (
-      <div className="text-center py-20">
-        <span className="text-white/5 font-black italic text-9xl uppercase tracking-tighter">Soon</span>
-      </div>
-    )}
-  </div>
-</section>
-
-<LaserDivider />
+        <LaserDivider />
 
         {/* 3. EVENT GLIMPSE SECTION */}
         <section className="py-16 sm:py-24 md:py-40 relative overflow-hidden">
@@ -307,7 +295,7 @@ setPast(format(pastFeatured).slice(0, 3));      // Shows up to 3
               <h2 className="text-4xl sm:text-5xl md:text-7xl font-black uppercase italic tracking-tighter text-white drop-shadow-2xl">
                 Event <span className="text-brandRed">Glimpse</span>
               </h2>
-              <Link href="/events" className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500 hover:text-brandRed transition-all whitespace-nowrap ml-4">
+              <Link href="/events" className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-400 hover:text-brandRed transition-all whitespace-nowrap ml-4">
                 View All Series
               </Link>
             </div>
@@ -336,36 +324,36 @@ setPast(format(pastFeatured).slice(0, 3));      // Shows up to 3
                 <h2 className="text-sm font-black uppercase tracking-[0.4em] sm:tracking-[0.5em] text-brandRed">Live Energy</h2>
               </div>
               <h3 className="text-4xl sm:text-5xl md:text-7xl font-black uppercase tracking-tighter text-white">
-                High <span className="text-zinc-800 italic">Frequency</span>
+                High <span className="text-zinc-700 italic">Frequency</span>
               </h3>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-10 relative z-30">
               <div className="group relative p-8 sm:p-12 rounded-[24px] sm:rounded-[40px] bg-zinc-950/60 backdrop-blur-xl border border-white/5 hover:border-brandRed/40 transition-all duration-700 overflow-hidden hover:-translate-y-2 shadow-2xl">
-                <div className="absolute inset-0 z-0 opacity-20 group-hover:opacity-60 transition-opacity duration-1000">
-                  <video autoPlay loop muted playsInline className="w-full h-full object-cover grayscale group-hover:grayscale-0">
+                <div className="absolute inset-0 z-0 opacity-40 group-hover:opacity-80 transition-opacity duration-1000">
+                  <video autoPlay loop muted playsInline className="w-full h-full object-cover">
                     <source src="/videos/agam-recap.mp4" type="video/mp4" />
                   </video>
-                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
                 </div>
                 <div className="relative z-10">
-                  <span className="text-zinc-600 font-mono text-xs tracking-widest uppercase">Jan 2026</span>
+                  <span className="text-zinc-400 font-mono text-xs tracking-widest uppercase">Jan 2026</span>
                   <h4 className="text-3xl sm:text-4xl font-black uppercase mt-4 sm:mt-6 mb-3 sm:mb-4 tracking-tight group-hover:text-brandRed transition-colors">Agam Live Recap</h4>
-                  <p className="text-zinc-500 text-base sm:text-lg font-medium leading-relaxed italic group-hover:text-zinc-300">Experience the night Carnatic Progressive Rock met the heart of Pune.</p>
+                  <p className="text-zinc-300 text-base sm:text-lg font-medium leading-relaxed italic">Experience the night Carnatic Progressive Rock met the heart of Pune.</p>
                 </div>
               </div>
 
               <div className="group relative p-8 sm:p-12 rounded-[24px] sm:rounded-[40px] bg-zinc-950/60 backdrop-blur-xl border border-white/5 hover:border-brandRed/40 transition-all duration-700 overflow-hidden hover:-translate-y-2 shadow-2xl">
-                <div className="absolute inset-0 z-0 opacity-20 group-hover:opacity-60 transition-opacity duration-1000">
-                  <video autoPlay loop muted playsInline className="w-full h-full object-cover grayscale group-hover:grayscale-0">
+                <div className="absolute inset-0 z-0 opacity-40 group-hover:opacity-80 transition-opacity duration-1000">
+                  <video autoPlay loop muted playsInline className="w-full h-full object-cover">
                     <source src="/videos/jam.mp4" type="video/mp4" />
                   </video>
-                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
                 </div>
                 <div className="relative z-10">
-                  <span className="text-zinc-600 font-mono text-xs tracking-widest uppercase">Feb 2026</span>
+                  <span className="text-zinc-400 font-mono text-xs tracking-widest uppercase">Feb 2026</span>
                   <h4 className="text-3xl sm:text-4xl font-black uppercase mt-4 sm:mt-6 mb-3 sm:mb-4 tracking-tight group-hover:text-brandRed transition-colors">Jamming Session</h4>
-                  <p className="text-zinc-500 text-base sm:text-lg font-medium leading-relaxed italic group-hover:text-zinc-300">Our unplugged community jams bringing the raw soul of Kerala to the city streets.</p>
+                  <p className="text-zinc-300 text-base sm:text-lg font-medium leading-relaxed italic">Our unplugged community jams bringing the raw soul of Kerala to the city streets.</p>
                 </div>
               </div>
             </div>
@@ -409,7 +397,7 @@ setPast(format(pastFeatured).slice(0, 3));      // Shows up to 3
             </div>
           </div>
         </section>
-              <DynamicTribeAd />
+        <DynamicTribeAd />
         <LaserDivider />
       </div>
     </div>

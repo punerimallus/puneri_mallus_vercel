@@ -52,6 +52,8 @@ export default function AddAdminCard() {
             type="email"
             placeholder="ADMIN EMAIL"
             required
+            
+  suppressHydrationWarning // Add this line
             className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 text-xs font-bold uppercase tracking-widest text-white focus:border-brandRed outline-none transition-all placeholder:text-zinc-800"
           />
           <button 

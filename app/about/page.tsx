@@ -89,17 +89,17 @@ export default function AboutPage() {
   return (
     <main className="min-h-screen bg-[#030303] text-white pt-40 pb-20 px-6 relative selection:bg-brandRed/30">
       
-      {/* 1. FIXED BRANDED BACKGROUND (SYNCED WITH EVENTS PAGE) */}
+      {/* 1. FIXED BRANDED BACKGROUND (UPDATED OPACITY FOR VISIBILITY) */}
       <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
         <Image 
           src="/events/about5.png" 
           alt="About Background"
           fill
-          className="object-cover object-center opacity-25 brightness-[0.5] saturate-[0.8]"
+          className="object-cover object-center opacity-40 brightness-[0.7] saturate-[0.9]"
           priority
         />
         {/* ATMOSPHERIC OVERLAYS */}
-        <div className="absolute inset-0 bg-gradient-radial from-transparent via-[#030303]/40 to-[#030303]" />
+        <div className="absolute inset-0 bg-gradient-radial from-transparent via-[#030303]/30 to-[#030303]" />
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#030303]" />
         
         {/* Subtle Brand Glows */}
@@ -304,23 +304,26 @@ export default function AboutPage() {
         <InstagramGlimpse />
         <LaserDivider />
         
-        {/* 6. NETWORK SECTION */}
-        <section className="max-w-7xl mx-auto text-center mb-40">
-          <h2 className="text-6xl font-black uppercase italic tracking-tighter mb-24">Our <span className="text-brandRed">Network</span></h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-10">
-            {[
-              { name: "Kerala Tourism", icon: <Globe size={40}/> },
-              { name: "Pune Malayali Fed.", icon: <Handshake size={40}/> },
-              { name: "Digital Partners", icon: <ShieldCheck size={40}/> },
-              { name: "Community Support", icon: <Heart size={40}/> },
-            ].map((partner, idx) => (
-              <div key={idx} className="p-14 bg-zinc-950/50 border border-white/5 rounded-[40px] flex flex-col items-center justify-center group hover:border-brandRed transition-all duration-500 shadow-xl backdrop-blur-md">
-                <div className="text-zinc-700 group-hover:text-brandRed mb-6 transition-colors">{partner.icon}</div>
-                <span className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500 group-hover:text-white transition-colors">{partner.name}</span>
-              </div>
-            ))}
-          </div>
-        </section>
+        {/* 6. NETWORK SECTION (REBALANCED FOR 3 CARDS) */}
+<section className="max-w-7xl mx-auto text-center mb-40">
+  <h2 className="text-6xl font-black uppercase italic tracking-tighter mb-24">Our <span className="text-brandRed">Network</span></h2>
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+    {[
+      { name: "Pune Malayali Fed.", icon: <Handshake size={40}/> },
+      { name: "Digital Partners", icon: <ShieldCheck size={40}/> },
+      { name: "Community Support", icon: <Heart size={40}/> },
+    ].map((partner, idx) => (
+      <div key={idx} className="p-14 bg-zinc-950/50 border border-white/5 rounded-[40px] flex flex-col items-center justify-center group hover:border-brandRed transition-all duration-500 shadow-xl backdrop-blur-md">
+        <div className="text-zinc-700 group-hover:text-brandRed mb-6 transition-colors">
+          {partner.icon}
+        </div>
+        <span className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500 group-hover:text-white transition-colors">
+          {partner.name}
+        </span>
+      </div>
+    ))}
+  </div>
+</section>
 
         {/* 7. CTA: THE TRIBE */}
         <section className="max-w-5xl mx-auto text-center pb-40">

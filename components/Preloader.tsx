@@ -18,7 +18,10 @@ export default function Preloader() {
         return prev + Math.floor(Math.random() * 15) + 5; 
       });
     }, 120);
-    return () => clearInterval(interval);
+
+    return () => {
+      clearInterval(interval);
+    };
   }, []);
 
   const mantra = ["ONE COMMUNITY", "MANY DREAMS", "ZERO DIVIDE"];
@@ -29,15 +32,15 @@ export default function Preloader() {
         <motion.div
           exit={{ opacity: 0, scale: 1.05, filter: "blur(10px)" }}
           transition={{ duration: 1, ease: [0.76, 0, 0.24, 1] }}
-          className="fixed inset-0 z-[999] bg-black flex flex-col items-center justify-center"
+          className="fixed inset-0 z-[999] bg-black flex flex-col items-center justify-center overflow-hidden"
         >
           {/* AMBIENT BACKGROUND */}
-          <div className="absolute inset-0 opacity-[0.05] bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-brandRed/10 blur-[150px] rounded-full animate-pulse" />
+          <div className="absolute inset-0 opacity-[0.05] bg-[url('https://grainy-gradients.vercel.app/noise.svg')] pointer-events-none" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-brandRed/10 blur-[150px] rounded-full animate-pulse pointer-events-none" />
 
-          <div className="relative flex flex-col items-center space-y-16">
+          <div className="relative flex flex-col items-center space-y-16 z-10">
             
-            {/* 1. UPSCALED LOGO */}
+            {/* 2. UPSCALED LOGO */}
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -46,14 +49,14 @@ export default function Preloader() {
               <Image 
                 src="/logo.png" 
                 alt="Puneri Mallus" 
-                width={600} // Increased from 400
+                width={600} 
                 height={200} 
                 className="h-32 md:h-48 w-auto object-contain drop-shadow-[0_0_50px_rgba(255,0,0,0.5)]"
                 priority
               />
             </motion.div>
 
-            {/* 2. THE LOADING BAR & UPDATED STATUS */}
+            {/* 3. THE LOADING BAR */}
             <div className="w-[300px] md:w-[500px] space-y-5">
               <div className="h-[2px] w-full bg-white/5 relative overflow-hidden">
                 <motion.div 
@@ -63,13 +66,12 @@ export default function Preloader() {
                 />
               </div>
               <div className="flex justify-between items-center font-mono text-[11px] tracking-[0.4em] text-zinc-400 font-black">
-                {/* CHANGED FROM INITIALIZING SYSTEM */}
                 <span className="animate-pulse">CONNECTING THE TRIBE</span>
                 <span className="text-brandRed">{percent}%</span>
               </div>
             </div>
 
-            {/* 3. THE MANTRA */}
+            {/* 4. THE MANTRA */}
             <div className="text-center space-y-3 pt-6">
               {mantra.map((text, i) => (
                 <motion.p
@@ -89,14 +91,21 @@ export default function Preloader() {
             </div>
           </div>
 
-          {/* BOTTOM FIXED MANTRA */}
-          <div className="absolute bottom-16">
+          {/* 5. BOTTOM FIXED MANTRA */}
+          <div className="absolute bottom-16 z-10">
              <motion.p 
                initial={{ opacity: 0 }}
-               animate={{ opacity: 0.5 }}
-               className="text-[10px] font-black text-zinc-500 tracking-[0.6em] uppercase italic"
+               animate={{ 
+                 opacity: [0.4, 1, 0.4], 
+               }} 
+               transition={{ 
+                 duration: 3, 
+                 repeat: Infinity, 
+                 ease: "easeInOut" 
+               }}
+               className="text-[10px] font-black text-white tracking-[0.6em] uppercase italic"
              >
-               Together For Growth
+               Together for Growth & Good Vibes
              </motion.p>
           </div>
         </motion.div>

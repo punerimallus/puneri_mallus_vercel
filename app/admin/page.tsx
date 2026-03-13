@@ -24,7 +24,7 @@ export default function AdminPortal() {
     },
     // --- NEW COLLABORATIONS MODULE ---
     {
-      title: "Business Collabs",
+      title: "Ad Popups",
       desc: "Deploy and manage partner ads, floating banners, and business popups.",
       icon: <Megaphone className="text-brandRed" size={32} />,
       link: "/admin/collabs", // This matches our new route
@@ -32,7 +32,7 @@ export default function AdminPortal() {
       color: "from-brandRed/30"
     },
     {
-      title: "Tribe Allies",
+      title: "Team Management",
       desc: "Manage brand partners, collaborators, and member perks.",
       icon: <Handshake className="text-brandRed" size={32} />,
       link: "/admin/partners",
@@ -48,7 +48,7 @@ export default function AdminPortal() {
       color: "from-white/10"
     },
     {
-      title: "Communities",
+      title: "Community & Samajams",
       desc: "Manage community sub-groups, interest circles, and WhatsApp links.",
       icon: <Globe className="text-cyan-400" size={32} />,
       link: "/admin/community",
@@ -56,7 +56,7 @@ export default function AdminPortal() {
       color: "from-cyan-400/20"
     },
     {
-      title: "The Archive",
+      title: "Gallery Edit",
       desc: "Update the gallery images in the About Us section.",
       icon: <Camera className="text-brandRed" size={32} />,
       link: "/admin/gallery",
@@ -64,7 +64,7 @@ export default function AdminPortal() {
       color: "from-brandRed/20"
     },
     {
-      title: "Social Pulse",
+      title: "Social Media Edits",
       desc: "Modify the Instagram Glimpse and Social Links.",
       icon: <Instagram className="text-pink-500" size={32} />,
       link: "/admin/social",
@@ -72,7 +72,7 @@ export default function AdminPortal() {
       color: "from-pink-500/10"
     },
     {
-      title: "Tribe Records",
+      title: "Admin Logs",
       desc: "View detailed audit trails and operator activity history.",
       icon: <Users className="text-blue-500" size={32} />,
       link: "/admin/members",
@@ -80,7 +80,7 @@ export default function AdminPortal() {
       color: "from-blue-500/10"
     },
     {
-      title: "Support Hub",
+      title: "Support Ticket",
       desc: "Monitor and respond to community transmissions and support tickets.",
       icon: <MessageSquare className="text-orange-500" size={32} />,
       link: "/admin/support",

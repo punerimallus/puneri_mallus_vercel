@@ -93,6 +93,8 @@ export default function LoginPage() {
                   type="email" 
                   placeholder="EMAIL" 
                   required
+                 
+                  suppressHydrationWarning // Add this line
                   className="w-full bg-black/40 border border-white/10 p-3.5 pl-11 rounded-xl font-bold text-[11px] tracking-widest focus:border-brandRed transition-all outline-none text-white placeholder:text-white/10"
                   value={email} 
                   onChange={(e) => setEmail(e.target.value)}
