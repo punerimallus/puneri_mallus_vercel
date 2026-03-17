@@ -15,35 +15,28 @@ export default function Footer() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
+  // REVERTED TO YOUR EXACT ORIGINAL LOGIC
   useEffect(() => {
-    const checkEmail = async (email: string | undefined) => {
-      if (!email) {
-        setIsAuthorized(false);
-        return;
-      }
+    const checkAdminWhitelist = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
       
-      const { data, error } = await supabase
-        .from('authorized_admins')
-        .select('email')
-        .eq('email', email.toLowerCase())
-        .single();
+      if (user?.email) {
+        // Query the authorized_admins table specifically
+        const { data, error } = await supabase
+          .from('authorized_admins')
+          .select('email')
+          .eq('email', user.email.toLowerCase())
+          .single();
 
-      setIsAuthorized(!!data && !error);
-    };
-
-    supabase.auth.getUser().then(({ data }) => {
-      if (data?.user?.email) checkEmail(data.user.email);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user?.email) {
-        checkEmail(session.user.email);
-      } else {
-        setIsAuthorized(false);
+        if (data && !error) {
+          setIsAuthorized(true);
+        } else {
+          setIsAuthorized(false);
+        }
       }
-    });
-
-    return () => subscription.unsubscribe();
+    };
+    
+    checkAdminWhitelist();
   }, [supabase]);
 
   if (pathname.startsWith('/admin')) return null;
