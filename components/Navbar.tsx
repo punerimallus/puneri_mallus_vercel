@@ -67,13 +67,15 @@ export default function Navbar() {
   return (
     <>
       <nav className={`fixed top-0 inset-x-0 z-[100] transition-all duration-300 ${
-  scrolled
-    ? 'bg-black/90 backdrop-blur-xl shadow-lg shadow-black/40'
-    : 'bg-gradient-to-b from-black/60 to-transparent'
-}`}>
-        <div className="w-full pl-4 pr-4 sm:px-5 md:px-8 xl:px-10 flex items-center justify-between gap-3 py-3">
+        scrolled
+          ? 'bg-black/90 backdrop-blur-xl shadow-lg shadow-black/40'
+          : 'bg-gradient-to-b from-black/60 to-transparent'
+      }`}>
+        {/* Removed py-3 and tightened horizontal padding for better laptop fit */}
+        <div className="w-full px-4 md:px-6 lg:px-8 xl:px-12 flex items-center justify-between gap-2 lg:gap-4 py-1">
 
-          <Link href="/" className="block group flex-shrink-0 py-2">
+          {/* Removed py-2 to shift the nav up and save space */}
+          <Link href="/" className="block group flex-shrink-0">
             <Image
               src="/logo.png"
               alt="Puneri Mallus"
@@ -89,7 +91,8 @@ export default function Navbar() {
             />
           </Link>
 
-          <div className="hidden lg:flex items-center gap-5 xl:gap-8 2xl:gap-10 flex-1 justify-center">
+          {/* Adjusted gap values (lg:gap-5) to prevent squishing on smaller 13/14-inch laptops */}
+          <div className="hidden lg:flex items-center gap-4 lg:gap-5 xl:gap-8 2xl:gap-10 flex-1 justify-center">
             {navLinks.map((link) => {
               const isActive = pathname === link.href;
               return (
@@ -99,12 +102,12 @@ export default function Navbar() {
                   }`}>
                     {link.name}
                   </span>
-      {link.name === 'Events' && hasUpcoming && (
-        <span className="absolute -top-0.5 -right-2 flex h-2 w-2">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brandRed opacity-75"></span>
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-brandRed shadow-[0_0_10px_#FF0000]"></span>
-        </span>
-      )}
+                  {link.name === 'Events' && hasUpcoming && (
+                    <span className="absolute -top-0.5 -right-2 flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brandRed opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-brandRed shadow-[0_0_10px_#FF0000]"></span>
+                    </span>
+                  )}
                   {isActive && (
                     <motion.div
                       layoutId="activeTab"
@@ -116,43 +119,43 @@ export default function Navbar() {
             })}
           </div>
 
-<div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-  <div className="hidden lg:flex items-center gap-4">
-    {user ? (
-      <div className="flex items-center gap-4 relative group">
-        <Link
-          href="/profile"
-          className="flex items-center gap-3 bg-white/5 backdrop-blur-md border border-white/10 p-1.5 pr-4 xl:pr-5 rounded-full hover:border-brandRed transition-all"
-        >
-          <div className="w-8 h-8 xl:w-9 xl:h-9 bg-brandRed rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(255,0,0,0.4)] overflow-hidden">
-            {user.user_metadata?.avatar_url ? (
-              <img 
-                src={user.user_metadata.avatar_url} 
-                alt="Profile" 
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <User size={14} className="text-white" />
-            )}
-          </div>
-          
-          <div className="flex flex-col text-left">
-            <span className="text-[7px] font-black text-zinc-500 uppercase tracking-widest leading-none mb-1">Active Member</span>
-            <span className="text-[10px] font-black text-white uppercase italic leading-none truncate max-w-[100px]">
-              {user.user_metadata?.full_name?.split(' ')[0] || 'Tribe User'}
-            </span>
-          </div>
-        </Link>
-        <button
-          onClick={handleLogout}
-          className="absolute -bottom-12 right-0 bg-zinc-900 border border-white/10 px-4 py-2 rounded-xl text-[9px] font-black uppercase text-zinc-400 hover:text-brandRed opacity-0 group-hover:opacity-100 transition-all flex items-center gap-2 whitespace-nowrap"
-        >
-          <LogOut size={12} /> Sign Out
-        </button>
-      </div>
-    ) : (
+          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+            <div className="hidden lg:flex items-center gap-4">
+              {user ? (
+                <div className="flex items-center gap-4 relative group">
+                  <Link
+                    href="/profile"
+                    className="flex items-center gap-3 bg-white/5 backdrop-blur-md border border-white/10 p-1.5 pr-4 xl:pr-5 rounded-full hover:border-brandRed transition-all"
+                  >
+                    <div className="w-8 h-8 xl:w-9 xl:h-9 bg-brandRed rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(255,0,0,0.4)] overflow-hidden">
+                      {user.user_metadata?.avatar_url ? (
+                        <img 
+                          src={user.user_metadata.avatar_url} 
+                          alt="Profile" 
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <User size={14} className="text-white" />
+                      )}
+                    </div>
+                    
+                    <div className="flex flex-col text-left">
+                      <span className="text-[7px] font-black text-zinc-500 uppercase tracking-widest leading-none mb-1">Active Member</span>
+                      <span className="text-[10px] font-black text-white uppercase italic leading-none truncate max-w-[100px]">
+                        {user.user_metadata?.full_name?.split(' ')[0] || 'Tribe User'}
+                      </span>
+                    </div>
+                  </Link>
+                  <button
+                    onClick={handleLogout}
+                    className="absolute -bottom-12 right-0 bg-zinc-900 border border-white/10 px-4 py-2 rounded-xl text-[9px] font-black uppercase text-zinc-400 hover:text-brandRed opacity-0 group-hover:opacity-100 transition-all flex items-center gap-2 whitespace-nowrap"
+                  >
+                    <LogOut size={12} /> Sign Out
+                  </button>
+                </div>
+              ) : (
                 <Link href="/auth/login">
-                  <button className="px-6 xl:px-8 py-2.5 xl:py-3 rounded-full bg-brandRed text-white font-black uppercase text-[10px] tracking-widest hover:bg-white hover:text-black transition-all duration-300 shadow-[0_0_20px_rgba(255,0,0,0.3)] active:scale-95 whitespace-nowrap">
+                  <button className="px-5 lg:px-6 xl:px-8 py-2.5 xl:py-3 rounded-full bg-brandRed text-white font-black uppercase text-[10px] tracking-widest hover:bg-white hover:text-black transition-all duration-300 shadow-[0_0_20px_rgba(255,0,0,0.3)] active:scale-95 whitespace-nowrap">
                     Join Tribe
                   </button>
                 </Link>
@@ -206,18 +209,18 @@ export default function Navbar() {
                     <Link
                       key={link.name} href={link.href}
                       onClick={() => setIsMobileMenuOpen(false)}
-                      className={`text-2xl sm:text-3xl font-black italic tracking-tighter transition-all ${
+                      className={`text-2xl sm:text-3xl font-black italic tracking-tighter transition-all flex items-center gap-2 ${
                         isActive ? 'text-brandRed translate-x-4' : 'text-white'
                       }`}
                     >
                       {link.name.toUpperCase()}
-  {link.name === 'Events' && hasUpcoming && (
-    <motion.div 
-      animate={{ opacity: [0.4, 1, 0.4] }}
-      transition={{ duration: 2, repeat: Infinity }}
-      className="w-8 h-[2px] bg-brandRed shadow-[0_0_8px_#FF0000]" 
-    />
-  )}
+                      {link.name === 'Events' && hasUpcoming && (
+                        <motion.div 
+                          animate={{ opacity: [0.4, 1, 0.4] }}
+                          transition={{ duration: 2, repeat: Infinity }}
+                          className="w-8 h-[2px] bg-brandRed shadow-[0_0_8px_#FF0000]" 
+                        />
+                      )}
                     </Link>
                   );
                 })}
@@ -226,7 +229,6 @@ export default function Navbar() {
               <div className="pt-6 sm:pt-8 border-t border-white/10 space-y-5">
                 {user ? (
                   <div className="flex flex-col gap-4">
-                    {/* MOBILE PROFILE LINK */}
                     <Link 
                       href="/profile" 
                       onClick={() => setIsMobileMenuOpen(false)}

@@ -21,14 +21,11 @@ const LaserDivider = () => (
 export default function Home() {
   const [slides, setSlides] = useState<any[]>([]);
   const [currentSlide, setCurrentSlide] = useState(0);
-  const [heroVideo, setHeroVideo] = useState(false);
   const [upcoming, setUpcoming] = useState<any[]>([]);
   const [past, setPast] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const videoTimer = setTimeout(() => setHeroVideo(true), 2000);
-    
     const fetchHomePulse = async () => {
       try {
         const [sliderRes, eventRes] = await Promise.all([
@@ -66,7 +63,6 @@ export default function Home() {
     };
 
     fetchHomePulse();
-    return () => clearTimeout(videoTimer);
   }, []);
 
   useEffect(() => {
@@ -89,7 +85,7 @@ export default function Home() {
   return (
     <div className="flex flex-col min-h-screen bg-[#030303] text-white selection:bg-brandRed/30 relative overflow-x-hidden w-full">
       
-      {/* 1. FIXED BRANDED BACKGROUND - OPACITY INCREASED */}
+      {/* 1. FIXED BRANDED BACKGROUND */}
       <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden bg-black">
         <Image 
           src="/events/main4.jpg" 
@@ -98,10 +94,7 @@ export default function Home() {
           priority
           className="object-cover object-center opacity-[0.45] brightness-[1.1] saturate-[1.2] contrast-[1.1]" 
         />
-        
-        {/* Lighter Gradient for more visibility */}
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#030303]/80 z-[1]" />
-        
         <div className="absolute inset-0 opacity-[0.04] bg-[url('https://grainy-gradients.vercel.app/noise.svg')] mix-blend-overlay z-[2]" />
       </div>
 
@@ -109,117 +102,82 @@ export default function Home() {
         
         {/* HERO SECTION */}
         <section className="relative h-screen w-full overflow-hidden bg-[#030303] z-20 flex flex-col items-center justify-center">
-          {slides.length > 0 ? (
-            slides.map((slide, index) => (
-              <div 
-                key={index} 
-                className={`absolute inset-0 transition-all duration-1000 ease-in-out 
-                  ${index === currentSlide 
-                    ? 'opacity-100 scale-100 z-20 pointer-events-auto' 
-                    : 'opacity-0 scale-110 z-0 pointer-events-none'
-                  }`}
-              >
-                <div className="absolute inset-0 z-0">
-                  {isVideo(slide.mediaUrl) ? (
-                    <video 
-                      autoPlay 
-                      loop 
-                      muted 
-                      playsInline 
-                      className="w-full h-full object-cover transition-opacity duration-700"
-                      style={{ 
-                        // Increased visibility logic (adding 20% to user setting)
-                        opacity: Math.min(((slide.visibility || 60) + 20) / 100, 1), 
-                        objectPosition: `50% ${slide.vOffset || 50}%` 
-                      }}
-                    >
-                      <source src={slide.mediaUrl} type="video/mp4" />
-                    </video>
-                  ) : (
-                    <Image 
-                      src={slide.mediaUrl} 
-                      alt="Slide" 
-                      fill 
-                      className="object-cover transition-opacity duration-700" 
-                      style={{ 
-                        opacity: Math.min(((slide.visibility || 60) + 20) / 100, 1), 
-                        objectPosition: `50% ${slide.vOffset || 50}%` 
-                      }}
-                      priority={index === 0} 
-                    />
-                  )}
-                  {/* Lighter overlay for text legibility without killing the background */}
-                  <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/80 z-10" />
-                </div>
-
-                <div className="relative z-30 h-full flex flex-col items-center justify-center text-center px-4 sm:px-6">
-                  <div className="space-y-4 sm:space-y-6 max-w-5xl w-full">
-                    <h1 className="text-3xl sm:text-4xl md:text-6xl font-black uppercase tracking-tighter text-white/90">{slide.title}</h1>
-                    <h2 className="text-4xl sm:text-5xl md:text-8xl font-black uppercase tracking-tighter italic text-brandRed drop-shadow-[0_0_25px_rgba(255,0,0,0.4)]">{slide.subtitle}</h2>
-                    <p className="text-base sm:text-lg md:text-2xl text-zinc-300 font-bold uppercase tracking-[0.3em] sm:tracking-[0.5em] pt-2 sm:pt-4">{slide.description}</p>
-                    
-                    {slide.buttonText && (
-                      <div className="pt-8 sm:pt-12">
-                        <Link href={slide.buttonLink || "/about"} className="relative z-50 inline-block">
-                          <button className="cursor-pointer group relative bg-brandRed text-white px-10 sm:px-16 py-4 sm:py-6 rounded-full font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-xs sm:text-sm hover:scale-110 transition-all shadow-[0_0_60px_rgba(255,0,0,0.4)] active:scale-95">
-                            <span className="relative z-10 flex items-center gap-3">
-                              {slide.buttonText}
-                              <ArrowUpRight size={18} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
-                            </span>
-                            <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity duration-300 pointer-events-none rounded-full" />
-                          </button>
-                        </Link>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))
-          ) : (
-            <div className="relative w-full h-full flex flex-col items-center justify-center">
+          {slides.length > 0 && slides.map((slide, index) => (
+            <div 
+              key={index} 
+              className={`absolute inset-0 transition-all duration-1000 ease-in-out 
+              ${index === currentSlide 
+                ? 'opacity-100 scale-100 z-20 pointer-events-auto' 
+                : 'opacity-0 scale-110 z-0 pointer-events-none'
+              }`}
+            >
               <div className="absolute inset-0 z-0">
-                <Image
-                  src="/hero-bg.jpeg"
-                  alt="Puneri Mallus Background"
-                  fill
-                  className={`object-cover transition-opacity duration-1000 ${heroVideo ? 'opacity-0' : 'opacity-85'}`}
-                  priority
-                />
-                {heroVideo && (
-                  <video autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover opacity-85 animate-in fade-in duration-1000">
-                    <source src="/videos/hero-video.mp4" type="video/mp4" />
+                {isVideo(slide.mediaUrl) ? (
+                  <video 
+                    autoPlay 
+                    loop 
+                    muted 
+                    playsInline 
+                    className="w-full h-full object-cover transition-opacity duration-700"
+                    style={{ 
+                      opacity: Math.min(((slide.visibility || 60) + 20) / 100, 1), 
+                      objectPosition: `50% ${slide.vOffset || 50}%` 
+                    }}
+                  >
+                    <source src={slide.mediaUrl} type="video/mp4" />
                   </video>
+                ) : (
+                  <Image 
+                    src={slide.mediaUrl} 
+                    alt="Slide" 
+                    fill 
+                    className="object-cover transition-opacity duration-700" 
+                    style={{ 
+                      opacity: Math.min(((slide.visibility || 60) + 20) / 100, 1), 
+                      objectPosition: `50% ${slide.vOffset || 50}%` 
+                    }}
+                    priority={index === 0} 
+                  />
                 )}
+                {/* Lighter overlay for text legibility */}
                 <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/80 z-10" />
               </div>
 
-              <div className="relative z-20 text-center space-y-8 sm:space-y-12 px-4 sm:px-6 w-full">
-                <div className="space-y-4 sm:space-y-6">
-                  <div className="flex flex-col items-center space-y-3">
-                    <h1 className="text-3xl sm:text-4xl md:text-6xl font-black uppercase tracking-tighter leading-none text-white/90">
-                      One Community <span className="text-brandRed">.</span> Many Dreams
+              {/* PERFECTLY CENTERED TEXT CONTAINER */}
+              <div className="relative w-full h-full flex flex-col items-center justify-center">
+                <div className="relative z-20 text-center px-4 sm:px-6 w-full max-w-6xl">
+                  
+                  {/* TEXT BLOCK: Dictates the center of the screen */}
+                  <div className="flex flex-col items-center space-y-1 sm:space-y-2">
+                    <h1 className="text-4xl sm:text-5xl md:text-7xl font-black uppercase tracking-tighter leading-none text-white drop-shadow-xl">
+                      {slide.title}
                     </h1>
-                    <h2 className="text-4xl sm:text-5xl md:text-8xl font-black uppercase tracking-tighter leading-none italic">
-                      <span className="text-brandRed drop-shadow-[0_0_25px_rgba(255,0,0,0.6)]">Zero Divides</span>
+                    <h2 className="text-6xl sm:text-7xl md:text-[110px] font-black uppercase tracking-tighter leading-none italic pb-2">
+                      <span className="text-brandRed drop-shadow-[0_0_25px_rgba(255,0,0,0.6)]">{slide.subtitle}</span>
                     </h2>
-                    <p className="text-base sm:text-lg md:text-2xl text-zinc-300 font-bold uppercase tracking-[0.3em] sm:tracking-[0.7em] pt-2 sm:pt-4">
-                      Together For Growth
+                    <p className="text-base sm:text-xl md:text-3xl text-zinc-200 font-bold uppercase tracking-[0.4em] sm:tracking-[0.8em] pt-4 sm:pt-6 drop-shadow-lg">
+                      {slide.description}
                     </p>
                   </div>
-                </div>
-                <div className="pt-4 sm:pt-8">
-                  <Link href="/about" className="relative z-50">
-                    <button className="cursor-pointer group relative bg-brandRed text-white px-10 sm:px-16 py-4 sm:py-6 rounded-full font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-xs sm:text-sm overflow-hidden transition-all hover:scale-110 shadow-[0_0_60px_rgba(255,0,0,0.4)]">
-                      <span className="relative z-10 flex items-center gap-3">
-                        Know More <ArrowUpRight size={18} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
-                      </span>
-                      <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
-                    </button>
-                  </Link>
+                  
+                  {/* BUTTON BLOCK: Positioned Absolutely so it doesn't push the text up */}
+                  {slide.buttonText && (
+                    <div className="absolute top-full left-0 right-0 flex justify-center pt-6 sm:pt-10">
+                      <Link href={slide.buttonLink || "/about"} className="relative z-50 inline-block">
+                        <button className="cursor-pointer group relative bg-brandRed text-white px-10 sm:px-16 py-4 sm:py-6 rounded-full font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-xs sm:text-sm overflow-hidden transition-all hover:scale-110 shadow-[0_0_60px_rgba(255,0,0,0.4)] active:scale-95">
+                          <span className="relative z-10 flex items-center gap-3">
+                            {slide.buttonText} <ArrowUpRight size={18} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
+                          </span>
+                          <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 rounded-full pointer-events-none" />
+                        </button>
+                      </Link>
+                    </div>
+                  )}
                 </div>
               </div>
+
             </div>
-          )}
+          ))}
 
           {slides.length > 1 && (
             <div className="absolute bottom-8 sm:bottom-12 left-1/2 -translate-x-1/2 z-50 flex gap-3 sm:gap-4 pointer-events-auto">

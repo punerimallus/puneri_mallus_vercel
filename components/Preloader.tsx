@@ -38,7 +38,8 @@ export default function Preloader() {
           <div className="absolute inset-0 opacity-[0.05] bg-[url('https://grainy-gradients.vercel.app/noise.svg')] pointer-events-none" />
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-brandRed/10 blur-[150px] rounded-full animate-pulse pointer-events-none" />
 
-          <div className="relative flex flex-col items-center space-y-16 z-10">
+          {/* MAIN WRAPPER: Reduced space-y-16 to responsive space-y-8/12 to prevent overlapping on laptops */}
+          <div className="relative flex flex-col items-center space-y-8 md:space-y-12 z-10 w-full px-6">
             
             {/* 2. UPSCALED LOGO */}
             <motion.div
@@ -57,7 +58,7 @@ export default function Preloader() {
             </motion.div>
 
             {/* 3. THE LOADING BAR */}
-            <div className="w-[300px] md:w-[500px] space-y-5">
+            <div className="w-full max-w-[300px] md:max-w-[500px] space-y-4 md:space-y-5">
               <div className="h-[2px] w-full bg-white/5 relative overflow-hidden">
                 <motion.div 
                   className="absolute inset-y-0 left-0 bg-brandRed shadow-[0_0_20px_#FF0000]"
@@ -72,7 +73,7 @@ export default function Preloader() {
             </div>
 
             {/* 4. THE MANTRA */}
-            <div className="text-center space-y-3 pt-6">
+            <div className="text-center space-y-2 md:space-y-3 pt-2 md:pt-4">
               {mantra.map((text, i) => (
                 <motion.p
                   key={i}
@@ -91,8 +92,8 @@ export default function Preloader() {
             </div>
           </div>
 
-          {/* 5. BOTTOM FIXED MANTRA */}
-          <div className="absolute bottom-16 z-10">
+          {/* 5. BOTTOM FIXED MANTRA: Adjusted bottom spacing for shorter screens */}
+          <div className="absolute bottom-8 md:bottom-12 lg:bottom-16 z-10 w-full text-center px-4">
              <motion.p 
                initial={{ opacity: 0 }}
                animate={{ 
