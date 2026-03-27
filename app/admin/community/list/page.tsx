@@ -129,7 +129,7 @@ export default function ListOrganization() {
       <AnimatePresence>
         {showSuccess && (
           <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[200] bg-white text-black px-8 py-4 rounded-full flex items-center gap-3 shadow-2xl">
-            <CheckCircle className="text-green-600" /> <span className="font-black uppercase text-xs tracking-widest">Node Synchronized</span>
+            <CheckCircle className="text-green-600" /> <span className="font-black uppercase text-xs tracking-widest">Community Updated</span>
           </motion.div>
         )}
       </AnimatePresence>

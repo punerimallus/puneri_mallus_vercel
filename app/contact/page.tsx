@@ -68,62 +68,64 @@ export default function ContactPage() {
         <div className="max-w-7xl mx-auto flex flex-col lg:grid lg:grid-cols-12 gap-12 lg:gap-20">
           
           {/* LEFT CONTENT: BRAND & INFO */}
-          <div className="lg:col-span-6 xl:col-span-7 space-y-16">
-            <div className="space-y-8">
+          <div className="lg:col-span-6 xl:col-span-7 space-y-12">
+            <div className="space-y-6">
               <h1 className="text-7xl md:text-8xl font-black uppercase italic tracking-tighter leading-[0.8] mb-6 text-glow">
                 Get In <br />
                 <span className="text-brandRed">Touch.</span>
               </h1>
               
-              <p className="text-zinc-400 font-bold uppercase tracking-[0.2em] text-sm leading-relaxed max-w-md">
+              <p className="text-zinc-300 font-bold uppercase tracking-[0.2em] text-xs sm:text-sm leading-relaxed max-w-md">
                 Have a question or want to collaborate? Drop us a message and our community team will get back to you shortly.
               </p>
             </div>
 
-            {/* WHATSAPP REDIRECTION CARD */}
+            {/* WHATSAPP REDIRECTION CARD - FIXED VISIBILITY */}
             <a 
               href="https://wa.me/919175981863" 
               target="_blank" 
               rel="noopener noreferrer"
-              className="block max-w-md p-8 bg-zinc-950/40 backdrop-blur-xl border border-white/5 rounded-[40px] group hover:border-green-500/50 transition-all duration-500 shadow-2xl overflow-hidden relative"
+              className="block max-w-md p-8 bg-zinc-900/60 backdrop-blur-2xl border border-white/10 rounded-[40px] group hover:border-green-500/50 transition-all duration-500 shadow-2xl overflow-hidden relative"
             >
-              <div className="absolute -right-4 -top-4 opacity-5 group-hover:opacity-10 transition-opacity">
+              <div className="absolute -right-4 -top-4 opacity-10 group-hover:opacity-20 transition-opacity text-green-500">
                  <MessageCircle size={140} />
               </div>
               <div className="relative z-10 space-y-4">
-                <div className="w-12 h-12 rounded-2xl bg-green-500/10 flex items-center justify-center border border-green-500/20 group-hover:bg-green-500 group-hover:text-black transition-all">
-                  <MessageCircle size={24} />
+                <div className="w-14 h-14 rounded-2xl bg-green-500/20 flex items-center justify-center border border-green-500/30 group-hover:bg-green-500 group-hover:text-black transition-all">
+                  <MessageCircle size={28} fill="currentColor" />
                 </div>
                 <div>
-                  <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-600 mb-1">Instant Support</h4>
-                  <p className="text-2xl font-black italic uppercase">Chat on <span className="text-green-500">WhatsApp</span></p>
+                  <h4 className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-400 mb-1">Instant Support</h4>
+                  <p className="text-3xl font-black italic uppercase text-white">Chat on <span className="text-green-500">WhatsApp</span></p>
                 </div>
-                <div className="flex items-center gap-2 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                <div className="flex items-center gap-3 text-[10px] font-black text-zinc-300 uppercase tracking-widest bg-black/40 w-fit px-4 py-2 rounded-full border border-white/5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_10px_#22c55e]" />
                   Online & Ready to help
                 </div>
               </div>
             </a>
 
-            {/* DIRECT COMMS */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-6 max-w-md">
-               <div className="flex items-center gap-6 p-4 rounded-3xl hover:bg-white/5 transition-all group backdrop-blur-sm bg-black/10 border border-white/5">
-                <div className="w-14 h-14 rounded-2xl bg-zinc-950/60 border border-white/5 flex items-center justify-center group-hover:border-brandRed transition-colors">
-                  <Mail className="text-brandRed" size={24} />
+            {/* DIRECT COMMS - FIXED VISIBILITY */}
+            <div className="grid grid-cols-1 gap-4 max-w-md">
+               {/* EMAIL ITEM */}
+               <div className="flex items-center gap-6 p-6 rounded-[30px] bg-zinc-900/40 border border-white/10 backdrop-blur-md hover:bg-zinc-800/60 transition-all group">
+                <div className="w-14 h-14 rounded-2xl bg-brandRed/10 border border-brandRed/20 flex items-center justify-center group-hover:bg-brandRed group-hover:text-white transition-all shadow-lg">
+                  <Mail className="text-brandRed group-hover:text-white" size={24} />
                 </div>
                 <div className="space-y-1">
-                  <p className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-600">Email Us</p>
-                  <p className="text-base font-bold">punerimallus1@gmail.com</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-500">Email Us</p>
+                  <p className="text-lg font-bold text-white tracking-tight">punerimallus1@gmail.com</p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-6 p-4 rounded-3xl hover:bg-white/5 transition-all group backdrop-blur-sm bg-black/10 border border-white/5">
-                <div className="w-14 h-14 rounded-2xl bg-zinc-950/60 border border-white/5 flex items-center justify-center group-hover:border-brandRed transition-colors">
-                  <MapPin className="text-brandRed" size={24} />
+              {/* LOCATION ITEM */}
+              <div className="flex items-center gap-6 p-6 rounded-[30px] bg-zinc-900/40 border border-white/10 backdrop-blur-md hover:bg-zinc-800/60 transition-all group">
+                <div className="w-14 h-14 rounded-2xl bg-brandRed/10 border border-brandRed/20 flex items-center justify-center group-hover:bg-brandRed group-hover:text-white transition-all shadow-lg">
+                  <MapPin className="text-brandRed group-hover:text-white" size={24} />
                 </div>
                 <div className="space-y-1">
-                  <p className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-600">Location</p>
-                  <p className="text-base font-bold uppercase">Pune, Maharashtra</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-500">Location</p>
+                  <p className="text-lg font-bold uppercase text-white tracking-tight">Pune, Maharashtra</p>
                 </div>
               </div>
             </div>

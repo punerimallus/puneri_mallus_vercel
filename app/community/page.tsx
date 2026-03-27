@@ -210,51 +210,63 @@ export default function CommunityPage() {
         </div>
 
         {/* GRID */}
-        <AnimatePresence mode="popLayout">
-            {filteredCircles.length > 0 ? (
-            <motion.div layout className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-20">
-                {filteredCircles.map((circle) => (
-                <motion.div 
-                    layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-                    key={circle._id} 
-                    className="group relative bg-zinc-950/30 border border-white/5 rounded-[30px] overflow-hidden transition-all duration-500 hover:border-brandRed/30 shadow-xl backdrop-blur-2xl"
-                >
-                    <Link href={`/community/${circle._id}`} className="block relative w-full h-52 overflow-hidden cursor-pointer">
-                        <Image 
-                            src={circle.image || "/about/placeholder.jpeg"} 
-                            alt={circle.title} fill unoptimized 
-                            className="object-cover group-hover:scale-110 transition-all duration-1000"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-transparent to-transparent" />
-                        <div className="absolute bottom-4 right-4 bg-zinc-950/80 px-3 py-1 rounded-full border border-white/10 flex items-center gap-1.5">
-                            <MapPin size={8} className="text-brandRed" />
-                            <span className="text-[7px] font-black text-zinc-300 uppercase tracking-widest">{circle.area || "Pune Hub"}</span>
-                        </div>
+<AnimatePresence mode="popLayout">
+    {filteredCircles.length > 0 ? (
+    <motion.div layout className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-20">
+        {filteredCircles.map((circle) => (
+        <motion.div 
+            layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+            key={circle._id} 
+            className="group relative bg-zinc-950/30 border border-white/5 rounded-[40px] overflow-hidden transition-all duration-500 hover:border-brandRed/30 shadow-xl backdrop-blur-2xl"
+        >
+            <Link href={`/community/${circle._id}`} className="block relative w-full h-56 overflow-hidden cursor-pointer">
+                <Image 
+                    src={circle.image || "/about/placeholder.jpeg"} 
+                    alt={circle.title} fill unoptimized 
+                    className="object-cover group-hover:scale-110 transition-all duration-1000"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-transparent to-transparent" />
+                
+                <div className="absolute bottom-4 right-4 bg-zinc-950/90 px-4 py-1.5 rounded-full border border-white/10 flex items-center gap-2 backdrop-blur-md">
+                    <MapPin size={12} className="text-brandRed" />
+                    <span className="text-[10px] font-black text-zinc-100 uppercase tracking-widest">
+                        {circle.area || "Pune Hub"}
+                    </span>
+                </div>
+            </Link>
+
+            {/* CONTENT SECTION - Restored stable layout */}
+            <div className="p-8 space-y-6">
+                <div className="space-y-3">
+                    {/* ABOVE HEADER */}
+                    <span className="text-brandRed font-black uppercase text-[10px] sm:text-[11px] tracking-[0.2em] block">
+                        {circle.category} {circle.tagline ? `// ${circle.tagline}` : ''}
+                    </span>
+
+                    {/* HEADER */}
+                    <h2 className="text-2xl sm:text-3xl font-black italic uppercase tracking-tighter flex items-center gap-2 text-white leading-tight">
+                        {circle.title} {circle.isVerified && <ShieldCheck size={20} className="text-brandRed" />}
+                    </h2>
+
+                    {/* BELOW HEADER */}
+                    <p className="text-zinc-300 text-[13px] sm:text-[14px] font-medium leading-relaxed italic line-clamp-2">
+                        {circle.description}
+                    </p>
+                </div>
+
+                {/* BUTTON - Using mt-4 as a buffer */}
+                <div className="pt-2">
+                    <Link href={`/community/${circle._id}`} className="block w-full">
+                        <button className="w-full bg-white text-black py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-brandRed hover:text-white transition-all flex items-center justify-center gap-2 shadow-lg active:scale-95">
+                            {isExternal(circle.category) ? 'Visit Organization' : 'Explore Circle'} <ArrowUpRight size={14} />
+                        </button>
                     </Link>
-
-                    <div className="p-6 space-y-4">
-                        <div className="space-y-1">
-                            <span className="text-brandRed font-black uppercase text-[8px] tracking-[0.2em] block">
-                                {circle.category} {circle.tagline ? `// ${circle.tagline}` : ''}
-                            </span>
-                            <h2 className="text-2xl font-black italic uppercase tracking-tighter flex items-center gap-2">
-                                {circle.title} {circle.isVerified && <ShieldCheck size={16} className="text-brandRed" />}
-                            </h2>
-                            <p className="text-zinc-400 text-[11px] font-medium leading-relaxed line-clamp-2 italic pt-1">
-                                {circle.description}
-                            </p>
-                        </div>
-
-                        <Link href={`/community/${circle._id}`} className="w-full">
-                            <button className="w-full bg-white text-black py-3 rounded-xl font-black uppercase text-[9px] tracking-widest hover:bg-brandRed hover:text-white transition-all flex items-center justify-center gap-2 shadow-lg">
-                                {isExternal(circle.category) ? 'Visit Organization' : 'Explore Circle'} <ArrowUpRight size={12} />
-                            </button>
-                        </Link>
-                    </div>
-                </motion.div>
-                ))}
-            </motion.div>
-            ) : (
+                </div>
+            </div>
+        </motion.div>
+        ))}
+    </motion.div>
+    ) : (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-72 flex flex-col items-center justify-center border border-white/5 rounded-[30px] bg-zinc-950/20 mb-20 backdrop-blur-md">
                 <Search size={30} className="text-zinc-800 mb-3" />
                 <p className="text-zinc-500 font-black uppercase tracking-[0.3em] text-[9px]">No nodes detected</p>

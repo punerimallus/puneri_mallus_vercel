@@ -4,7 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { 
-  Loader2, Search, Filter, Briefcase, ChevronRight, Zap
+  Loader2, Search, Filter, Briefcase, ChevronRight, Zap, ChevronDown
 } from 'lucide-react';
 
 const HIERARCHY = [
@@ -46,10 +46,10 @@ export default function PartnersPage() {
   return (
     <div className="min-h-screen bg-[#030303] text-white relative overflow-x-hidden selection:bg-brandRed/30">
       
-      {/* INCREASED OPACITY BACKGROUND */}
+      {/* BACKGROUND */}
       <div className="fixed inset-0 z-0 bg-black">
         <Image 
-          src="/events/main3.jpg" 
+          src="/events/partner_3.png" 
           alt="BG" 
           fill 
           className="object-cover opacity-[0.5] brightness-[0.8]" 
@@ -67,24 +67,48 @@ export default function PartnersPage() {
              <span className="text-[9px] font-black uppercase tracking-[0.3em] text-white">Community Leadership</span>
           </div>
           <h1 className="text-6xl md:text-8xl font-black italic uppercase tracking-tighter leading-none drop-shadow-2xl">
-            The <span className="text-brandRed">Architects .</span>
+            The <span className="text-brandRed">Architects.</span>
           </h1>
           <p className="text-zinc-300 font-bold uppercase tracking-[0.5em] text-[10px] md:text-xs">
             The Visionaries behind Puneri Mallus
           </p>
         </div>
 
-        {/* SEARCH & ENHANCED FILTERS */}
-        <div className="sticky top-24 z-50 flex flex-col lg:flex-row items-center gap-6 mb-32 bg-black/60 backdrop-blur-3xl p-6 rounded-[32px] border border-white/10 shadow-2xl">
+        {/* SEARCH & DYNAMIC FILTERS */}
+        <div className="sticky top-24 z-50 flex flex-col lg:flex-row items-center gap-4 lg:gap-6 mb-32 bg-black/60 backdrop-blur-3xl p-4 lg:p-6 rounded-[32px] border border-white/10 shadow-2xl">
            <div className="relative flex-1 w-full">
-              <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-zinc-500" size={20} />
+              <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-zinc-500" size={18} />
               <input 
                 placeholder="SEARCH MEMBERS..." 
-                className="w-full bg-white/[0.05] border border-white/10 rounded-2xl py-5 pl-14 text-xs font-black uppercase tracking-widest outline-none focus:border-brandRed/50 transition-all placeholder:text-zinc-600"
+                className="w-full bg-white/[0.05] border border-white/10 rounded-2xl py-4 lg:py-5 pl-14 text-xs font-black uppercase tracking-widest outline-none focus:border-brandRed/50 transition-all placeholder:text-zinc-600"
                 value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
               />
            </div>
-           <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 lg:pb-0 w-full lg:w-auto px-2">
+
+           {/* MOBILE DROPDOWN FILTER (Visible on phones) */}
+           <div className="relative w-full lg:hidden group">
+              <Filter className="absolute left-5 top-1/2 -translate-y-1/2 text-brandRed pointer-events-none" size={16} />
+              <select 
+  defaultValue="" // This replaces 'selected' on the option
+  onChange={(e) => {
+    if (e.target.value) scrollToSection(e.target.value);
+  }}
+  className="w-full bg-white/[0.05] border border-white/10 rounded-2xl py-4 pl-14 pr-10 text-[10px] font-black uppercase tracking-[0.2em] outline-none appearance-none focus:border-brandRed/50 transition-all cursor-pointer"
+>
+  {/* Remove 'selected' from here */}
+  <option value="" disabled>JUMP TO SECTION</option> 
+  
+  {HIERARCHY.map((cat) => (
+    <option key={cat} value={cat} className="bg-[#030303] text-white">
+      {cat.toUpperCase()}
+    </option>
+  ))}
+</select>
+              <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none group-focus-within:rotate-180 transition-transform" size={16} />
+           </div>
+
+           {/* DESKTOP TAB FILTER (Visible on LG screens) */}
+           <div className="hidden lg:flex gap-3 px-2">
               {HIERARCHY.map((cat) => (
                 <button 
                   key={cat} 

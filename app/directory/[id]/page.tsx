@@ -140,21 +140,34 @@ export default function ProfessionalDetailsPage() {
                   <span className="text-[9px] font-black uppercase text-zinc-500 tracking-widest italic">Rate this professional</span>
                 </div>
 
-                <div className="flex items-center gap-4 text-zinc-400 font-black uppercase tracking-[0.2em] text-[9px]">
-                  <MapPin size={14} className="text-brandRed" />
-                  {item.area}
-                </div>
+                {/* UPDATED: INCREASED LOCATION SIZE AND VISIBILITY */}
+    <div className="flex items-center gap-4 text-zinc-100 font-black uppercase tracking-[0.3em] text-[12px] sm:text-sm">
+        <MapPin size={18} className="text-brandRed" />
+        {item.area}
+    </div>
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-3">
-              <a href={`https://wa.me/${item.contact}`} target="_blank" className="flex-1 flex items-center justify-center gap-3 bg-white text-black h-16 rounded-2xl font-black uppercase text-[11px] tracking-[0.2em] hover:bg-brandRed hover:text-white transition-all shadow-xl">
-                <MessageCircle size={20} /> Chat on WhatsApp
-              </a>
-              <a href={`tel:${item.contact}`} className="flex items-center justify-center gap-3 bg-zinc-900/50 backdrop-blur-md text-white h-16 px-10 rounded-2xl font-black uppercase text-[11px] tracking-[0.2em] border border-white/10 hover:border-brandRed transition-all">
-                <Phone size={20} /> Call Now
-              </a>
-            </div>
+            <div className="flex flex-col sm:flex-row gap-4 w-full pt-2">
+  {/* 1. WHATSAPP BUTTON - Green & Full Width on Mobile */}
+  <a 
+    href={`https://wa.me/91${item.contact?.toString().replace(/\D/g,'')}`} 
+    target="_blank" 
+    className="w-full sm:flex-1 flex items-center justify-center gap-3 bg-[#25D366] text-white h-16 sm:h-20 rounded-2xl font-black uppercase text-[12px] sm:text-xs tracking-[0.2em] hover:bg-white hover:text-[#25D366] border border-[#25D366]/20 transition-all shadow-xl active:scale-95"
+  >
+    <MessageCircle size={22} fill="currentColor" /> 
+    <span>Chat on WhatsApp</span>
+  </a>
+
+  {/* 2. CALL BUTTON - Semi-transparent & Full Width on Mobile */}
+  <a 
+    href={`tel:${item.contact}`} 
+    className="w-full sm:w-auto sm:px-12 flex items-center justify-center gap-3 bg-zinc-900/50 backdrop-blur-md text-white h-16 sm:h-20 rounded-2xl font-black uppercase text-[12px] sm:text-xs tracking-[0.2em] border border-white/10 hover:border-brandRed transition-all active:scale-95"
+  >
+    <Phone size={20} /> 
+    <span>Call Now</span>
+  </a>
+</div>
           </div>
         </div>
 
@@ -254,7 +267,7 @@ export default function ProfessionalDetailsPage() {
                     <MapPin size={24} />
                   </div>
                   <div>
-                    <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest mb-1">Base</p>
+                    <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest mb-1">Location</p>
                     <p className="text-sm text-zinc-200 font-bold uppercase">{item.area}</p>
                     {item.mapUrl && <a href={item.mapUrl} target="_blank" className="text-[10px] text-brandRed font-black mt-3 inline-flex items-center gap-1 hover:underline tracking-widest uppercase">Navigation Link <ExternalLink size={12} /></a>}
                   </div>

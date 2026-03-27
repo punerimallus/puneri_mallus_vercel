@@ -41,7 +41,7 @@ export default function MemberDetailsPage() {
     <div className="min-h-screen bg-[#030303] text-zinc-100 relative overflow-x-hidden selection:bg-brandRed/30">
       
       <div className="fixed inset-0 z-0 pointer-events-none bg-black">
-        <Image src="/events/main3.jpg" alt="BG" fill priority className="object-cover opacity-[0.35] brightness-[0.4]" />
+        <Image src="/events/partner_3.png" alt="BG" fill priority className="object-cover opacity-[0.50] brightness-[0.7]" />
         <div className="absolute inset-0 bg-gradient-to-b from-[#030303] via-transparent to-[#030303]" />
       </div>
 
@@ -110,28 +110,28 @@ export default function MemberDetailsPage() {
             </div>
 
             {/* TWO PRIMARY BUTTONS */}
-            <div className="flex flex-col sm:flex-row gap-4 max-w-2xl pt-4">
-               {/* 1. DIRECT CALL BUTTON */}
-               {phoneNumber && (
-                 <a 
-                   href={`tel:${phoneNumber}`} 
-                   className="flex-1 h-16 bg-white text-black rounded-2xl flex items-center justify-center gap-3 font-black uppercase text-[11px] tracking-widest hover:bg-brandRed hover:text-white transition-all shadow-2xl active:scale-95"
-                 >
-                   <Phone size={20} /> Call Representative
-                 </a>
-               )}
+<div className="flex flex-col sm:flex-row gap-4 max-w-2xl pt-4">
+    {/* 1. DIRECT CALL BUTTON */}
+    {phoneNumber && (
+        <a 
+        href={`tel:${phoneNumber}`} 
+        className="w-full sm:flex-1 h-16 sm:h-20 bg-white text-black rounded-2xl flex items-center justify-center gap-3 font-black uppercase text-[11px] sm:text-xs tracking-widest hover:bg-brandRed hover:text-white transition-all shadow-2xl active:scale-95"
+        >
+        <Phone size={20} /> Call Representative
+        </a>
+    )}
 
-               {/* 2. WHATSAPP BUTTON */}
-               {(item.whatsapp || phoneNumber) && (
-                 <a 
-                   href={getWhatsAppLink()} 
-                   target="_blank" 
-                   className="flex-1 h-16 bg-[#25D366] text-white rounded-2xl flex items-center justify-center gap-3 font-black uppercase text-[11px] tracking-widest hover:bg-white hover:text-[#25D366] border border-[#25D366]/20 transition-all shadow-2xl active:scale-95"
-                 >
-                   <MessageCircle size={22} /> WhatsApp Chat
-                 </a>
-               )}
-            </div>
+    {/* 2. WHATSAPP BUTTON - Optimized for Mobile height and width */}
+    {(item.whatsapp || phoneNumber) && (
+        <a 
+        href={getWhatsAppLink()} 
+        target="_blank" 
+        className="w-full sm:flex-1 h-16 sm:h-20 bg-[#25D366] text-white rounded-2xl flex items-center justify-center gap-3 font-black uppercase text-[11px] sm:text-xs tracking-widest hover:bg-white hover:text-[#25D366] border border-[#25D366]/20 transition-all shadow-2xl active:scale-95"
+        >
+        <MessageCircle size={22} /> WhatsApp Chat
+        </a>
+    )}
+</div>
           </div>
         </div>
       </main>

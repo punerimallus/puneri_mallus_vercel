@@ -165,23 +165,40 @@ export default function EventsPage() {
                     </h2>
 
                     <AnimatePresence>
-                      {isExpanded && (
-                        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden space-y-6" >
-                           <div className="h-px bg-white/10 w-full" />
-                           <div className="grid grid-cols-1 gap-4">
-                             <div className="flex items-center gap-3 text-zinc-300 text-sm md:text-base font-black uppercase tracking-widest">
-                               <Clock size={18} className={item.isUpcoming ? 'text-brandRed' : 'text-zinc-600'} /> {item.time || 'TBA'}
-                             </div>
-                             <div className="flex items-center gap-3 text-zinc-300 text-sm md:text-base font-black uppercase tracking-widest">
-                               <MapPin size={18} className={item.isUpcoming ? 'text-brandRed' : 'text-zinc-600'} /> {item.location || 'Pune Hub'}
-                             </div>
-                           </div>
-                           <p className="text-zinc-400 text-sm md:text-lg leading-relaxed italic font-medium">
-                             {item.description}
-                           </p>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
+  {isExpanded && (
+    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden space-y-6" >
+       <div className="h-px bg-white/10 w-full" />
+       
+       <div className="grid grid-cols-1 gap-4">
+         <div className="flex items-center gap-3 text-zinc-300 text-sm md:text-base font-black uppercase tracking-widest">
+           <Clock size={18} className={item.isUpcoming ? 'text-brandRed' : 'text-zinc-600'} /> {item.time || 'TBA'}
+         </div>
+         <div className="flex items-center gap-3 text-zinc-300 text-sm md:text-base font-black uppercase tracking-widest">
+           <MapPin size={18} className={item.isUpcoming ? 'text-brandRed' : 'text-zinc-600'} /> {item.location || 'Pune Hub'}
+         </div>
+       </div>
+
+       {/* UPDATED DESCRIPTION LOGIC: Convert hyphens to pointers */}
+       <div className="space-y-3 pl-1">
+         {item.description?.split('-').map((segment: string, idx: number) => {
+           const trimmed = segment.trim();
+           if (!trimmed) return null;
+
+           return (
+             <div key={idx} className="flex items-start gap-3 group/item">
+               <div className="mt-2 shrink-0">
+                 <div className="w-1.5 h-1.5 rounded-full bg-brandRed shadow-[0_0_8px_#FF0000]" />
+               </div>
+               <p className="text-zinc-300 text-sm md:text-base leading-relaxed italic font-medium group-hover/item:text-white transition-colors">
+                 {trimmed}
+               </p>
+             </div>
+           );
+         })}
+       </div>
+    </motion.div>
+  )}
+</AnimatePresence>
 
                     <div className="flex flex-col gap-3">
                         <div className="flex gap-2">

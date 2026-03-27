@@ -26,6 +26,8 @@ export async function POST(req: Request) {
       link: body.link?.trim(), // Website
       image: body.image,
       instagram: body.instagram?.replace('@', '').trim(),
+      // ADD THIS LINE - It was missing!
+      contact: body.contact?.replace(/\D/g, ''),
       whatsapp: body.whatsapp?.replace(/\D/g, ''), // Clean phone number
       updated_at: new Date()
     };

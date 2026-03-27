@@ -62,9 +62,19 @@ export default function OrganizationDetailsPage() {
   return (
     <div className="min-h-screen bg-[#030303] text-zinc-100 relative overflow-x-hidden selection:bg-brandRed/30">
       
-      <motion.div style={{ y }} className="fixed inset-0 z-0 pointer-events-none overflow-hidden bg-[#030303]">
-        <Image src="/events/comm_2.png" alt="BG" fill priority className="object-cover opacity-[0.15] brightness-[0.3] scale-105" />
-        <div className="absolute inset-0 bg-gradient-to-b from-[#030303] via-transparent to-[#030303] z-[1]" />
+      {/* 1. FIXED BRANDED BACKGROUND */}
+      <motion.div style={{ y }} className="fixed inset-0 z-0 pointer-events-none overflow-hidden bg-black">
+        <Image 
+          src="/events/comm_2.png" 
+          alt="Atmosphere" 
+          fill 
+          priority 
+          className="object-cover opacity-[0.40] brightness-[0.7] scale-110 saturate-[1.2]" 
+        />
+        {/* Deep gradient for text readability */}
+        <div className="absolute inset-0 bg-gradient-to-b from-[#030303]/60 via-transparent to-[#030303] z-[1]" />
+        {/* Grainy Noise Overlay for consistency */}
+        <div className="absolute inset-0 opacity-[0.03] bg-[url('https://grainy-gradients.vercel.app/noise.svg')] mix-blend-overlay z-[2]" />
       </motion.div>
 
       <main className="max-w-7xl mx-auto px-6 pt-40 pb-32 relative z-10">
@@ -79,7 +89,7 @@ export default function OrganizationDetailsPage() {
             </button>
             {item.isVerified && (
               <div className="absolute top-4 left-4 bg-brandRed text-white px-3 py-1 rounded-full flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest shadow-lg">
-                <ShieldCheck size={10} /> Verified Node
+                <ShieldCheck size={10} /> Verified Member
               </div>
             )}
           </div>
@@ -98,13 +108,26 @@ export default function OrganizationDetailsPage() {
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-4 max-w-2xl">
-              <a href={getWhatsAppLink()} target="_blank" className="flex-1 flex items-center justify-center gap-3 bg-white text-black h-16 rounded-2xl font-black uppercase text-[11px] tracking-[0.15em] hover:bg-brandRed hover:text-white transition-all shadow-xl active:scale-95">
-                <MessageCircle size={20} /> {item.contact ? 'Direct Connect' : 'Join Whatsapp'}
+            {/* TWO PRIMARY BUTTONS */}
+            <div className="flex flex-col sm:flex-row gap-4 max-w-2xl w-full pt-4">
+              {/* 1. WHATSAPP / DIRECT CONNECT BUTTON - Optimized for visibility */}
+              <a 
+                href={getWhatsAppLink()} 
+                target="_blank" 
+                className="w-full sm:flex-1 flex items-center justify-center gap-3 bg-[#25D366] text-white h-16 sm:h-20 rounded-2xl font-black uppercase text-[12px] sm:text-sm tracking-[0.2em] hover:bg-white hover:text-[#25D366] border border-[#25D366]/20 transition-all shadow-xl active:scale-95"
+              >
+                <MessageCircle size={24} fill="currentColor" /> 
+                {item.contact ? 'Direct Connect' : 'Join Whatsapp'}
               </a>
+
+              {/* 2. OFFICIAL LINK BUTTON */}
               {item.website && (
-                <a href={item.website} target="_blank" className="flex items-center justify-center gap-3 bg-zinc-900 border border-white/10 text-white h-16 px-10 rounded-2xl font-black uppercase text-[11px] tracking-[0.15em] hover:border-brandRed transition-all">
-                  <Globe size={20} /> Official Link
+                <a 
+                  href={item.website} 
+                  target="_blank" 
+                  className="w-full sm:w-auto sm:px-12 flex items-center justify-center gap-3 bg-zinc-900 border border-white/10 text-white h-16 sm:h-20 rounded-2xl font-black uppercase text-[12px] sm:text-sm tracking-[0.2em] hover:border-brandRed transition-all"
+                >
+                  <Globe size={24} /> Official Link
                 </a>
               )}
             </div>

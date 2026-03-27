@@ -104,7 +104,7 @@ export default function ListMember() {
       <AnimatePresence>
         {showSuccess && (
           <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[200] bg-white text-black px-8 py-4 rounded-full flex items-center gap-3">
-            <CheckCircle className="text-green-600" /> <span className="font-black uppercase text-xs">Node Synchronized</span>
+            <CheckCircle className="text-green-600" /> <span className="font-black uppercase text-xs">Member Updated</span>
           </motion.div>
         )}
       </AnimatePresence>

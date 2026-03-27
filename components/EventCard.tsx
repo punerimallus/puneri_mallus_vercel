@@ -142,23 +142,36 @@ export default function EventCard({
             </div>
           </div>
 
-          {/* OPTIONAL DESCRIPTION BULLETS */}
-          {showDescription && description && (
-            <div className="mb-8 relative pl-4 border-l border-brandRed/20">
-              <ul className="space-y-2">
-                {description.split('-').map((segment, idx) => {
-                  const trimmed = segment.trim();
-                  if (!trimmed) return null;
-                  return (
-                    <li key={idx} className="text-zinc-400 text-[11px] font-medium leading-tight italic flex items-start gap-2">
-                      <ChevronRight size={10} className="text-brandRed mt-0.5 shrink-0" />
-                      <span>{trimmed}</span>
-                    </li>
-                  );
-                })}
-              </ul>
+          {/* STANDARDIZED DESCRIPTION POINTERS */}
+{showDescription && description && (
+  <div className="mb-8 relative pl-2">
+    <ul className="space-y-3">
+      {description.split('-').map((segment, idx) => {
+        const trimmed = segment.trim();
+        if (!trimmed) return null; // Skips empty segments
+        
+        return (
+          <motion.li 
+            key={idx} 
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: idx * 0.1 }}
+            className="text-zinc-300 text-[11px] sm:text-[12px] font-medium leading-relaxed italic flex items-start gap-3 group/item"
+          >
+            {/* Standardized Red Pointer with Glow */}
+            <div className="mt-1.5 shrink-0">
+               <div className="w-1.5 h-1.5 rounded-full bg-brandRed shadow-[0_0_8px_#FF0000] group-hover/item:scale-125 transition-transform" />
             </div>
-          )}
+            
+            <span className="group-hover/item:text-white transition-colors">
+              {trimmed}
+            </span>
+          </motion.li>
+        );
+      })}
+    </ul>
+  </div>
+)}
 
           {/* FOOTER: VENUE & TICKETS */}
           <div className="mt-auto space-y-4">
