@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import InstagramGlimpse from '@/components/about/InstagramGlimpse';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ShieldCheck, 
   Handshake, 
@@ -18,7 +19,8 @@ import {
   MessageCircle,
   Target, // NEW
   Eye,    // NEW
-  Diamond // NEW
+  Diamond, // NEW
+  X
 } from 'lucide-react';
 interface TeamMember {
   name: string;
@@ -41,6 +43,7 @@ export default function AboutPage() {
   const [startTypewriter, setStartTypewriter] = useState(false);
   const [galleryImages, setGalleryImages] = useState<string[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [zoomImage, setZoomImage] = useState<string | null>(null);
   useEffect(() => {
     async function initializeTribeData() {
       const timestamp = Date.now();
@@ -383,39 +386,76 @@ export default function AboutPage() {
         <LaserDivider />
 
         {/* 6. CONCISE GALLERY SECTION */}
-        <section className="max-w-[90%] mx-auto mb-40 relative">
-          <div className="flex flex-col md:flex-row items-baseline gap-6 mb-12">
-            <h2 className="text-5xl md:text-7xl font-black uppercase italic tracking-tighter text-white">
-              The <span className="text-brandRed">Archive</span>
-            </h2>
-            <p className="text-zinc-500 font-bold uppercase tracking-[0.3em] text-[10px]">
-              Visual Legacy // 2026
-            </p>
-          </div>
+<section className="max-w-[90%] mx-auto mb-40 relative">
+  <div className="flex flex-col md:flex-row items-baseline gap-6 mb-12">
+    <h2 className="text-5xl md:text-7xl font-black uppercase italic tracking-tighter text-white">
+      The <span className="text-brandRed">Archive</span>
+    </h2>
+    <p className="text-zinc-500 font-bold uppercase tracking-[0.3em] text-[10px]">
+      Visual Legacy // 2026
+    </p>
+  </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {(galleryImages.length > 0 ? galleryImages : [1, 2, 3, 4, 5, 6]).map((item, idx) => {
-              const src = typeof item === 'string' ? item : `/gallery/img${item}.jpg`;
-              return (
-                <div key={idx} className="relative aspect-video md:aspect-[4/3] rounded-2xl overflow-hidden border border-white/5 group bg-zinc-900 shadow-2xl">
-                  <Image 
-                    src={src} 
-                    alt={`Archive Legacy ${idx + 1}`} 
-                    fill 
-                    sizes="(max-width: 768px) 50vw, 33vw"
-                    className="object-cover transition-all duration-700 grayscale group-hover:grayscale-0 group-hover:scale-110" 
-                    priority={idx < 3}
-                  />
-                  <div className="absolute inset-0 bg-brandRed/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-                  <div className="absolute top-4 right-4 w-6 h-[1px] bg-white/20 group-hover:bg-brandRed transition-colors" />
-                  <div className="absolute top-4 right-4 h-6 w-[1px] bg-white/20 group-hover:bg-brandRed transition-colors" />
-                </div>
-              );
-            })}
-          </div>
-        </section>
-        
-        <LaserDivider />
+  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+    {(galleryImages.length > 0 ? galleryImages : [1, 2, 3, 4, 5, 6]).map((item, idx) => {
+      const src = typeof item === 'string' ? item : `/gallery/img${item}.jpg`;
+      return (
+        <div 
+          key={idx} 
+          onClick={() => setZoomImage(src)} // Trigger Lightbox
+          className="relative aspect-video md:aspect-[4/3] rounded-2xl overflow-hidden border border-white/5 group bg-zinc-900 shadow-2xl cursor-pointer"
+        >
+          <Image 
+            src={src} 
+            alt={`Archive Legacy ${idx + 1}`} 
+            fill 
+            sizes="(max-width: 768px) 50vw, 33vw"
+            className="object-cover transition-all duration-700 grayscale group-hover:grayscale-0 group-hover:scale-110" 
+            priority={idx < 3}
+          />
+          <div className="absolute inset-0 bg-brandRed/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+          {/* Decorative Corner Pointers */}
+          <div className="absolute top-4 right-4 w-6 h-[1px] bg-white/20 group-hover:bg-brandRed transition-colors" />
+          <div className="absolute top-4 right-4 h-6 w-[1px] bg-white/20 group-hover:bg-brandRed transition-colors" />
+        </div>
+      );
+    })}
+  </div>
+</section>
+
+<LaserDivider />
+
+{/* LIGHTBOX OVERLAY */}
+<AnimatePresence>
+  {zoomImage && (
+    <motion.div 
+      initial={{ opacity: 0 }} 
+      animate={{ opacity: 1 }} 
+      exit={{ opacity: 0 }} 
+      onClick={() => setZoomImage(null)} 
+      className="fixed inset-0 z-[1000] bg-black/98 flex items-center justify-center p-4 sm:p-12 cursor-zoom-out backdrop-blur-xl"
+    >
+      <motion.div 
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        className="relative w-full max-w-6xl h-full flex items-center justify-center"
+      >
+        <Image 
+          src={zoomImage} 
+          alt="Zoomed Legacy Asset" 
+          fill 
+          unoptimized 
+          className="object-contain" 
+        />
+      </motion.div>
+      {/* Close Button */}
+      <button className="absolute top-10 right-10 text-white p-4 bg-zinc-900 rounded-full hover:bg-brandRed transition-all shadow-2xl border border-white/10">
+        <X size={32} />
+      </button>
+    </motion.div>
+  )}
+</AnimatePresence>
         <InstagramGlimpse />
         <LaserDivider />
         
