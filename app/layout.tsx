@@ -5,7 +5,7 @@ import Preloader from "@/components/Preloader";
 import { AlertProvider } from "@/context/AlertContext";
 import Footer from "@/components/Footer";
 // import ChatWidget from "@/components/ChatWidget";
-
+import { SpeedInsights } from "@vercel/speed-insights/next";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
@@ -26,6 +26,7 @@ export default function RootLayout({
           <Navbar />
           <main className="min-h-screen w-full overflow-x-hidden">
             {children}
+            <SpeedInsights />
           </main>
           {/* <ChatWidget/> */}
           <Footer />
