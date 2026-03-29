@@ -15,13 +15,10 @@ export default function Preloader() {
           setTimeout(() => setLoading(false), 800); 
           return 100;
         }
-        return prev + Math.floor(Math.random() * 15) + 5; 
+        return prev + Math.floor(Math.random() * 10) + 2; 
       });
-    }, 120);
-
-    return () => {
-      clearInterval(interval);
-    };
+    }, 80);
+    return () => clearInterval(interval);
   }, []);
 
   const mantra = ["ONE COMMUNITY", "MANY DREAMS", "ZERO DIVIDE"];
@@ -30,84 +27,110 @@ export default function Preloader() {
     <AnimatePresence>
       {loading && (
         <motion.div
-          exit={{ opacity: 0, scale: 1.05, filter: "blur(10px)" }}
-          transition={{ duration: 1, ease: [0.76, 0, 0.24, 1] }}
-          className="fixed inset-0 z-[999] bg-black flex flex-col items-center justify-center overflow-hidden"
+          exit={{ opacity: 0, scale: 1.1, filter: "blur(20px)" }}
+          transition={{ duration: 1, ease: [0.7, 0, 0.3, 1] }}
+          className="fixed inset-0 z-[999] bg-[#030303] flex flex-col items-center justify-center overflow-hidden"
         >
-          {/* AMBIENT BACKGROUND */}
-          <div className="absolute inset-0 opacity-[0.05] bg-[url('https://grainy-gradients.vercel.app/noise.svg')] pointer-events-none" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-brandRed/10 blur-[150px] rounded-full animate-pulse pointer-events-none" />
+          {/* 1. ATMOSPHERIC FX */}
+          <div className="absolute inset-0 opacity-[0.03] bg-[url('https://grainy-gradients.vercel.app/noise.svg')] pointer-events-none" />
+          
+          {/* Moving Ambient Orbs */}
+          <motion.div 
+            animate={{ scale: [1, 1.2, 1], opacity: [0.1, 0.2, 0.1] }}
+            transition={{ duration: 8, repeat: Infinity }}
+            className="absolute top-1/4 -left-20 w-[400px] h-[400px] bg-brandRed/20 blur-[150px] rounded-full" 
+          />
+          <motion.div 
+            animate={{ scale: [1.2, 1, 1.2], opacity: [0.1, 0.15, 0.1] }}
+            transition={{ duration: 10, repeat: Infinity }}
+            className="absolute bottom-1/4 -right-20 w-[400px] h-[400px] bg-brandRed/10 blur-[150px] rounded-full" 
+          />
 
-          {/* MAIN WRAPPER: Reduced space-y-16 to responsive space-y-8/12 to prevent overlapping on laptops */}
-          <div className="relative flex flex-col items-center space-y-8 md:space-y-12 z-10 w-full px-6">
+          <div className="relative flex flex-col items-center w-full px-10 z-10 space-y-16">
             
-            {/* 2. UPSCALED LOGO */}
+            {/* 2. LOGO: Sharp Animation */}
             <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 1, ease: "easeOut" }}
             >
               <Image 
                 src="/logo.png" 
                 alt="Puneri Mallus" 
-                width={600} 
-                height={200} 
-                className="h-32 md:h-48 w-auto object-contain drop-shadow-[0_0_50px_rgba(255,0,0,0.5)]"
+                width={450} 
+                height={150} 
+                className="h-28 md:h-44 w-auto object-contain drop-shadow-[0_0_40px_rgba(255,0,0,0.3)]"
                 priority
               />
             </motion.div>
 
-            {/* 3. THE LOADING BAR */}
-            <div className="w-full max-w-[300px] md:max-w-[500px] space-y-4 md:space-y-5">
-              <div className="h-[2px] w-full bg-white/5 relative overflow-hidden">
+            {/* 3. MODERN LOADING ENGINE */}
+            <div className="w-full max-w-[320px] md:max-w-[550px] space-y-6">
+              <div className="h-[2px] w-full bg-white/5 relative overflow-hidden rounded-full">
+                {/* Background "Glow" line */}
+                <div className="absolute inset-0 bg-brandRed/10" />
+                
+                {/* Main Progress */}
                 <motion.div 
                   className="absolute inset-y-0 left-0 bg-brandRed shadow-[0_0_20px_#FF0000]"
                   initial={{ width: 0 }}
                   animate={{ width: `${percent}%` }}
                 />
+                
+                {/* LASER SCANNER EFFECT */}
+                <motion.div 
+                  animate={{ left: ["-10%", "110%"] }}
+                  transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+                  className="absolute inset-y-0 w-20 bg-gradient-to-r from-transparent via-white/40 to-transparent z-10"
+                />
               </div>
-              <div className="flex justify-between items-center font-mono text-[11px] tracking-[0.4em] text-zinc-400 font-black">
-                <span className="animate-pulse">CONNECTING THE TRIBE</span>
-                <span className="text-brandRed">{percent}%</span>
+
+              <div className="flex flex-col items-center gap-3">
+                <div className="flex justify-between w-full font-mono text-[8px] md:text-[10px] tracking-[0.4em] font-black text-zinc-500">
+                  <span className="uppercase italic">System Initialization</span>
+                  <span className="text-brandRed">{percent}%</span>
+                </div>
+                
+                {/* REPLACED: TOGETHER FOR GROWTH SLOGAN */}
+                <motion.p 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="text-[9px] md:text-[11px] font-black text-white tracking-[0.3em] md:tracking-[0.5em] uppercase italic text-center pt-2"
+                >
+                  Together for Growth <span className="text-brandRed mx-1 inline-block">/</span> Good Vibes
+                </motion.p>
               </div>
             </div>
 
-            {/* 4. THE MANTRA */}
-            <div className="text-center space-y-2 md:space-y-3 pt-2 md:pt-4">
+            {/* 4. MANTRA: Minimalist Stack */}
+            <div className="flex flex-col items-center space-y-4 pt-4">
               {mantra.map((text, i) => (
-                <motion.p
+                <motion.div
                   key={i}
-                  initial={{ opacity: 0, y: 10 }}
+                  initial={{ opacity: 0 }}
                   animate={{ 
-                    opacity: percent > (i * 30) ? 1 : 0,
-                    y: percent > (i * 30) ? 0 : 10 
+                    opacity: percent > (i * 33) ? 1 : 0,
+                    x: percent > (i * 33) ? 0 : -10 
                   }}
-                  className={`text-[12px] md:text-sm font-black uppercase tracking-[0.8em] transition-all duration-700 ${
-                    text === "ZERO DIVIDE" ? "text-brandRed drop-shadow-[0_0_10px_rgba(255,0,0,0.5)]" : "text-white/30"
-                  }`}
+                  className="flex items-center gap-4"
                 >
-                  {text}
-                </motion.p>
+                   {/* Modern dash indicator */}
+                   <div className={`h-[1px] transition-all duration-1000 ${percent > (i * 33) ? 'w-6 bg-brandRed' : 'w-0 bg-zinc-800'}`} />
+                   <p className={`text-[10px] md:text-[12px] font-black uppercase tracking-[0.6em] transition-all duration-1000 ${
+                    text === "ZERO DIVIDE" ? "text-brandRed" : "text-white/20"
+                  }`}>
+                    {text}
+                  </p>
+                </motion.div>
               ))}
             </div>
           </div>
 
-          {/* 5. BOTTOM FIXED MANTRA: Adjusted bottom spacing for shorter screens */}
-          <div className="absolute bottom-8 md:bottom-12 lg:bottom-16 z-10 w-full text-center px-4">
-             <motion.p 
-               initial={{ opacity: 0 }}
-               animate={{ 
-                 opacity: [0.4, 1, 0.4], 
-               }} 
-               transition={{ 
-                 duration: 3, 
-                 repeat: Infinity, 
-                 ease: "easeInOut" 
-               }}
-               className="text-[10px] font-black text-white tracking-[0.6em] uppercase italic"
-             >
-               Together for Growth & Good Vibes
-             </motion.p>
+          {/* 5. MINIMAL FOOTER LABEL */}
+          <div className="absolute bottom-12 z-10 text-center opacity-20">
+             <p className="text-[7px] font-black uppercase tracking-[1em] text-white">
+               Tribe Official Interface // 2026
+             </p>
           </div>
         </motion.div>
       )}

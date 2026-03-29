@@ -311,7 +311,7 @@ export default function Home() {
                   <Image src="/founders/shehanas.jpg" alt="Shena" fill className="object-cover group-hover:scale-105 transition-all duration-700" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
                 </div>
-                <h4 className="text-2xl sm:text-3xl font-black uppercase tracking-tighter text-white">Shena</h4>
+                <h4 className="text-2xl sm:text-3xl font-black uppercase tracking-tighter text-white">Shehanas  </h4>
                 <p className="text-brandRed font-black uppercase text-[10px] tracking-[0.4em] sm:tracking-[0.5em] mt-2 sm:mt-3">Co-Founder</p>
               </div>
             </div>

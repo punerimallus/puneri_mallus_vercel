@@ -4,7 +4,7 @@ import Navbar from "@/components/Navbar";
 import Preloader from "@/components/Preloader";
 import { AlertProvider } from "@/context/AlertContext";
 import Footer from "@/components/Footer";
-import ChatWidget from "@/components/ChatWidget";
+// import ChatWidget from "@/components/ChatWidget";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -27,7 +27,7 @@ export default function RootLayout({
           <main className="min-h-screen w-full overflow-x-hidden">
             {children}
           </main>
-          <ChatWidget/>
+          {/* <ChatWidget/> */}
           <Footer />
         </AlertProvider>
       </body>
