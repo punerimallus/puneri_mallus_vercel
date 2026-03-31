@@ -129,12 +129,12 @@ useEffect(() => {
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600 group-focus-within:text-brandRed" size={14} />
                 <input 
                     placeholder="SEARCH RECORDS..." 
-                    className="w-full bg-zinc-950/40 border border-white/10 rounded-xl py-3.5 pl-11 text-[9px] font-black tracking-widest outline-none focus:border-brandRed transition-all text-white backdrop-blur-xl" 
+                    className="w-full bg-zinc-950/40 border border-white/10 rounded-xl py-3.5 pl-11 text-[9px] font-black tracking-widest outline-none focus:border-brandRed transition-all text-white md:backdrop-blur-xl" 
                     onChange={e => {setSearch(e.target.value); stopSlider();}} value={search}
                 />
             </div>
 
-            <div className="relative flex items-center bg-zinc-950/50 p-1 rounded-xl border border-white/10 w-full md:w-[450px] backdrop-blur-md">
+            <div className="relative flex items-center bg-zinc-950/50 p-1 rounded-xl border border-white/10 w-full md:w-[450px] md:backdrop-blur-md">
                 {FILTERS.map((f) => (
                     <button key={f.id} onClick={() => {setActiveFilter(f.id); stopSlider();}}
                         className={`relative flex-1 py-2.5 text-[9px] font-black uppercase tracking-widest transition-colors z-10 ${activeFilter === f.id ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
@@ -162,7 +162,7 @@ useEffect(() => {
   initial={{ opacity: 0 }} 
   animate={{ opacity: 1 }} 
   exit={{ opacity: 0 }}
-                  className="group relative bg-zinc-950/30 border border-white/5 rounded-[40px] overflow-hidden transition-all duration-500 hover:border-brandRed/30 shadow-xl backdrop-blur-2xl h-fit"
+                  className="group relative bg-zinc-950/30 border border-white/5 rounded-[40px] overflow-hidden transition-all duration-500 hover:border-brandRed/30 shadow-xl md:backdrop-blur-2xl h-fit"
                 >
                   <div className="relative w-full h-56 overflow-hidden">
                     <Image 
@@ -181,7 +181,7 @@ useEffect(() => {
                         <div className="px-3 py-1 text-2xl font-black text-black leading-none pb-2">{day}</div>
                     </div>
 
-                    <div className="absolute top-6 right-6 bg-zinc-950/80 px-3 py-1.5 rounded-full border border-white/10 flex items-center gap-2 backdrop-blur-md">
+                    <div className="absolute top-6 right-6 bg-zinc-950/80 px-3 py-1.5 rounded-full border border-white/10 flex items-center gap-2 md:backdrop-blur-md">
                         {item.isUpcoming ? <Zap size={10} className="text-brandRed fill-brandRed animate-pulse" /> : <History size={10} className="text-zinc-500" />}
                         <span className={`text-[7px] font-black uppercase tracking-widest ${item.isUpcoming ? 'text-brandRed' : 'text-zinc-500'}`}>
                             {item.isUpcoming ? 'Upcoming' : 'Past'}
