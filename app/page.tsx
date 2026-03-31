@@ -119,89 +119,96 @@ export default function Home() {
   return (
     <div className="flex flex-col min-h-screen bg-[#030303] text-white selection:bg-brandRed/30 relative overflow-x-hidden w-full">
       
-      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden bg-black">
-        {/* FIX 1: Added sizes="100vw" and quality={75} to background image */}
-        <Image 
-          src="/events/main4.jpg" 
-          alt="Branded Atmosphere"
-          fill
-          priority
-          sizes="100vw"
-          quality={75}
-          className="object-cover object-center opacity-[0.45] brightness-[1.1] saturate-[1.2] contrast-[1.1]" 
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#030303]/80 z-[1]" />
-        <div className="absolute inset-0 opacity-[0.04] bg-[url('https://grainy-gradients.vercel.app/noise.svg')] mix-blend-overlay z-[2]" />
-      </div>
+      <div
+  className="fixed inset-0 z-0 pointer-events-none overflow-hidden"
+  style={{
+    backgroundImage: 'url(/events/main4.jpg)',
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    opacity: 0.45,
+    willChange: 'transform',
+    transform: 'translateZ(0)',
+  }}
+/>
+<div className="fixed inset-0 z-0 pointer-events-none">
+  <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#030303]/80 z-[1]" />
+  <div className="absolute inset-0 opacity-[0.04] bg-[url('https://grainy-gradients.vercel.app/noise.svg')] mix-blend-overlay z-[2]" />
+</div>
 
-      <div className="relative z-10">
+<div className="relative z-10">
         
         {/* HERO SECTION */}
-        <section className="relative h-screen w-full overflow-hidden bg-[#030303] z-20 flex flex-col items-center justify-center">
-          {slides.length > 0 && slides.map((slide, index) => (
-            <div 
-              key={index} 
-              className={`absolute inset-0 transition-all duration-1000 ease-in-out 
-              ${index === currentSlide 
-                ? 'opacity-100 scale-100 z-20 pointer-events-auto' 
-                : 'opacity-0 scale-110 z-0 pointer-events-none'
-              }`}
+<section className="relative h-screen w-full overflow-hidden bg-[#030303] z-20 flex flex-col items-center justify-center">
+  {slides.length > 0 && slides.map((slide, index) => {
+    const isActive = index === currentSlide;
+    const isAdjacent = Math.abs(index - currentSlide) <= 1;
+    if (!isActive && !isAdjacent) return null;
+
+    return (
+      <div
+        key={index}
+        className={`absolute inset-0 transition-all duration-1000 ease-in-out ${
+          isActive
+            ? 'opacity-100 scale-100 z-20 pointer-events-auto'
+            : 'opacity-0 scale-110 z-0 pointer-events-none'
+        }`}
+      >
+        <div className="absolute inset-0 z-0">
+          {isVideo(slide.mediaUrl) ? (
+            <video autoPlay loop muted playsInline preload="none"
+              className="w-full h-full object-cover transition-opacity duration-700"
+              style={{ opacity: Math.min(((slide.visibility || 60) + 20) / 100, 1), objectPosition: `50% ${slide.vOffset || 50}%` }}
             >
-              <div className="absolute inset-0 z-0">
-                {isVideo(slide.mediaUrl) ? (
-                  <video autoPlay loop muted playsInline className="w-full h-full object-cover transition-opacity duration-700"
-                    style={{ opacity: Math.min(((slide.visibility || 60) + 20) / 100, 1), objectPosition: `50% ${slide.vOffset || 50}%` }}
-                  >
-                    <source src={slide.mediaUrl} type="video/mp4" />
-                  </video>
-                ) : (
-                  // FIX 2: Added sizes="100vw" and quality={80} to slider images
-                  <Image src={slide.mediaUrl} alt="Slide" fill
-                    sizes="100vw"
-                    quality={80}
-                    className="object-cover transition-opacity duration-700" 
-                    style={{ opacity: Math.min(((slide.visibility || 60) + 20) / 100, 1), objectPosition: `50% ${slide.vOffset || 50}%` }}
-                    priority={index === 0} 
-                  />
-                )}
-                <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/80 z-10" />
-              </div>
-
-              <div className="relative w-full h-full flex flex-col items-center justify-center">
-                <div className="relative z-20 text-center px-4 sm:px-6 w-full max-w-6xl">
-                  <div className="flex flex-col items-center space-y-1 sm:space-y-2">
-                    <h1 className="text-4xl sm:text-5xl md:text-7xl font-black uppercase tracking-tighter leading-none text-white drop-shadow-xl">{slide.title}</h1>
-                    <h2 className="text-6xl sm:text-7xl md:text-[110px] font-black uppercase tracking-tighter leading-none italic pb-2">
-                      <span className="text-brandRed drop-shadow-[0_0_25px_rgba(255,0,0,0.6)]">{slide.subtitle}</span>
-                    </h2>
-                    <p className="text-base sm:text-xl md:text-3xl text-zinc-200 font-bold uppercase tracking-[0.4em] sm:tracking-[0.8em] pt-4 sm:pt-6 drop-shadow-lg">{slide.description}</p>
-                  </div>
-                  
-                  {slide.buttonText && (
-                    <div className="absolute top-full left-0 right-0 flex justify-center pt-6 sm:pt-10">
-                      <Link href={slide.buttonLink || "/about"} className="relative z-50 inline-block">
-                        <button className="cursor-pointer group relative bg-brandRed text-white px-10 sm:px-16 py-4 sm:py-6 rounded-full font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-xs sm:text-sm overflow-hidden transition-all hover:scale-110 shadow-[0_0_60px_rgba(255,0,0,0.4)] active:scale-95">
-                          <span className="relative z-10 flex items-center gap-3">{slide.buttonText} <ArrowUpRight size={18} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" /></span>
-                          <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 rounded-full pointer-events-none" />
-                        </button>
-                      </Link>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-
-          {slides.length > 1 && (
-            <div className="absolute bottom-8 sm:bottom-12 left-1/2 -translate-x-1/2 z-50 flex gap-3 sm:gap-4 pointer-events-auto">
-              {slides.map((_, i) => (
-                <button key={i} onClick={() => setCurrentSlide(i)} 
-                  className={`cursor-pointer h-1.5 transition-all duration-500 rounded-full ${i === currentSlide ? 'w-10 sm:w-12 bg-brandRed' : 'w-3 sm:w-4 bg-white/40'}`} 
-                />
-              ))}
-            </div>
+              <source src={slide.mediaUrl} type="video/mp4" />
+            </video>
+          ) : (
+            <Image src={slide.mediaUrl} alt="Slide" fill
+              sizes="100vw"
+              quality={80}
+              className="object-cover transition-opacity duration-700"
+              style={{ opacity: Math.min(((slide.visibility || 60) + 20) / 100, 1), objectPosition: `50% ${slide.vOffset || 50}%` }}
+              priority={index === 0}
+            />
           )}
-        </section>
+          <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/80 z-10" />
+        </div>
+
+        <div className="relative w-full h-full flex flex-col items-center justify-center">
+          <div className="relative z-20 text-center px-4 sm:px-6 w-full max-w-6xl">
+            <div className="flex flex-col items-center space-y-1 sm:space-y-2">
+              <h1 className="text-4xl sm:text-5xl md:text-7xl font-black uppercase tracking-tighter leading-none text-white drop-shadow-xl">{slide.title}</h1>
+              <h2 className="text-6xl sm:text-7xl md:text-[110px] font-black uppercase tracking-tighter leading-none italic pb-2">
+                <span className="text-brandRed drop-shadow-[0_0_25px_rgba(255,0,0,0.6)]">{slide.subtitle}</span>
+              </h2>
+              <p className="text-base sm:text-xl md:text-3xl text-zinc-200 font-bold uppercase tracking-[0.4em] sm:tracking-[0.8em] pt-4 sm:pt-6 drop-shadow-lg">{slide.description}</p>
+            </div>
+
+            {slide.buttonText && (
+              <div className="absolute top-full left-0 right-0 flex justify-center pt-6 sm:pt-10">
+                <Link href={slide.buttonLink || "/about"} className="relative z-50 inline-block">
+                  <button className="cursor-pointer group relative bg-brandRed text-white px-10 sm:px-16 py-4 sm:py-6 rounded-full font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-xs sm:text-sm overflow-hidden transition-all hover:scale-110 shadow-[0_0_60px_rgba(255,0,0,0.4)] active:scale-95">
+                    <span className="relative z-10 flex items-center gap-3">{slide.buttonText} <ArrowUpRight size={18} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" /></span>
+                    <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 rounded-full pointer-events-none" />
+                  </button>
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  })}
+
+  {slides.length > 1 && (
+    <div className="absolute bottom-8 sm:bottom-12 left-1/2 -translate-x-1/2 z-50 flex gap-3 sm:gap-4 pointer-events-auto">
+      {slides.map((_, i) => (
+        <button key={i} onClick={() => setCurrentSlide(i)}
+          className={`cursor-pointer h-1.5 transition-all duration-500 rounded-full ${i === currentSlide ? 'w-10 sm:w-12 bg-brandRed' : 'w-3 sm:w-4 bg-white/40'}`}
+        />
+      ))}
+    </div>
+  )}
+</section>  {/* ← this was missing */}
 
         <LaserDivider />
 
@@ -233,7 +240,7 @@ export default function Home() {
                             {event.title} · Live {new Date().getFullYear()}
                           </span>
                         </div>
-                        <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-zinc-950/60 backdrop-blur-xl shadow-2xl group-hover:border-brandRed/30 transition-all duration-500">
+                        <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-zinc-950/80 md:bg-zinc-950/60 md:backdrop-blur-xl shadow-2xl group-hover:border-brandRed/30 transition-all duration-500">
                           <EventCard {...event} isUpcoming={true} showDescription={true} />
                         </div>
                       </div>
@@ -272,8 +279,8 @@ export default function Home() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 sm:gap-8 relative z-30">
               {past.map((event) => (
-                <div key={event.id} className="relative transition-transform duration-500 hover:-translate-y-4">
-                  <div className="bg-zinc-950/60 backdrop-blur-xl rounded-[40px] border border-white/5 overflow-hidden">
+                <div key={event.id} className="relative transition-transform duration-500 md:hover:-translate-y-4">
+                  <div className="bg-zinc-950/80 md:bg-zinc-950/60 md:backdrop-blur-xl rounded-[40px] border border-white/5 overflow-hidden">
                     <EventCard {...event} isUpcoming={false} />
                   </div>
                 </div>
@@ -298,8 +305,7 @@ export default function Home() {
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-10 relative z-30">
-              <div className="group relative p-8 sm:p-12 rounded-[24px] sm:rounded-[40px] bg-zinc-950/60 backdrop-blur-xl border border-white/5 hover:border-brandRed/40 transition-all duration-700 overflow-hidden hover:-translate-y-2 shadow-2xl">
-                <div className="absolute inset-0 z-0 opacity-40 group-hover:opacity-80 transition-opacity duration-1000">
+                  <div className="group relative p-8 sm:p-12 rounded-[24px] sm:rounded-[40px] bg-zinc-950/80 md:bg-zinc-950/60 md:backdrop-blur-xl border border-white/5 hover:border-brandRed/40 transition-all duration-700 overflow-hidden md:hover:-translate-y-2 shadow-2xl">                <div className="absolute inset-0 z-0 opacity-40 group-hover:opacity-80 transition-opacity duration-1000">
                   {/* FIX 5: Replaced autoplay video with LazyVideo */}
                   <LazyVideo src="/videos/agam-recap.mp4" className="w-full h-full object-cover" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
@@ -311,8 +317,7 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="group relative p-8 sm:p-12 rounded-[24px] sm:rounded-[40px] bg-zinc-950/60 backdrop-blur-xl border border-white/5 hover:border-brandRed/40 transition-all duration-700 overflow-hidden hover:-translate-y-2 shadow-2xl">
-                <div className="absolute inset-0 z-0 opacity-40 group-hover:opacity-80 transition-opacity duration-1000">
+<div className="group relative p-8 sm:p-12 rounded-[24px] sm:rounded-[40px] bg-zinc-950/80 md:bg-zinc-950/60 md:backdrop-blur-xl border border-white/5 md:hover:border-brandRed/40 transition-all duration-700 overflow-hidden md:hover:-translate-y-2 shadow-2xl">                <div className="absolute inset-0 z-0 opacity-40 group-hover:opacity-80 transition-opacity duration-1000">
                   {/* FIX 5: Replaced autoplay video with LazyVideo */}
                   <LazyVideo src="/videos/jam.mp4" className="w-full h-full object-cover" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
@@ -337,8 +342,7 @@ export default function Home() {
             </h2>
             <div className="flex flex-wrap justify-center gap-10 sm:gap-16 lg:gap-32">
               <div className="group w-full max-w-[260px] sm:max-w-[340px]">
-                <div className="aspect-[3/4] bg-zinc-950/60 backdrop-blur-md rounded-[32px] sm:rounded-[50px] mb-6 sm:mb-8 overflow-hidden border border-white/10 group-hover:border-brandRed transition-all duration-700 shadow-2xl relative">
-                  {/* FIX 3: Added quality={80} and loading="lazy" to founder images */}
+<div className="aspect-[3/4] bg-zinc-950/80 md:bg-zinc-950/60 md:backdrop-blur-md rounded-[32px] sm:rounded-[50px] mb-6 sm:mb-8 overflow-hidden border border-white/10 group-hover:border-brandRed transition-all duration-700 shadow-2xl relative">                  {/* FIX 3: Added quality={80} and loading="lazy" to founder images */}
                   <Image 
                     src="/founders/suchi.jpg" 
                     alt="Suchi" 
@@ -355,8 +359,7 @@ export default function Home() {
               </div>
 
               <div className="group w-full max-w-[260px] sm:max-w-[340px]">
-                <div className="aspect-[3/4] bg-zinc-950/60 backdrop-blur-md rounded-[32px] sm:rounded-[50px] mb-6 sm:mb-8 overflow-hidden border border-white/10 group-hover:border-brandRed transition-all duration-700 shadow-2xl relative">
-                  {/* FIX 3: Added quality={80} and loading="lazy" to founder images */}
+<div className="aspect-[3/4] bg-zinc-950/80 md:bg-zinc-950/60 md:backdrop-blur-md rounded-[32px] sm:rounded-[50px] mb-6 sm:mb-8 overflow-hidden border border-white/10 group-hover:border-brandRed transition-all duration-700 shadow-2xl relative">                  {/* FIX 3: Added quality={80} and loading="lazy" to founder images */}
                   <Image 
                     src="/founders/shehanas.jpg" 
                     alt="Shena" 

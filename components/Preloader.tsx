@@ -5,6 +5,7 @@ import Image from 'next/image';
 
 export default function Preloader() {
   const [loading, setLoading] = useState(true);
+  
   const [percent, setPercent] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
@@ -12,7 +13,10 @@ export default function Preloader() {
     setPercent((prev) => {
       if (prev >= 100) {
         clearInterval(intervalRef.current!)
-        setTimeout(() => setLoading(false), 800);
+        setTimeout(() => {
+  sessionStorage.setItem('preloader_shown', 'true');
+  setLoading(false);
+}, 800);
         return 100;
       }
       return Math.min(prev + Math.floor(Math.random() * 10) + 2, 100);
@@ -22,7 +26,7 @@ export default function Preloader() {
 }, []);
 
   const mantra = ["ONE COMMUNITY", "MANY DREAMS", "ZERO DIVIDE"];
-
+  
   return (
     <AnimatePresence>
       {loading && (
@@ -35,16 +39,8 @@ transition={{ duration: 0.6, ease: "easeInOut" }}
           <div className="absolute inset-0 opacity-[0.03] bg-[url('https://grainy-gradients.vercel.app/noise.svg')] pointer-events-none" />
           
           {/* Moving Ambient Orbs */}
-          <motion.div 
-            animate={{ scale: [1, 1.2, 1], opacity: [0.1, 0.2, 0.1] }}
-            transition={{ duration: 8, repeat: Infinity }}
-            className="absolute top-1/4 -left-20 w-[400px] h-[400px] bg-brandRed/20 blur-[150px] rounded-full" 
-          />
-          <motion.div 
-            animate={{ scale: [1.2, 1, 1.2], opacity: [0.1, 0.15, 0.1] }}
-            transition={{ duration: 10, repeat: Infinity }}
-            className="absolute bottom-1/4 -right-20 w-[400px] h-[400px] bg-brandRed/10 blur-[150px] rounded-full" 
-          />
+          <div className="absolute top-1/4 -left-20 w-[400px] h-[400px] bg-brandRed/15 blur-[150px] rounded-full pointer-events-none" />
+<div className="absolute bottom-1/4 -right-20 w-[400px] h-[400px] bg-brandRed/10 blur-[150px] rounded-full pointer-events-none" />
 
           <div className="relative flex flex-col items-center w-full px-10 z-10 space-y-8 md:space-y-16">
             
@@ -74,10 +70,10 @@ transition={{ duration: 0.6, ease: "easeInOut" }}
                 
                 {/* Main Progress */}
                 <motion.div 
-                  className="absolute inset-y-0 left-0 bg-brandRed shadow-[0_0_20px_#FF0000]"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${percent}%` }}
-                />
+  className="absolute inset-y-0 left-0 bg-brandRed shadow-[0_0_20px_#FF0000] will-change-transform"
+  initial={{ width: 0 }}
+  animate={{ width: `${percent}%` }}
+/>
                 
                 {/* LASER SCANNER EFFECT */}
                 <motion.div 
