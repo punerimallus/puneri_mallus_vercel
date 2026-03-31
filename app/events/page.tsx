@@ -104,18 +104,21 @@ useEffect(() => {
       onClickCapture={stopSlider}
       onKeyDownCapture={stopSlider}
     >
-      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
-<Image 
-    src="/events/eventsback.jpg" 
-    alt="BG" 
-    fill 
-    className="object-cover opacity-[0.45] brightness-[0.8] scale-110 saturate-[1.2]" 
-    priority 
-    // ADD THIS:
-    sizes="100vw"
-    blurDataURL={blurPlaceholder}
-  />        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#030303] z-[1]" />
-      </div>
+      <div
+  className="fixed inset-0 z-0 pointer-events-none overflow-hidden"
+  style={{
+    backgroundImage: 'url(/events/eventsback.jpg)',
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    opacity: 0.45,
+    transform: 'translateZ(0)',
+    willChange: 'transform',
+  }}
+/>
+<div className="fixed inset-0 z-0 pointer-events-none">
+  <div className="absolute inset-0 brightness-[0.8] saturate-[1.2]" />
+  <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#030303] z-[1]" />
+</div>
 
       <div className="max-w-7xl mx-auto relative z-10 pt-32 pb-32 px-6">
         <div className="text-center mb-12 space-y-4">
