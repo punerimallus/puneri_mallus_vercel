@@ -45,43 +45,44 @@ export default function SignupPage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
-
+  const [isWaitingForEmail, setIsWaitingForEmail] = useState(false);
   // --- 1. AUTOMATIC REDIRECT ENGINE ---
   useEffect(() => {
   let poller: any;
 
   const checkGlobalRegistration = async () => {
-    if (!phone || phone.length < 10) return;
+    // Only check if we are actually waiting for a click
+    if (!phone || !isWaitingForEmail) return;
 
-    // We check the DATABASE, not the local session.
-    // The moment you click 'Confirm' on your phone, your SQL trigger 
-    // creates this profile. The laptop will see it immediately.
+    // Check the DATABASE (profiles table)
     const { data, error } = await supabase
       .from('profiles')
       .select('id')
       .eq('phone_number', `+91${phone}`)
       .maybeSingle();
 
+    // If data exists, it means the Phone click happened!
     if (data && !error) {
-      setMessage("IDENTITY DETECTED. SYNCING TRIBE ACCESS...");
+      setMessage("IDENTITY VERIFIED! SYNCING ACCESS...");
       clearInterval(poller);
       
-      // Redirect to login so the laptop can establish its own session
+      // Laptop redirects to Login now that the account is active
       setTimeout(() => {
         router.push('/auth/login');
       }, 2000);
     }
   };
 
-  // Start polling only when waiting for the email link click
-  if (message.includes("EMAIL") || message.includes("DISPATCHED") || message.includes("STANDBY")) {
-    poller = setInterval(checkGlobalRegistration, 2500);
+  if (isWaitingForEmail) {
+    poller = setInterval(checkGlobalRegistration, 3000); // Check every 3 seconds
   }
 
   return () => {
     if (poller) clearInterval(poller);
   };
-}, [message, phone, supabase, router]);
+}, [isWaitingForEmail, phone, supabase, router]);
+
+
   const PUNE_AREAS = ["Akurdi", "Aundh", "Balewadi", "Baner", "Bavdhan", "Bhosari", "Bibwewadi", "Camp", "Chikhali", "Chinchwad", "Dapodi", "Deccan", "Dhanori", "Erandwane", "Fatima Nagar", "Ghorpadi", "Hadapsar", "Hinjewadi", "Kalyani Nagar", "Karve Nagar", "Kasarwadi", "Katraj", "Khadki", "Kondhwa", "Koregaon Park", "Kothrud", "Lohegaon", "Magarpatta", "Model Colony", "Moshi", "Mundhwa", "NIBM", "Nigdi", "Pashan", "Phugewadi", "Pimpri", "Pimple Gurav", "Pimple Nilakh", "Pimple Saudagar", "Pune", "Punawale", "Rahatani", "Ravet", "Sadashiv Peth", "Sahakar Nagar", "Sangvi", "Shivajinagar", "Sinhagad Road", "Sus", "Swargate", "Talawade", "Tathawade", "Thergaon", "Undri", "Viman Nagar", "Vishrantwadi", "Wakad", "Wanowrie", "Warje", "Yerwada"].sort();
 
   const isPhoneValid = useMemo(() => phone.length === 10, [phone]);
@@ -224,7 +225,9 @@ export default function SignupPage() {
           setMessage('WELCOME TO THE TRIBE! ENTERING...');
           setTimeout(() => router.push('/auth/login'), 2000);
         } else {
+          // --- UPDATED: TRIGGER THE HEARTBEAT POLLER HERE ---
           setMessage('VERIFICATION EMAIL SENT. CHECK YOUR MAIL...');
+          setIsWaitingForEmail(true); 
         }
       }
     } catch (err: any) {
