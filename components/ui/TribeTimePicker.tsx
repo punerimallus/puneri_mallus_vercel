@@ -27,22 +27,34 @@ export default function TribeTimePicker({ value, onChange, onClose, anchorRef }:
   const minutes = ["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"];
 
   const updatePosition = useCallback(() => {
-    if (anchorRef.current) {
-      const rect = anchorRef.current.getBoundingClientRect();
-      
-      // Calculate height of picker (approx 500px) to see if it should go UP or DOWN
+  if (anchorRef.current) {
+    const rect = anchorRef.current.getBoundingClientRect();
+    const pickerWidth = 320;
+    const pickerHeight = 450; // Estimated height
+
+    // 1. Determine if we are on a small screen (mobile)
+    const isMobile = window.innerWidth < 768;
+
+    if (isMobile) {
+      // Center it on screen for mobile
+      setCoords({
+        top: window.innerHeight / 2 - pickerHeight / 2 + window.scrollY,
+        left: window.innerWidth / 2 - pickerWidth / 2 + window.scrollX
+      });
+    } else {
+      // Desktop: Always drop DOWN unless there is zero space
       const spaceBelow = window.innerHeight - rect.bottom;
-      const shouldShowAbove = spaceBelow < 500; 
+      const canFitBelow = spaceBelow > 100; // Minimal threshold
 
       setCoords({
-        // If low on screen space, show it above the input
-        top: shouldShowAbove 
-          ? rect.top + window.scrollY - 520 // Offset for picker height
-          : rect.bottom + window.scrollY + 8,
-        left: Math.min(rect.left, window.innerWidth - 340) // Prevent horizontal overflow
+        top: canFitBelow 
+          ? rect.bottom + window.scrollY + 8 
+          : rect.top + window.scrollY - pickerHeight - 8,
+        left: Math.max(10, Math.min(rect.left, window.innerWidth - pickerWidth - 20))
       });
     }
-  }, [anchorRef]);
+  }
+}, [anchorRef]);
 
   useEffect(() => {
     setMounted(true);

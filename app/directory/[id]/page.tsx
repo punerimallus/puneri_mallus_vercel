@@ -8,9 +8,10 @@ import { createBrowserClient } from '@supabase/ssr';
 import { 
   MessageCircle, MapPin, Globe, Instagram, 
   ExternalLink, Maximize2, X, ShieldCheck, Share2, 
-  Phone, Star, ChevronRight, Zap, ListChecks, Info, Image as ImageIcon
+  Phone, Star, ChevronRight, Zap, ListChecks, Info, Image as ImageIcon,Clock
 } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
+
 
 export default function ProfessionalDetailsPage() {
   const { id } = useParams();
@@ -145,6 +146,13 @@ export default function ProfessionalDetailsPage() {
         <MapPin size={18} className="text-brandRed" />
         {item.area}
     </div>
+    {/* ADDED: OPERATING HOURS DISPLAY */}
+    {(item.openTime || item.closeTime) && (
+      <div className="flex items-center gap-4 text-zinc-400 font-black uppercase tracking-[0.2em] text-[10px] sm:text-[11px] border-l-0 sm:border-l border-white/10 sm:pl-10">
+          <Clock size={16} className="text-brandRed" />
+          <span>{item.openTime} — {item.closeTime}</span>
+      </div>
+    )}
               </div>
             </div>
 
@@ -277,6 +285,17 @@ export default function ProfessionalDetailsPage() {
                   <div className="w-12 h-12 bg-zinc-900 rounded-2xl flex items-center justify-center shrink-0 border border-white/5 text-brandRed">
                     <Globe size={24} />
                   </div>
+                  {/* ADDED: EXPLICIT WEBSITE LINK */}
+    {item.website && (
+      <a 
+        href={item.website} 
+        target="_blank" 
+        className="text-xs text-zinc-200 font-bold break-all hover:text-brandRed transition-colors flex items-center gap-2"
+      >
+        {item.website.replace(/^https?:\/\//, '')} 
+        <ExternalLink size={12} />
+      </a>
+    )}
                   <div className="flex flex-wrap gap-4 items-center">
                     {item.instagram && <a href={`https://instagram.com/${item.instagram}`} target="_blank" className="text-zinc-400 hover:text-brandRed transition-colors scale-125"><Instagram size={24} /></a>}
                     {item.website && <a href={item.website} target="_blank" className="text-zinc-400 hover:text-brandRed transition-colors scale-125"><Globe size={24} /></a>}

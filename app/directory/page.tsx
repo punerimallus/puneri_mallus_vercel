@@ -73,17 +73,24 @@ export default function MalluMartPage() {
   }, []);
 
   const filteredItems = useMemo(() => {
-    const query = searchQuery.toLowerCase();
-    return items.filter(item => {
-      const matchesSearch = 
-        item.name?.toLowerCase().includes(query) || 
-        item.description?.toLowerCase().includes(query) ||
-        item.area?.toLowerCase().includes(query) ||
-        item.category?.toLowerCase().includes(query);
-      const matchesCategoryDropdown = activeCategory === "ALL" || item.category?.toUpperCase() === activeCategory;
-      return matchesSearch && matchesCategoryDropdown;
-    });
-  }, [searchQuery, activeCategory, items]);
+  const query = searchQuery.toLowerCase();
+  return items.filter(item => {
+    // 🔥 NEW: Only show if Approved OR if the current user is the owner
+    const isOwner = user?.email === item.userEmail;
+    if (!item.isApproved && !isOwner) return false;
+    if (item.isDraft && !isOwner) return false;
+    if (item.isApproved === false && !isOwner) return false;
+    const matchesSearch = 
+      item.name?.toLowerCase().includes(query) || 
+      item.description?.toLowerCase().includes(query) ||
+      item.area?.toLowerCase().includes(query) ||
+      item.category?.toLowerCase().includes(query);
+      
+    const matchesCategoryDropdown = activeCategory === "ALL" || item.category?.toUpperCase() === activeCategory;
+    
+    return matchesSearch && matchesCategoryDropdown;
+  });
+}, [searchQuery, activeCategory, items, user]);
 
   const handleDeleteExecute = async () => {
     if (!itemToDelete) return;
@@ -204,6 +211,19 @@ export default function MalluMartPage() {
             {filteredItems.map((item) => (
               <div key={item._id} className={`group relative bg-zinc-950/30 border rounded-[40px] overflow-hidden transition-all duration-500 shadow-2xl backdrop-blur-sm md:backdrop-blur-2xl ${item.isPremium ? 'border-brandRed/60 shadow-[0_0_40px_rgba(255,0,0,0.15)]' : 'border-white/5 hover:border-brandRed/30'}`}>
                 
+                
+                  {/* 🔥 2. DRAFT BADGE (Add this here) */}
+  {user?.email === item.userEmail && item.isDraft && (
+    <div className="absolute top-20 left-6 z-[40] bg-zinc-800/90 backdrop-blur-md text-amber-400 px-4 py-1.5 rounded-full flex items-center gap-2 text-[8px] font-black uppercase tracking-widest shadow-xl border border-white/5">
+      <Edit3 size={12} className="text-amber-400" /> Work in Progress (Draft)
+    </div>
+  )}
+               {/* 🔥 3. PENDING BADGE (Keep your existing pending logic but ensure it doesn't show if it's a draft) */}
+  {user?.email === item.userEmail && !item.isApproved && !item.isDraft && (
+    <div className="absolute top-20 left-6 z-[40] bg-zinc-950/80 backdrop-blur-md text-white px-4 py-1.5 rounded-full flex items-center gap-2 text-[8px] font-black uppercase tracking-widest shadow-xl animate-pulse">
+      <Zap size={12} className="text-brandRed fill-brandRed" /> Pending Approval
+    </div>
+  )}
                 {user?.email === item.userEmail && (
                   <div className="absolute top-6 left-6 z-[40] flex gap-2">
                     <Link href={`/directory/list?edit=${item._id}`} className="p-3 bg-black/60 backdrop-blur-sm md:backdrop-blur-md text-white hover:text-brandRed rounded-xl border border-white/10 transition-all shadow-xl">
@@ -226,7 +246,7 @@ export default function MalluMartPage() {
                   <Image 
                     src={(item.imagePaths && item.imagePaths[0]) ? `https://bhfrgcphqmbocplfcvbg.supabase.co/storage/v1/object/public/mallu-mart/${item.imagePaths[0]}` : (item.imagePath ? `https://bhfrgcphqmbocplfcvbg.supabase.co/storage/v1/object/public/mallu-mart/${item.imagePath}` : "/about/placeholder.jpeg")} 
                     alt={item.name} fill placeholder="blur"
-  blurDataURL={blurPlaceholder}  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw" className="object-cover md:group-hover:scale-110 transition-all duration-1000"
+                    blurDataURL={blurPlaceholder}  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw" className="object-cover md:group-hover:scale-110 transition-all duration-1000"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-transparent to-transparent" />
                   <div className="absolute bottom-6 right-6 bg-zinc-950/80 px-4 py-1.5 rounded-full border border-white/10 flex items-center gap-1.5">

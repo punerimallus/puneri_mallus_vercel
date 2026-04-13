@@ -2,7 +2,12 @@ import { NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 import { createClient } from '@supabase/supabase-js';
-import { sendPendingCommunityEmail, sendApprovedCommunityEmail, sendAdminPendingAlert } from '@/lib/mail';
+import { 
+  sendPendingCommunityEmail, 
+  sendApprovedCommunityEmail, 
+  sendAdminPendingAlert,
+  sendRejectedCommunityEmail,
+} from '@/lib/mail';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -20,7 +25,21 @@ export async function POST(req: Request) {
     const client = await clientPromise;
     const db = client.db("punerimallus");
     const data = await req.json();
-    const { _id, ...body } = data;
+
+    // 🔥 NEW: REORDER LOGIC (Bulk Update)
+    if (data.reorder && Array.isArray(data.newOrder)) {
+      const operations = data.newOrder.map((item: any) => ({
+        updateOne: {
+          filter: { _id: new ObjectId(item.id) },
+          update: { $set: { order: item.order, updatedAt: new Date() } }
+        }
+      }));
+
+      const result = await db.collection("community_circles").bulkWrite(operations);
+      return NextResponse.json({ success: true, message: `Reordered ${result.modifiedCount} nodes` });
+    }
+
+    const { _id, isRejected, ...body } = data;
 
     if (body.category) body.category = body.category.toUpperCase();
 
@@ -34,11 +53,16 @@ export async function POST(req: Request) {
       });
 
       if (oldNode) {
-        /**
-         * 🔥 SAFE IMAGE CLEANUP
-         * We only run cleanup if 'image' or 'imagePaths' are present in the request body.
-         * This prevents images from being deleted when just toggling 'isApproved' from the dashboard.
-         */
+        // REJECTION LOGIC
+        if (isRejected === true) {
+          const submitterEmail = oldNode.submittedBy || body.submittedBy;
+          if (submitterEmail) {
+            await sendRejectedCommunityEmail(submitterEmail, body.title || oldNode.title);
+          }
+          body.isApproved = false;
+        }
+
+        // Image Cleanup Logic
         if (body.image || body.imagePaths) {
           const oldImages = new Set([oldNode.image, ...(oldNode.imagePaths || [])].filter(Boolean));
           const newImages = new Set([body.image, ...(body.imagePaths || [])].filter(Boolean));
@@ -57,18 +81,25 @@ export async function POST(req: Request) {
           }
         }
 
-        // EMAIL LOGIC: CHECK FOR APPROVAL (Status change from false to true)
+        // Approval Notification
         if (!oldNode.isApproved && body.isApproved === true) {
           const submitterEmail = oldNode.submittedBy || body.submittedBy;
           if (submitterEmail) {
             const adminIdentifier = body.approvedBy || "Tribe Moderator"; 
-            // Trigger the professional live email
             await sendApprovedCommunityEmail(submitterEmail, body.title || oldNode.title, adminIdentifier, _id);
           }
         }
+
+        // Draft to Publish Logic
+        if (oldNode.isDraft && body.isDraft === false) {
+           const submitterEmail = oldNode.submittedBy || body.submittedBy;
+           if (submitterEmail) await sendPendingCommunityEmail(submitterEmail, body.title || oldNode.title);
+           
+           const pendingCount = await db.collection("community_circles").countDocuments({ isApproved: false });
+           await sendAdminPendingAlert(body.title || oldNode.title, pendingCount);
+        }
       }
 
-      // Update document
       await db.collection("community_circles").updateOne(
         { _id: new ObjectId(_id) },
         { 
@@ -84,21 +115,19 @@ export async function POST(req: Request) {
       // NEW SUBMISSION LOGIC
       const result = await db.collection("community_circles").insertOne({
         ...body,
+        isDraft: body.isDraft ?? false,
+        isApproved: false, 
+        isVerified: body.isVerified || false,
+        order: 999, // 🔥 Default high order for new submissions
+        services: body.services || [],
         createdAt: new Date(),
         updatedAt: new Date(),
-        isApproved: body.isApproved ?? false, 
-        isVerified: body.isVerified || false,
-        services: body.services || []
       });
 
-      // EMAIL LOGIC: USER NOTIFICATION & ADMIN ALERT
-      if (body.submittedBy && !body.isApproved) {
+      if (body.submittedBy && !body.isApproved && !body.isDraft) {
         await sendPendingCommunityEmail(body.submittedBy, body.title);
-
         try {
-          const pendingCount = await db.collection("community_circles").countDocuments({ 
-            isApproved: false 
-          });
+          const pendingCount = await db.collection("community_circles").countDocuments({ isApproved: false });
           await sendAdminPendingAlert(body.title, pendingCount);
         } catch (adminMailErr) {
           console.error("ADMIN_NOTIFY_ERROR:", adminMailErr);

@@ -23,7 +23,7 @@ body {
   width: 100%;
   min-height: 100vh;
   /* Prevents layout shifts from scrollbar appearing */
-  scrollbar-gutter: stable;
+  scrollbar-gutter: auto;
 }
 
 body::before {

@@ -1,17 +1,18 @@
 "use client";
-import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useRef, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createBrowserClient } from '@supabase/ssr';
 import { 
   CheckCircle, ArrowRight, Loader2, ArrowLeft, 
   Image as ImageIcon, MapPin, Plus, Trash2, X, 
-  Link as LinkIcon, Phone, Globe, Briefcase, Camera, Check, Clock, Instagram
+  Link as LinkIcon, Phone, Globe, Briefcase, Camera, Check, Clock, Instagram, Star
 } from 'lucide-react';
 import TribeTimePicker from '@/components/ui/TribeTimePicker';
 import TribeAlert from '@/components/TribeAlert'; 
 
 const EXTERNAL_CATEGORIES = ["SAMAJAM", "TEMPLE", "CHURCH", "ORGANIZATION", "OTHER"];
+
 const LaserDivider = () => (
   <div className="relative w-full h-px flex items-center justify-center overflow-hidden my-2">
     <div className="absolute inset-x-0 h-px bg-gradient-to-r from-transparent via-brandRed/40 to-transparent" />
@@ -19,8 +20,21 @@ const LaserDivider = () => (
     <div className="absolute w-24 h-px bg-white blur-[1.5px] opacity-40 z-20" />
   </div>
 );
+
+// --- WRAPPER FOR NEXT.JS SEARCH PARAMS ---
 export default function AddCommunityPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-black flex items-center justify-center"><Loader2 className="animate-spin text-brandRed" /></div>}>
+      <AddCommunityForm />
+    </Suspense>
+  );
+}
+
+function AddCommunityForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editId = searchParams.get('edit'); // 🔥 CAPTURE EDIT ID
+
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(1);
   const [gallery, setGallery] = useState<any[]>([]);
@@ -28,7 +42,6 @@ export default function AddCommunityPage() {
   const [services, setServices] = useState<any[]>([]); 
   const [showCustomCategory, setShowCustomCategory] = useState(false);
 
-  // --- TRIBE ALERT STATE ---
   const [alertConfig, setAlertConfig] = useState<{
     isVisible: boolean;
     message: string;
@@ -39,7 +52,6 @@ export default function AddCommunityPage() {
     setAlertConfig({ isVisible: true, message, type });
   };
 
-  // --- TIME PICKER STATE ---
   const [pickerField, setPickerField] = useState<'openTime' | 'closeTime' | null>(null);
   const openTimeRef = useRef<HTMLDivElement>(null);
   const closeTimeRef = useRef<HTMLDivElement>(null);
@@ -66,6 +78,60 @@ export default function AddCommunityPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
+  // 🔥 1. HYDRATION LOGIC: Load existing data if editing
+  useEffect(() => {
+    if (editId) {
+      const fetchDraftData = async () => {
+        try {
+          const res = await fetch(`/api/community?id=${editId}`);
+          if (res.ok) {
+            const data = await res.json();
+            
+            // Map main fields
+            setFormData({
+              ...formData,
+              title: data.title || '',
+              category: EXTERNAL_CATEGORIES.includes(data.category) ? data.category : 'OTHER',
+              customCategory: !EXTERNAL_CATEGORIES.includes(data.category) ? data.category : '',
+              area: data.area || '',
+              tagline: data.tagline || '',
+              description: data.description || '',
+              link: data.link || '',
+              instagram: data.instagram || '',
+              image: data.image || '',
+              mapUrl: data.mapUrl || '',
+              contact: data.contact || '',
+              website: data.website || '',
+              openTime: data.openTime || '09:00 AM',
+              closeTime: data.closeTime || '06:00 PM'
+            });
+
+            if (data.services) setServices(data.services);
+            if (data.category === "OTHER" || !EXTERNAL_CATEGORIES.includes(data.category)) setShowCustomCategory(true);
+
+            // 🔥 Map existing images so they don't get lost
+            if (data.imagePaths) {
+              const existingGallery = data.imagePaths.map((url: string) => ({
+                id: Math.random().toString(36).substr(2, 9),
+                type: 'existing', // Mark as existing to skip re-upload
+                file: null,
+                previewUrl: url
+              }));
+              setGallery(existingGallery);
+
+              // Set thumbnail focus
+              const thumb = existingGallery.find((img: any) => img.previewUrl === data.image);
+              if (thumb) setThumbnailId(thumb.id);
+            }
+          }
+        } catch (err) {
+          console.error("Hydration Error:", err);
+        }
+      };
+      fetchDraftData();
+    }
+  }, [editId]);
+
   const addService = () => setServices([...services, { name: '', desc: '' }]);
   const removeService = (index: number) => setServices(services.filter((_, i) => i !== index));
   const updateService = (index: number, field: string, value: string) => {
@@ -77,9 +143,7 @@ export default function AddCommunityPage() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const selected = Array.from(e.target.files);
-      if (gallery.length + selected.length > 5) {
-        return triggerAlert("Max 5 images allowed for community review", "error");
-      }
+      if (gallery.length + selected.length > 5) return triggerAlert("Max 5 images allowed", "error");
       const newImgs = selected.map(file => ({
         id: Math.random().toString(36).substr(2, 9),
         type: 'new', 
@@ -96,35 +160,36 @@ export default function AddCommunityPage() {
     if (thumbnailId === id) setThumbnailId(null);
   };
 
-  const validateURL = (url: string) => {
-    if (!url) return true;
-    const pattern = /^(https?:\/\/)?([\da-z.-]+)\.([a-z.]{2,6})([/\w .-]*)*\/?$/;
-    return pattern.test(url);
-  };
-
-  const handleSubmit = async () => {
-    if (gallery.length === 0) return triggerAlert("At least one image is required", "error");
-    if (!thumbnailId) return triggerAlert("Please select a thumbnail image", "error");
-    if (!formData.title.trim()) return triggerAlert("Organization Name is required", "error");
-    if (!formData.area.trim()) return triggerAlert("Location Area is required", "error");
-    if (!formData.description.trim()) return triggerAlert("Description is mandatory", "error");
-    
-    if (!formData.contact || formData.contact.length !== 10) {
-      return triggerAlert("Valid 10-digit WhatsApp number required", "error");
-    }
-    if (formData.website && !validateURL(formData.website)) {
-      return triggerAlert("The Website URL format is invalid", "error");
-    }
-    if (formData.link && !validateURL(formData.link)) {
-      return triggerAlert("The Community Link URL format is invalid", "error");
+  // 🔥 2. SMART SUBMIT LOGIC
+  const handleSubmit = async (isDraftMode: boolean = false) => {
+    if (!isDraftMode) {
+      if (gallery.length === 0) return triggerAlert("At least one image is required", "error");
+      if (!thumbnailId) return triggerAlert("Please select a cover thumbnail", "error");
+      if (!formData.title.trim()) return triggerAlert("Circle Name is required", "error");
+      if (!formData.area.trim()) return triggerAlert("Location Area is required", "error");
+      if (!formData.description.trim() || formData.description.length < 20) {
+        return triggerAlert("Community Story is too short (min 20 chars)", "error");
+      }
+      if (!formData.contact || formData.contact.length !== 10) {
+        return triggerAlert("Valid 10-digit WhatsApp contact required", "error");
+      }
+    } else {
+      // Minimal check for drafts
+      if (!formData.title.trim()) return triggerAlert("Provide a name to save draft", "info");
     }
 
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      let finalThumbnailUrl = "";
+      let finalThumbnailUrl = formData.image || "";
 
+      // 🔥 Process Images: Only upload 'new' ones
       const finalPaths = await Promise.all(gallery.map(async (img) => {
+        if (img.type === 'existing') {
+          if (img.id === thumbnailId) finalThumbnailUrl = img.previewUrl;
+          return img.previewUrl;
+        }
+
         const fileName = `user-node-${Date.now()}-${Math.random().toString(36).substr(2,5)}`;
         const { data, error } = await supabase.storage.from('community').upload(fileName, img.file);
         if (error) throw error;
@@ -134,22 +199,18 @@ export default function AddCommunityPage() {
         return urlData.publicUrl;
       }));
 
-      let igHandle = formData.instagram.trim().replace('@', '');
-      if (igHandle.startsWith('https://')) {
-        igHandle = igHandle.split('/').filter(Boolean).pop() || '';
-      }
-
       const finalCategory = formData.category === "OTHER" ? formData.customCategory : formData.category;
       
       const payload = { 
         ...formData, 
-        instagram: igHandle,
+        _id: editId, // 🔥 CRITICAL: Ensures MongoDB updates instead of creating new
         category: finalCategory.toUpperCase(), 
         image: finalThumbnailUrl, 
         imagePaths: finalPaths, 
         services,
         isApproved: false,
-        submittedBy: user?.email 
+        isDraft: isDraftMode, 
+        submittedBy: user?.email?.toLowerCase()
       };
 
       const res = await fetch('/api/community/manage', {
@@ -159,12 +220,11 @@ export default function AddCommunityPage() {
       });
 
       if (res.ok) {
-        triggerAlert("Community Submitted for Review", "success");
+        triggerAlert(isDraftMode ? "Draft Updated Successfully" : "Submitted for Tribe Review", "success");
         setTimeout(() => router.push('/community'), 2500);
       }
     } catch (err) { 
-      console.error(err); 
-      triggerAlert("Submission failed. Ensure you are logged in.", "error"); 
+      triggerAlert("Process failed. Please try again.", "error"); 
     } finally { 
       setLoading(false); 
     }
@@ -183,12 +243,7 @@ export default function AddCommunityPage() {
       <div className="max-w-4xl mx-auto space-y-12">
         <div className="flex gap-2">
           {[1, 2].map(s => (
-            <div 
-              key={s} 
-              className={`h-1 flex-1 rounded-full transition-all duration-500 ${
-                step >= s ? 'bg-brandRed shadow-[0_0_10px_#FF0000]' : 'bg-zinc-800'
-              }`} 
-            />
+            <div key={s} className={`h-1 flex-1 rounded-full transition-all duration-500 ${step >= s ? 'bg-brandRed shadow-[0_0_10px_#FF0000]' : 'bg-zinc-800'}`} />
           ))}
         </div>
 
@@ -204,290 +259,182 @@ export default function AddCommunityPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-2 md:col-span-2 border border-white/25 p-6 rounded-[32px] focus-within:border-brandRed transition-all">
                 <label className="text-[10px] font-black uppercase text-zinc-500 ml-2">Organization Name *</label>
-                <input 
-                  placeholder="E.G. PUNE MALAYALEE ASSOCIATION" 
-                  className="w-full bg-transparent outline-none font-bold text-white text-xl" 
-                  value={formData.title} 
-                  onChange={e => setFormData({...formData, title: e.target.value.toUpperCase()})} 
-                />
+                <input placeholder="E.G. PUNE MALAYALEE ASSOCIATION" className="w-full bg-transparent outline-none font-bold text-white text-xl uppercase" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
               </div>
 
               <div className="space-y-2 border border-white/25 p-6 rounded-[32px] focus-within:border-brandRed transition-all">
                 <label className="text-[10px] font-black uppercase text-zinc-500 ml-2">Sector Type *</label>
-                <div className="relative">
-                  <select 
-                    className="w-full bg-transparent outline-none font-bold text-white cursor-pointer appearance-none" 
-                    value={formData.category} 
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setFormData({...formData, category: val});
-                      setShowCustomCategory(val === "OTHER");
-                    }}
-                  >
-                    {EXTERNAL_CATEGORIES.map(c => <option key={c} value={c} className="bg-black">{c}</option>)}
-                  </select>
-                </div>
+                <select className="w-full bg-transparent outline-none font-bold text-white cursor-pointer" value={formData.category} onChange={(e) => { setFormData({...formData, category: e.target.value}); setShowCustomCategory(e.target.value === "OTHER"); }}>
+                  {EXTERNAL_CATEGORIES.map(c => <option key={c} value={c} className="bg-black">{c}</option>)}
+                </select>
               </div>
 
               <div className="space-y-2 border border-white/25 p-6 rounded-[32px] focus-within:border-brandRed transition-all">
                 <label className="text-[10px] font-black uppercase text-zinc-500 ml-2">Area / Location *</label>
-                <input 
-                  placeholder="E.G. BANER / WAKAD" 
-                  className="w-full bg-transparent outline-none font-bold text-white" 
-                  value={formData.area} 
-                  onChange={e => setFormData({...formData, area: e.target.value.toUpperCase()})} 
-                />
+                <input placeholder="E.G. BANER" className="w-full bg-transparent outline-none font-bold text-white uppercase" value={formData.area} onChange={e => setFormData({...formData, area: e.target.value})} />
               </div>
 
               <div className="space-y-2 border border-white/25 p-6 rounded-[32px] focus-within:border-brandRed transition-all" ref={openTimeRef}>
-                <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 flex items-center gap-2">
-                  <Clock size={12}/> Opening Time
-                </label>
-                <div 
-                  onClick={() => setPickerField('openTime')}
-                  className="cursor-pointer font-bold text-white flex justify-between items-center py-2"
-                >
-                  {formData.openTime}
-                  <Clock size={16} className="text-zinc-600" />
-                </div>
+                <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 flex items-center gap-2"><Clock size={12}/> Opening Time</label>
+                <div onClick={() => setPickerField('openTime')} className="cursor-pointer font-bold text-white flex justify-between items-center py-2">{formData.openTime}</div>
               </div>
 
               <div className="space-y-2 border border-white/25 p-6 rounded-[32px] focus-within:border-brandRed transition-all" ref={closeTimeRef}>
-                <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 flex items-center gap-2">
-                  <Clock size={12}/> Closing Time
-                </label>
-                <div 
-                  onClick={() => setPickerField('closeTime')}
-                  className="cursor-pointer font-bold text-white flex justify-between items-center py-2"
-                >
-                  {formData.closeTime}
-                  <Clock size={16} className="text-zinc-600" />
-                </div>
+                <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 flex items-center gap-2"><Clock size={12}/> Closing Time</label>
+                <div onClick={() => setPickerField('closeTime')} className="cursor-pointer font-bold text-white flex justify-between items-center py-2">{formData.closeTime}</div>
               </div>
-
-              <AnimatePresence>
-                {pickerField && (
-                  <TribeTimePicker 
-                    value={formData[pickerField]}
-                    anchorRef={pickerField === 'openTime' ? openTimeRef : closeTimeRef}
-                    onClose={() => setPickerField(null)}
-                    onChange={(time) => setFormData({ ...formData, [pickerField]: time })}
-                  />
-                )}
-              </AnimatePresence>
 
               {showCustomCategory && (
                 <div className="space-y-2 md:col-span-2 border border-brandRed/30 p-6 rounded-[32px]">
                   <label className="text-[10px] font-black uppercase text-brandRed ml-2">Custom Category Name *</label>
-                  <input 
-                    placeholder="SPECIFY CATEGORY" 
-                    className="w-full bg-transparent outline-none font-bold text-white" 
-                    value={formData.customCategory} 
-                    onChange={e => setFormData({...formData, customCategory: e.target.value.toUpperCase()})} 
-                  />
+                  <input placeholder="SPECIFY CATEGORY" className="w-full bg-transparent outline-none font-bold text-white uppercase" value={formData.customCategory} onChange={e => setFormData({...formData, customCategory: e.target.value})} />
                 </div>
               )}
 
               <div className="space-y-2 md:col-span-2 border border-white/25 p-6 rounded-[32px] focus-within:border-brandRed transition-all">
                 <label className="text-[10px] font-black uppercase text-zinc-500 ml-2">Google Maps Link</label>
-                <div className="relative flex items-center pt-2">
-                  <MapPin className="text-zinc-600 mr-3" size={18} />
-                  <input 
-                    placeholder="PASTE GOOGLE MAPS LINK" 
-                    className="w-full bg-transparent outline-none font-bold text-xs text-white" 
-                    value={formData.mapUrl} 
-                    onChange={e => setFormData({...formData, mapUrl: e.target.value})} 
-                  />
-                </div>
+                <input placeholder="PASTE GOOGLE MAPS LINK" className="w-full bg-transparent outline-none font-bold text-xs text-white" value={formData.mapUrl} onChange={e => setFormData({...formData, mapUrl: e.target.value})} />
               </div>
             </div>
             
-            {/* CLEAN CENTERED NEXT BUTTON */}
-            <div className="pt-6">
-              <button 
-                onClick={() => setStep(2)} 
-                className="group w-full py-8 bg-white text-black rounded-[32px] font-black uppercase tracking-[0.3em] transition-all duration-500 hover:bg-brandRed hover:text-white active:scale-[0.98] shadow-2xl flex items-center justify-center gap-4"
-              >
-                <span className="text-sm">Next: Offerings & Media</span>
-                <ArrowRight 
-                  size={20} 
-                  strokeWidth={3} 
-                  className="transition-transform duration-300 group-hover:translate-x-2" 
-                />
-              </button>
-              
-              <p className="text-center text-[9px] text-zinc-600 font-bold uppercase tracking-widest mt-8 italic">
-                Step 01 / 02 • Verification Status: Pending
-              </p>
-            </div>
+            <button onClick={() => setStep(2)} className="w-full py-8 bg-white text-black rounded-[32px] font-black uppercase tracking-[0.3em] transition-all hover:bg-brandRed hover:text-white flex items-center justify-center gap-4">
+              <span>Next: Services & Media</span><ArrowRight size={20} />
+            </button>
           </motion.div>
         ) : (
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-10">
             <div className="flex items-center gap-4">
-              <button 
-                onClick={() => setStep(1)} 
-                className="p-4 border border-white/25 rounded-2xl hover:bg-brandRed transition-all text-white"
-              >
-                <ArrowLeft />
-              </button>
-              <h1 className="text-5xl font-black italic uppercase leading-none">
-                Visual <span className="text-brandRed">Identity</span>
-              </h1>
+              <button onClick={() => setStep(1)} className="p-4 border border-white/25 rounded-2xl hover:bg-brandRed transition-all text-white"><ArrowLeft /></button>
+              <h1 className="text-5xl font-black italic uppercase leading-none text-white">Visual <span className="text-brandRed">Identity .</span></h1>
             </div>
 
-            {/* SERVICES SECTION */}
-            <div className="border border-white/25 p-8 rounded-[40px] space-y-6">
-                <div className="flex justify-between items-center px-2">
-                    <div className="flex items-center gap-3 text-brandRed">
-                        <Briefcase size={20}/>
-                        <label className="text-[11px] font-black uppercase tracking-widest text-white">Offerings / Services</label>
-                    </div>
-                    <button 
-                      onClick={addService} 
-                      className="text-[10px] bg-white text-black px-5 py-2 rounded-full font-black uppercase hover:bg-brandRed hover:text-white transition-all"
-                    >
-                      + Add
-                    </button>
-                </div>
-                <div className="space-y-8">
-  {services.map((service, index) => (
-    <div key={index} className="relative group space-y-4">
-      {/* DELETE BUTTON - Positioned to look integrated but clear */}
-      <button 
-        onClick={() => removeService(index)} 
-        className="absolute -top-3 -right-3 p-2 bg-red-600 text-white rounded-full z-20 opacity-0 group-hover:opacity-100 transition-all shadow-xl hover:scale-110 active:scale-90 border-2 border-[#030303]"
-      >
-        <X size={14} strokeWidth={3} />
-      </button>
-
-      {/* INDIVIDUAL BOX FOR SERVICE NAME */}
-      <div className="border border-white/25 p-6 rounded-[28px] focus-within:border-brandRed transition-all bg-transparent">
-        <label className="text-[9px] font-black uppercase text-zinc-600 ml-2 mb-1 block tracking-widest">
-          Service Designation
-        </label>
-        <input 
-          placeholder="E.G. EMERGENCY WELFARE" 
-          className="w-full bg-transparent outline-none text-sm font-black uppercase text-white px-2" 
-          value={service.name} 
-          onChange={(e) => updateService(index, 'name', e.target.value)} 
-        />
-      </div>
-
-      {/* INDIVIDUAL BOX FOR DESCRIPTION */}
-      <div className="border border-white/25 p-6 rounded-[28px] focus-within:border-brandRed transition-all bg-transparent">
-        <label className="text-[9px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest">
-          Offer Details
-        </label>
-        <textarea 
-          placeholder="DESCRIBE WHAT THE COMMUNITY PROVIDES..." 
-          className="w-full bg-transparent outline-none text-xs font-medium text-zinc-400 italic px-2 resize-none" 
-          rows={2}
-          value={service.desc} 
-          onChange={(e) => updateService(index, 'desc', e.target.value)} 
-        />
-      </div>
+            {/* 🔥 SERVICES SECTION (RESTORED & SEPARATED) */}
+<div className="border border-white/25 p-8 rounded-[40px] space-y-6">
+  <div className="flex justify-between items-center px-2">
+    <div className="flex items-center gap-3 text-brandRed">
+      <Briefcase size={20} />
+      <label className="text-[11px] font-black uppercase tracking-widest text-white">Specific Services</label>
     </div>
-  ))}
+    <button 
+      onClick={addService} 
+      className="text-[10px] bg-white text-black px-5 py-2 rounded-full font-black uppercase hover:bg-brandRed hover:text-white transition-all shadow-lg active:scale-95"
+    >
+      + Add Service
+    </button>
+  </div>
 
-  {services.length === 0 && (
-    <div className="border border-dashed border-white/5 rounded-[32px] py-12 flex flex-col items-center justify-center gap-3">
-       <Briefcase size={24} className="text-zinc-800" />
-       <p className="text-zinc-600 text-[10px] font-black uppercase tracking-[0.2em] italic">
-         Inventory Empty: No Services Cataloged
-       </p>
-    </div>
-  )}
+  <div className="space-y-10">
+    {services.map((service, index) => (
+      <div key={index} className="relative group space-y-4">
+        {/* DELETE BUTTON */}
+        <button 
+          onClick={() => removeService(index)} 
+          className="absolute -top-3 -right-3 p-2 bg-red-600 text-white rounded-full z-20 opacity-0 group-hover:opacity-100 transition-all shadow-xl hover:scale-110 active:scale-90 border-2 border-[#030303]"
+        >
+          <X size={14} strokeWidth={3} />
+        </button>
+
+        {/* SEPARATED HEADER BOX */}
+        <div className="border border-white/10 p-5 rounded-[24px] bg-zinc-950/40 focus-within:border-brandRed transition-all">
+          <label className="text-[9px] font-black uppercase text-zinc-500 ml-1 mb-1 block tracking-widest">
+            Service Designation
+          </label>
+          <input 
+            placeholder="E.G. EMERGENCY WELFARE" 
+            className="w-full bg-transparent outline-none text-sm font-black uppercase text-white px-1" 
+            value={service.name} 
+            onChange={(e) => updateService(index, 'name', e.target.value)} 
+          />
+        </div>
+
+        {/* SEPARATED DESCRIPTION BOX */}
+        <div className="border border-white/10 p-5 rounded-[24px] bg-zinc-950/40 focus-within:border-brandRed transition-all">
+          <label className="text-[9px] font-black uppercase text-zinc-500 ml-1 mb-1 block tracking-widest">
+            Offer Details
+          </label>
+          <textarea 
+            placeholder="DESCRIBE THE SCOPE OF THIS SERVICE..." 
+            rows={2} 
+            className="w-full bg-transparent outline-none text-xs font-medium text-zinc-400 italic px-1 resize-none" 
+            value={service.desc} 
+            onChange={(e) => updateService(index, 'desc', e.target.value)} 
+          />
+        </div>
+      </div>
+    ))}
+
+    {/* EMPTY STATE */}
+    {services.length === 0 && (
+      <div className="border border-dashed border-white/5 rounded-[32px] py-12 flex flex-col items-center justify-center gap-3">
+        <Briefcase size={24} className="text-zinc-800" />
+        <p className="text-zinc-600 text-[10px] font-black uppercase tracking-[0.2em] italic text-center">
+          Inventory Empty: No Services Cataloged
+        </p>
+      </div>
+    )}
+  </div>
 </div>
-            </div>
 
-            {/* GALLERY SECTION */}
+            {/* 🔥 GALLERY SECTION (RESTORED) */}
             <div className="border border-white/25 p-8 rounded-[40px] space-y-6">
-                <div className="flex items-center gap-3 text-brandRed px-2">
-                  <Camera size={20}/>
-                  <label className="text-[11px] font-black uppercase tracking-widest text-white">Media Gallery *</label>
-                </div>
-                <div className="flex gap-6 overflow-x-auto pb-6 pt-4 no-scrollbar overflow-y-visible">
+                <div className="flex items-center gap-3 text-brandRed px-2"><Camera size={20}/><label className="text-[11px] font-black uppercase tracking-widest text-white">Media Gallery *</label></div>
+                <div className="flex gap-6 overflow-x-auto pb-6 pt-4 no-scrollbar">
                     {gallery.map((img) => (
                         <div key={img.id} className="relative flex-shrink-0 group">
-                          <button 
-                            type="button" 
-                            onClick={() => setThumbnailId(img.id)} 
-                            className={`relative w-32 h-32 rounded-[24px] overflow-hidden border-2 transition-all ${
-                              thumbnailId === img.id ? 'border-brandRed scale-105 shadow-[0_0_15px_rgba(255,0,0,0.3)]' : 'border-white/5 opacity-40'
-                            }`}
-                          >
-                              <img src={img.previewUrl} className="w-full h-full object-cover" alt="Gallery Asset" />
-                              {thumbnailId === img.id && (
-                                <div className="absolute inset-0 bg-brandRed/20 flex items-center justify-center text-white">
-                                  <Check size={20} strokeWidth={4} />
-                                </div>
-                              )}
+                          <button type="button" onClick={() => setThumbnailId(img.id)} className={`relative w-32 h-32 rounded-[24px] overflow-hidden border-2 transition-all ${thumbnailId === img.id ? 'border-brandRed scale-105' : 'border-white/5 opacity-40'}`}>
+                              <img src={img.previewUrl} className="w-full h-full object-cover" alt="Preview" />
+                              {thumbnailId === img.id && <div className="absolute inset-0 bg-brandRed/10 flex items-center justify-center text-white"><Star size={20} fill="currentColor" /></div>}
                           </button>
-                          <button 
-                            type="button" 
-                            onClick={() => handleRemoveImage(img.id)} 
-                            className="absolute -top-3 -right-3 p-2 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all z-[30] shadow-xl border-2 border-[#030303]"
-                          >
-                            <X size={14} strokeWidth={3} />
-                          </button>
+                          <button type="button" onClick={() => handleRemoveImage(img.id)} className="absolute -top-3 -right-3 p-2 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all z-[30]"><X size={14}/></button>
                         </div>
                     ))}
                     {gallery.length < 5 && (
                       <label className="shrink-0 w-32 h-32 border-2 border-dashed border-white/25 rounded-[24px] flex flex-col items-center justify-center cursor-pointer hover:border-brandRed transition-all text-zinc-700">
-                        <Plus size={24} />
-                        <input type="file" multiple className="hidden" onChange={handleFileChange} />
+                        <Plus size={24} /><input type="file" multiple className="hidden" onChange={handleFileChange} />
                       </label>
                     )}
                 </div>
-                <p className="text-[10px] text-zinc-500 font-bold italic uppercase px-2">* Choose the primary card cover</p>
             </div>
 
             <div className="border border-white/25 p-8 rounded-[40px] focus-within:border-brandRed transition-all">
                 <label className="text-[10px] font-black uppercase text-zinc-500 mb-4 block ml-2">Description / Bio *</label>
-                <textarea 
-                  placeholder="TELL YOUR STORY..." 
-                  className="w-full bg-transparent outline-none min-h-[150px] font-medium italic text-white text-lg leading-relaxed px-2" 
-                  value={formData.description} 
-                  onChange={e => setFormData({...formData, description: e.target.value})} 
-                />
+                <textarea placeholder="TELL YOUR STORY..." className="w-full bg-transparent outline-none min-h-[150px] font-medium italic text-white text-lg leading-relaxed" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
             </div>
 
-            {/* DIGITAL CONNECTIONS */}
+            {/* 🔥 DIGITAL CONNECTIONS (RESTORED) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {[
                   { label: 'WhatsApp Contact *', icon: Phone, key: 'contact', placeholder: '10 DIGITS' },
-                  { label: 'WhatsApp Group Link', icon: LinkIcon, key: 'link', placeholder: 'HTTPS://CHAT...' },
+                  { label: 'Group Link', icon: LinkIcon, key: 'link', placeholder: 'HTTPS://CHAT...' },
                   { label: 'Instagram Handle', icon: Instagram, key: 'instagram', placeholder: '@USERNAME' },
                   { label: 'Official Website', icon: Globe, key: 'website', placeholder: 'WWW.DOMAIN.COM' }
                 ].map((field) => (
                   <div key={field.key} className="border border-white/25 p-6 rounded-[32px] focus-within:border-brandRed transition-all">
                     <label className="text-[10px] font-black uppercase text-zinc-500 ml-2">{field.label}</label>
-                    <div className="relative flex items-center mt-2">
+                    <div className="flex items-center mt-2">
                       <field.icon className="text-zinc-600 mr-3" size={16} />
-                      <input 
-                        placeholder={field.placeholder} 
-                        maxLength={field.key === 'contact' ? 10 : 200}
-                        className="w-full bg-transparent outline-none font-bold text-white text-sm" 
-                        value={formData[field.key as keyof typeof formData]} 
-                        onChange={e => setFormData({...formData, [field.key]: field.key === 'contact' ? e.target.value.replace(/\D/g,'') : e.target.value})} 
-                      />
+                      <input placeholder={field.placeholder} className="w-full bg-transparent outline-none font-bold text-white text-sm" value={formData[field.key as keyof typeof formData]} onChange={e => setFormData({...formData, [field.key]: e.target.value})} />
                     </div>
                   </div>
                 ))}
             </div>
 
-            <button 
-              onClick={handleSubmit} 
-              disabled={loading} 
-              className="w-full py-8 bg-brandRed text-white rounded-[32px] font-black uppercase tracking-[0.4em] shadow-xl hover:bg-white hover:text-black transition-all disabled:opacity-50 active:scale-95"
-            >
-              {loading ? <Loader2 className="animate-spin mx-auto" /> : 'Finalize Submission'}
-            </button>
+            <div className="flex flex-col md:flex-row gap-4 pt-6">
+              <motion.button whileHover={{ y: -5 }} onClick={() => handleSubmit(true)} disabled={loading} className="flex-1 py-7 bg-zinc-900 text-zinc-400 border border-white/10 rounded-[32px] font-black uppercase tracking-[0.2em] text-[15px] flex items-center justify-center gap-2">
+                {loading ? <Loader2 className="animate-spin" size={18} /> : "Save as Draft"}
+              </motion.button>
+              <motion.button whileHover={{ y: -5, scale: 1.01 }} onClick={() => handleSubmit(false)} disabled={loading} className="flex-[2] py-7 bg-brandRed text-white rounded-[32px] font-black uppercase tracking-[0.4em] text-[15px] flex items-center justify-center gap-2 shadow-xl">
+                {loading ? <Loader2 className="animate-spin" size={18} /> : <>Finalize Submission <CheckCircle size={18} /></>}
+              </motion.button>
+            </div>
           </motion.div>
-          
         )}
         <LaserDivider/>
       </div>
+
+      <AnimatePresence>
+        {pickerField && <TribeTimePicker value={formData[pickerField]} anchorRef={pickerField === 'openTime' ? openTimeRef : closeTimeRef} onClose={() => setPickerField(null)} onChange={(time) => setFormData({ ...formData, [pickerField]: time })} />}
+      </AnimatePresence>
     </div>
   );
 }

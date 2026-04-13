@@ -20,7 +20,7 @@ export default function VerifiedPage() {
         </div>
 
         <p className="text-zinc-400 text-sm font-medium leading-relaxed italic">
-          Verification complete. You can now close this window and continue on your main device.
+          Verification complete. You can now close this window and continue on your main device to log in.
         </p>
 
         <Link href="/auth/login" className="block pt-4">

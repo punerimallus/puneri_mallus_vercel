@@ -363,13 +363,13 @@ export default function Home() {
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
                 </div>
                 <h4 className="text-2xl sm:text-3xl font-black uppercase tracking-tighter text-white">Sucheendran K.C</h4>
-                <p className="text-brandRed font-black uppercase text-[10px] tracking-[0.4em] sm:tracking-[0.5em] mt-2 sm:mt-3">Founder</p>
+                <p className="text-brandRed font-black uppercase text-[11px] tracking-[0.4em] sm:tracking-[0.5em] mt-2 sm:mt-3">Founder</p>
               </div>
 
               <div className="group w-full max-w-[260px] sm:max-w-[340px]">
 <div className="aspect-[3/4] bg-zinc-950/80 md:bg-zinc-950/60 md:backdrop-blur-md rounded-[32px] sm:rounded-[50px] mb-6 sm:mb-8 overflow-hidden border border-white/10 group-hover:border-brandRed transition-all duration-700 shadow-2xl relative">                  {/* FIX 3: Added quality={80} and loading="lazy" to founder images */}
                   <Image 
-                    src="/founders/shehanas.jpg" 
+                    src="/founders/shehanas_2.jpeg" 
                     alt="Shena" 
                     fill 
                     sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
@@ -380,7 +380,7 @@ export default function Home() {
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
                 </div>
                 <h4 className="text-2xl sm:text-3xl font-black uppercase tracking-tighter text-white">Shehanas</h4>
-                <p className="text-brandRed font-black uppercase text-[10px] tracking-[0.4em] sm:tracking-[0.5em] mt-2 sm:mt-3">Co-Founder</p>
+                <p className="text-brandRed font-black uppercase text-[11px] tracking-[0.4em] sm:tracking-[0.5em] mt-2 sm:mt-3">Co-Founder</p>
               </div>
             </div>
             

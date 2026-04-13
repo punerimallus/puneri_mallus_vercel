@@ -3,13 +3,14 @@ import { useState, useEffect, useMemo } from 'react';
 import { 
   Trash2, Edit3, Plus, Users, Globe, 
   Loader2, Search, X, MapPin, ShieldCheck, Zap,
-  Eye, EyeOff, CheckCircle, Clock, Check, ExternalLink
-} from 'lucide-react'; // Added ExternalLink
+  Eye, EyeOff, CheckCircle, Clock, Check, ExternalLink, GripVertical
+} from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
+import { Reorder } from 'framer-motion';
 import TribeConfirm from '@/components/TribeConfirm';
 import { useAlert } from '@/context/AlertContext';
 
-// TAB DEFINITIONS
 const TABS = [
   { id: 'ALL', label: 'All Communities' },
   { id: 'PENDING', label: 'Pending Review' },
@@ -19,6 +20,7 @@ const TABS = [
 export default function CommunityAdmin() {
   const [circles, setCircles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState(""); 
   const [activeTab, setActiveTab] = useState('ALL');
   const { showAlert } = useAlert();
@@ -30,54 +32,67 @@ export default function CommunityAdmin() {
     try {
       const res = await fetch('/api/community?admin=true');
       const data = await res.json();
-      setCircles(Array.isArray(data) ? data : []);
+      const sortedData = Array.isArray(data) ? data.sort((a, b) => (a.order || 0) - (b.order || 0)) : [];
+      setCircles(sortedData);
     } catch (error) { 
-      console.error(error); 
       showAlert("Sync Failed", "error");
     } finally { setLoading(false); }
   };
 
   useEffect(() => { fetchCircles(); }, []);
 
-  const toggleApproval = async (circle: any) => {
+  const handleReorderSave = async (newOrderCircles: any[]) => {
     try {
-      // 1. GET THE ADMIN NAME
-      
-      
+      const orderPayload = newOrderCircles.map((item, index) => ({
+        id: item._id,
+        order: index
+      }));
       const res = await fetch('/api/community/manage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          _id: circle._id, 
-          isApproved: !circle.isApproved
-          
-        })
+        body: JSON.stringify({ reorder: true, newOrder: orderPayload })
       });
-
-      if (res.ok) {
-        setCircles(circles.map(c => 
-          c._id === circle._id ? { ...c, isApproved: !c.isApproved } : c
-        ));
-        showAlert(circle.isApproved ? "Node Hidden" : "Node Approved & Live", "success");
-      }
-    } catch (error) { showAlert("Approval failed", "error"); }
+      if (res.ok) showAlert("Sequence Synced", "success");
+    } catch (err) { showAlert("Ordering Failed", "error"); }
   };
 
-  const filteredCircles = useMemo(() => {
-    return circles.filter(c => {
-      const matchesSearch = c.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            c.category?.toLowerCase().includes(searchQuery.toLowerCase());
-      
-      const matchesTab = activeTab === 'ALL' || 
-                         (activeTab === 'PENDING' && !c.isApproved) || 
-                         (activeTab === 'LIVE' && c.isApproved);
+  const toggleApproval = async (circle: any) => {
+    setUpdatingId(circle._id);
+    showAlert(`Processing ${circle.isApproved ? 'Deactivation' : 'Approval'}...`, "info");
+    try {
+      const res = await fetch('/api/community/manage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ _id: circle._id, isApproved: !circle.isApproved })
+      });
+      if (res.ok) {
+        setCircles(circles.map(c => c._id === circle._id ? { ...c, isApproved: !c.isApproved } : c));
+        showAlert(circle.isApproved ? "Node Hidden" : "Node Approved & Live", "success");
+      }
+    } catch (error) { showAlert("Action failed", "error"); }
+    finally { setUpdatingId(null); }
+  };
 
-      return matchesSearch && matchesTab;
-    });
-  }, [circles, searchQuery, activeTab]);
+  const handleReject = async (circle: any) => {
+    setUpdatingId(circle._id);
+    showAlert("Initiating Rejection Protocol...", "info");
+    try {
+      const res = await fetch('/api/community/manage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ _id: circle._id, isRejected: true })
+      });
+      if (res.ok) {
+        showAlert("Submission Rejected", "success");
+        fetchCircles(); 
+      }
+    } catch (error) { showAlert("Rejection failed", "error"); }
+    finally { setUpdatingId(null); }
+  };
 
   const handleDelete = async () => {
     if (!itemToDelete) return;
+    setUpdatingId(itemToDelete._id);
     try {
       const res = await fetch(`/api/community/delete?id=${itemToDelete._id}`, { method: 'DELETE' });
       if (res.ok) {
@@ -85,8 +100,19 @@ export default function CommunityAdmin() {
         showAlert("Node Dissolved", "success");
       }
     } catch (error) { showAlert("Action failed", "error"); }
-    finally { setConfirmOpen(false); }
+    finally { setConfirmOpen(false); setUpdatingId(null); }
   };
+
+  const filteredCircles = useMemo(() => {
+    return circles.filter(c => {
+      const matchesSearch = c.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            c.category?.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesTab = activeTab === 'ALL' || 
+                         (activeTab === 'PENDING' && !c.isApproved) || 
+                         (activeTab === 'LIVE' && c.isApproved);
+      return matchesSearch && matchesTab;
+    });
+  }, [circles, searchQuery, activeTab]);
 
   return (
     <div className="min-h-screen bg-black pt-40 pb-20 px-6 lg:px-16 text-white text-glow">
@@ -101,12 +127,11 @@ export default function CommunityAdmin() {
       <div className="max-w-7xl mx-auto space-y-10">
         <div className="flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="space-y-1">
-            <h2 className="text-4xl font-black italic uppercase tracking-tighter">Community <span className="text-cyan-400">Hub .</span></h2>
+            <h2 className="text-4xl font-black italic uppercase tracking-tighter leading-none">Community <span className="text-cyan-400">Audit .</span></h2>
             <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">
-              {circles.filter(c => !c.isApproved).length} Community Awaiting Clearance // {circles.filter(c => c.isApproved).length} Communities Live
+              Drag to reorder // {circles.length} Nodes Registered
             </p>
           </div>
-          
           <Link href="/admin/community/list">
             <button className="bg-white text-black px-8 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-cyan-400 transition-all flex items-center gap-2 shadow-xl">
               <Plus size={16} /> Add Organization
@@ -120,90 +145,117 @@ export default function CommunityAdmin() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-6 py-2.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === tab.id ? 'bg-cyan-400 text-black shadow-lg shadow-cyan-400/20' : 'text-zinc-500 hover:text-white'}`}
+                className={`px-6 py-2.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === tab.id ? 'bg-cyan-400 text-black' : 'text-zinc-500 hover:text-white'}`}
               >
                 {tab.label}
               </button>
             ))}
           </div>
-
           <div className="relative w-full md:w-80">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600" size={16} />
             <input 
-              placeholder="FILTER NODES..." 
+              placeholder="SEARCH NODES..." 
               className="w-full bg-black border border-white/10 p-4 pl-12 rounded-2xl text-[10px] font-black uppercase outline-none focus:border-cyan-400 transition-all"
               value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
             />
           </div>
         </div>
 
-        {loading ? (
-          <div className="h-64 flex items-center justify-center"><Loader2 className="animate-spin text-cyan-400" /></div>
+        {loading && circles.length === 0 ? (
+          <div className="h-64 flex items-center justify-center"><Loader2 className="animate-spin text-cyan-400" size={40} /></div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <Reorder.Group 
+            axis="y" 
+            values={circles} 
+            onReorder={setCircles} 
+            className="grid grid-cols-1 gap-4"
+          >
             {filteredCircles.map((circle) => (
-              <div key={circle._id} className={`group relative bg-zinc-950 border rounded-[40px] overflow-hidden transition-all duration-500 ${!circle.isApproved ? 'border-amber-500/40 shadow-[0_0_30px_rgba(245,158,11,0.05)]' : 'border-white/5 hover:border-cyan-400/30'}`}>
-                
-                <div className={`absolute top-6 left-6 z-20 px-4 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest flex items-center gap-2 backdrop-blur-md border ${circle.isApproved ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20 animate-pulse'}`}>
-                   {circle.isApproved ? <CheckCircle size={10}/> : <Clock size={10}/>}
-                   {circle.isApproved ? 'Live' : 'Pending Review'}
+              <Reorder.Item 
+                key={circle._id} 
+                value={circle}
+                onDragEnd={() => handleReorderSave(circles)}
+                dragListener={!updatingId}
+                className="group relative bg-zinc-950 border border-white/5 p-6 rounded-[32px] flex flex-col md:flex-row items-center gap-8 hover:bg-zinc-900/50 transition-all active:cursor-grabbing"
+              >
+                {updatingId === circle._id && (
+                  <div className="absolute inset-0 z-[100] bg-black/70 backdrop-blur-sm rounded-[32px] flex items-center justify-center gap-3">
+                    <Loader2 className="animate-spin text-cyan-400" size={24} />
+                    <span className="text-[10px] font-black uppercase tracking-[0.3em] text-cyan-400">Syncing Node...</span>
+                  </div>
+                )}
+
+                {/* Drag Handle */}
+                <div className="hidden md:flex text-zinc-800 group-hover:text-zinc-500 cursor-grab active:cursor-grabbing transition-colors">
+                  <GripVertical size={24} />
                 </div>
 
-                <div className="h-52 relative overflow-hidden">
-                  <img src={circle.image} className="w-full h-full object-cover opacity-40 group-hover:opacity-70 transition-all duration-1000 group-hover:scale-110" alt="Node" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-transparent to-transparent" />
+                {/* Thumbnail */}
+                <div className="w-24 h-24 rounded-2xl overflow-hidden bg-black shrink-0 relative">
+                  <img 
+                    src={circle.image || "/about/placeholder.jpeg"} 
+                    alt="Thumb" 
+                    className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity" 
+                  />
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 space-y-2 text-center md:text-left">
+                  <div className="flex items-center justify-center md:justify-start gap-3">
+                    <h3 className="text-xl font-black uppercase italic">{circle.title}</h3>
+                    {circle.isApproved ? <CheckCircle className="text-green-500" size={16} /> : <Clock className="text-amber-500" size={16} />}
+                  </div>
+                  <div className="flex flex-wrap justify-center md:justify-start gap-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+                    <span className="text-cyan-400">{circle.category}</span>
+                    <span className="flex items-center gap-1"><MapPin size={10} /> {circle.area}</span>
+                    <span className="text-zinc-700">{circle.submittedBy?.split('@')[0]}</span>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-3">
+                  <Link href={`/community/${circle._id}`} target="_blank" className="p-3 bg-zinc-900 text-zinc-500 hover:text-cyan-400 rounded-xl transition-all border border-white/5">
+                    <ExternalLink size={18}/>
+                  </Link>
+
+                  <button 
+                    disabled={!!updatingId}
+                    onClick={() => toggleApproval(circle)} 
+                    className={`flex items-center gap-2 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                      circle.isApproved 
+                      ? 'bg-green-600 text-white shadow-[0_0_20px_rgba(34,197,94,0.3)]' 
+                      : 'bg-zinc-900 text-zinc-500 hover:text-white border border-white/5'
+                    }`}
+                  >
+                    {circle.isApproved ? <EyeOff size={14} /> : <Check size={14} />}
+                    {circle.isApproved ? 'Live' : 'Approve'}
+                  </button>
+
+                  {!circle.isApproved && (
+                    <button 
+                      disabled={!!updatingId}
+                      onClick={() => handleReject(circle)} 
+                      className="p-3 bg-zinc-900 text-zinc-500 hover:text-brandRed hover:bg-brandRed/10 rounded-xl transition-all border border-white/5"
+                    >
+                      <X size={18} />
+                    </button>
+                  )}
                   
-                  <div className="absolute top-6 right-6 flex gap-2 z-20">
-                      {/* PREVIEW BUTTON - Opens your Details Page in new tab */}
-                      <Link 
-                        href={`/community/${circle._id}`} 
-                        target="_blank" 
-                        className="p-3 bg-black/60 backdrop-blur-md rounded-xl hover:text-cyan-400 transition-all border border-white/10"
-                        title="Preview Content"
-                      >
-                        <ExternalLink size={16}/>
-                      </Link>
+                  <Link href={`/admin/community/list?edit=${circle._id}`} className="p-3 bg-zinc-900 text-zinc-500 hover:text-cyan-400 rounded-xl transition-all border border-white/5">
+                    <Edit3 size={18}/>
+                  </Link>
 
-                      <button 
-                        onClick={() => toggleApproval(circle)} 
-                        title={circle.isApproved ? "Revoke Approval" : "Approve Node"} 
-                        className={`p-3 backdrop-blur-md rounded-xl transition-all border border-white/10 ${circle.isApproved ? 'bg-black/60 text-zinc-400 hover:text-amber-400' : 'bg-brandRed text-white shadow-lg shadow-red-500/30'}`}
-                      >
-                        {circle.isApproved ? <EyeOff size={16}/> : <Check size={16} strokeWidth={3}/>}
-                      </button>
-                      
-                      <Link href={`/admin/community/list?edit=${circle._id}`} className="p-3 bg-black/60 backdrop-blur-md rounded-xl hover:text-cyan-400 transition-all border border-white/10"><Edit3 size={16}/></Link>
-                      <button onClick={() => { setItemToDelete(circle); setConfirmOpen(true); }} className="p-3 bg-black/60 backdrop-blur-md rounded-xl hover:text-red-500 transition-all border border-white/10"><Trash2 size={16}/></button>
-                  </div>
+                  <button 
+                    disabled={!!updatingId} 
+                    onClick={() => { setItemToDelete(circle); setConfirmOpen(true); }} 
+                    className="p-3 bg-zinc-900 text-zinc-600 hover:text-red-500 rounded-xl transition-all border border-white/5"
+                  >
+                    <Trash2 size={18}/>
+                  </button>
                 </div>
-
-                <div className="p-8 space-y-4">
-                  <div className="space-y-1">
-                    <span className="text-cyan-400 font-black text-[9px] uppercase tracking-[0.3em]">{circle.category}</span>
-                    <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white group-hover:text-cyan-400 transition-colors">{circle.title}</h3>
-                  </div>
-                  
-                  <div className="flex items-center justify-between pt-4 border-t border-white/5">
-                    <div className="flex items-center gap-2 text-zinc-500 text-[10px] font-bold uppercase">
-                      <MapPin size={12} /> {circle.area}
-                    </div>
-                    {circle.submittedBy && (
-                      <div className="text-[8px] font-black text-zinc-600 uppercase tracking-widest flex items-center gap-1">
-                        <Users size={10} /> {circle.submittedBy.split('@')[0]}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
+              </Reorder.Item>
             ))}
-          </div>
-        )}
-
-        {!loading && filteredCircles.length === 0 && (
-          <div className="h-64 flex flex-col items-center justify-center border border-dashed border-white/10 rounded-[40px]">
-            <Search size={30} className="text-zinc-800 mb-4" />
-            <p className="text-zinc-500 font-black uppercase tracking-widest text-[9px]">No nodes found in this sector</p>
-          </div>
+          </Reorder.Group>
         )}
       </div>
     </div>

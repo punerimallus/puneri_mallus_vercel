@@ -241,13 +241,26 @@ export default function NodeDetails({ isAdminView = false }: NodeDetailsProps) {
                 <div className="w-12 h-px bg-brandRed" /> Archive & Visuals
               </h2>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-                {allImages.map((img: string, idx: number) => (
-                  <div key={idx} onClick={() => setZoomImage(img)} className="relative aspect-square rounded-[40px] border border-white/5 cursor-zoom-in group bg-zinc-900 overflow-hidden shadow-2xl">
-                    <Image src={img} alt="Gallery" fill sizes="100vw" className="object-cover opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-all duration-700" />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <Maximize2 size={24} className="text-white" />
+                {/* Filter allImages to ensure only valid strings exist before mapping */}
+                {allImages
+                  .filter((img: string) => img && img.trim() !== "")
+                  .map((img: string, idx: number) => (
+                    <div 
+                      key={idx} 
+                      onClick={() => setZoomImage(img)} 
+                      className="relative aspect-square rounded-[40px] border border-white/5 cursor-zoom-in group bg-zinc-900 overflow-hidden shadow-2xl"
+                    >
+                      <Image 
+                        src={img} 
+                        alt={`Gallery image ${idx + 1}`} 
+                        fill 
+                        sizes="(max-width: 768px) 100vw, 33vw" 
+                        className="object-cover opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-all duration-700" 
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <Maximize2 size={24} className="text-white" />
+                      </div>
                     </div>
-                  </div>
                 ))}
               </div>
             </section>

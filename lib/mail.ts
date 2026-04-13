@@ -114,3 +114,131 @@ export const sendAdminPendingAlert = async (communityName: string, pendingCount:
   };
   return await transporter.sendMail(mailOptions);
 };
+
+export const sendMartPendingEmail = async (to: string, businessName: string) => {
+  const mailOptions = {
+    from: `"Puneri Mallus Tribe" <${process.env.EMAIL_USER}>`,
+    to: to,
+    subject: `🕒 Audit Pending: ${businessName}`,
+    html: `
+      <div style="font-family: 'Segoe UI', Helvetica, Arial, sans-serif; max-width: 500px; margin: auto; background: #030303; color: #ffffff; padding: 50px 40px; border-radius: 40px; border: 1px solid #222; text-align: center;">
+        <h2 style="font-weight: 900; text-transform: uppercase; font-size: 24px; margin-bottom: 15px; color: #fff;">Broadcast <span style="color: #ff0000;">Received</span></h2>
+        
+        <p style="font-size: 16px; color: #aaa; line-height: 1.6; margin-bottom: 30px;">
+          Your listing for <b style="color: #fff;">${businessName}</b> has been received and added to our audit queue.
+        </p>
+        
+        <div style="padding: 20px; background: rgba(255,0,0,0.05); border: 1px solid rgba(255,0,0,0.2); border-radius: 20px; margin-bottom: 30px;">
+          <p style="margin: 0; font-size: 13px; font-weight: bold; color: #ff0000; text-transform: uppercase; letter-spacing: 1px;">Current Status: Under Review</p>
+        </div>
+
+        <p style="font-size: 14px; color: #666; line-height: 1.6;">
+          Our team is currently verifying the business details. You will receive another update as soon as your professional profile is live on the Mallu Mart grid.
+        </p>
+        
+        <hr style="border: 0; border-top: 1px solid #222; margin: 40px 0;" />
+        <p style="font-size: 11px; color: #444; text-transform: uppercase; font-weight: bold; letter-spacing: 1px;">Puneri Mallus Mart // Together for growth and good vibes</p>
+      </div>
+    `,
+  };
+  return await transporter.sendMail(mailOptions);
+};
+
+/**
+ * Sends an email when a business listing goes live on Mallu Mart
+ */
+export const sendMartLiveEmail = async (to: string, businessName: string) => {
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://punerimallusvercel.vercel.app';
+  const directLink = `${baseUrl}/directory`;
+
+  const mailOptions = {
+    from: `"Puneri Mallus Tribe" <${process.env.EMAIL_USER}>`,
+    to: to,
+    subject: `🚀 Broadcast Success: ${businessName} is Live!`,
+    html: `
+      <div style="font-family: 'Segoe UI', Helvetica, Arial, sans-serif; max-width: 500px; margin: auto; background: #030303; color: #ffffff; padding: 50px 40px; border-radius: 40px; border: 1px solid #ff0000; text-align: center;">
+        <h2 style="font-weight: 900; text-transform: uppercase; font-size: 24px; margin-bottom: 15px; color: #fff;">Now <span style="color: #ff0000;">Live!</span></h2>
+        
+        <p style="font-size: 16px; color: #aaa; line-height: 1.6; margin-bottom: 30px;">
+          Great news! Your business <b style="color: #fff;">${businessName}</b> has been approved and is now visible to the entire community on Mallu Mart.
+        </p>
+        
+        <div style="padding: 15px; background: rgba(255,0,0,0.05); border-radius: 20px; margin-bottom: 35px; border: 1px solid rgba(255,0,0,0.1);">
+          <p style="margin: 0; font-size: 12px; color: #fff;">Your profile is now discoverable by the tribe.</p>
+        </div>
+
+        <a href="${directLink}" style="display: inline-block; background: #ff0000; color: #fff; padding: 18px 40px; border-radius: 50px; text-decoration: none; font-weight: 900; text-transform: uppercase; font-size: 13px; letter-spacing: 1px;">View on Mallu Mart</a>
+        
+        <p style="margin-top: 40px; font-size: 12px; color: #555;">
+          Thank you for powering the Puneri Mallus economy!
+        </p>
+      </div>
+    `,
+  };
+  return await transporter.sendMail(mailOptions);
+};
+
+export const sendMartRejectedEmail = async (to: string, businessName: string) => {
+  const mailOptions = {
+    from: `"Puneri Mallus Tribe" <${process.env.EMAIL_USER}>`,
+    to: to,
+    subject: `⚠️ Action Required: Mart Listing Update`,
+    html: `
+      <div style="font-family: 'Segoe UI', sans-serif; max-width: 500px; margin: auto; background: #030303; color: #ffffff; padding: 50px 40px; border-radius: 40px; border: 1px solid #ffae00; text-align: center;">
+        <h2 style="font-weight: 900; text-transform: uppercase; font-size: 24px; margin-bottom: 15px; color: #fff;">Audit <span style="color: #ffae00;">Update</span></h2>
+        <p style="font-size: 16px; color: #aaa; line-height: 1.6; margin-bottom: 30px;">
+          Your listing for <b style="color: #fff;">${businessName}</b> was not approved during our recent audit.
+        </p>
+        <div style="padding: 15px; background: rgba(255,174,0,0.05); border-radius: 20px; margin-bottom: 35px; border: 1px solid rgba(255,174,0,0.1);">
+          <p style="margin: 0; font-size: 12px; color: #fff;">Please ensure your details are complete and follow community guidelines.</p>
+        </div>
+        <a href="https://punerimallusvercel.vercel.app/directory" style="display: inline-block; background: #ffae00; color: #000; padding: 18px 40px; border-radius: 50px; text-decoration: none; font-weight: 900; text-transform: uppercase; font-size: 13px;">Edit Listing</a>
+      </div>
+    `,
+  };
+  return await transporter.sendMail(mailOptions);
+};
+
+export const sendAdminMartAlert = async (businessName: string, category: string) => {
+  const mailOptions = {
+    from: `"Mart Monitor" <${process.env.EMAIL_USER}>`,
+    to: "punerimallus1@gmail.com", // 🔥 Your Admin Email
+    subject: `🚨 NEW MART LISTING: ${businessName}`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 450px; margin: auto; background: #fff; color: #000; padding: 40px; border: 2px solid #ff0000; border-radius: 20px;">
+        <h2 style="color: #ff0000; text-transform: uppercase;">New Mart Submission</h2>
+        <p>A new professional listing for <b>${businessName}</b> has been broadcasted and needs review.</p>
+        
+        <div style="background: #f0f0f0; padding: 20px; border-radius: 15px; margin: 20px 0;">
+          <p style="margin: 0; font-size: 10px; color: #666; text-transform: uppercase;">Category</p>
+          <p style="margin: 5px 0; font-size: 16px; font-weight: bold; color: #000;">${category}</p>
+        </div>
+
+        <a href="https://punerimallusvercel.vercel.app/admin/mart" style="display: block; background: #000; color: #fff; text-align: center; padding: 15px; border-radius: 10px; text-decoration: none; font-weight: bold; text-transform: uppercase; font-size: 12px; letter-spacing: 1px;">Open Audit Dashboard</a>
+      </div>
+    `,
+  };
+  return await transporter.sendMail(mailOptions);
+};
+
+export const sendRejectedCommunityEmail = async (to: string, communityName: string) => {
+  const mailOptions = {
+    from: `"Puneri Mallus Tribe" <${process.env.EMAIL_USER}>`,
+    to: to,
+    subject: "Update regarding your community submission",
+    html: `
+      <div style="font-family: 'Segoe UI', sans-serif; max-width: 500px; margin: auto; background: #030303; color: #ffffff; padding: 50px 40px; border-radius: 40px; border: 1px solid #ffae00; text-align: center;">
+        <h2 style="font-weight: 900; text-transform: uppercase; font-size: 24px; margin-bottom: 15px; color: #fff;">Audit <span style="color: #ffae00;">Update</span></h2>
+        <p style="font-size: 16px; color: #aaa; line-height: 1.6; margin-bottom: 30px;">
+          Your submission for <b style="color: #fff;">${communityName}</b> was not approved for the community grid at this time.
+        </p>
+        <p style="font-size: 14px; color: #666; line-height: 1.6;">
+          Please ensure all fields are correctly filled and the images are clear. You can re-submit or edit your listing anytime.
+        </p>
+        <hr style="border: 0; border-top: 1px solid #222; margin: 40px 0;" />
+        <p style="font-size: 11px; color: #444; text-transform: uppercase;">Puneri Mallus Tribe Community</p>
+      </div>
+    `,
+  };
+  return await transporter.sendMail(mailOptions);
+};

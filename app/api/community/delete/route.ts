@@ -8,27 +8,31 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// Helper to extract filename safely from the 'community' bucket
+// 🔥 IMPROVED: More robust filename extraction
 const getFileName = (url: string) => {
   if (!url || !url.includes('community/')) return null;
-  const parts = url.split('/');
-  const fileNameWithParams = parts[parts.length - 1];
-  return fileNameWithParams.split('?')[0];
+  // This handles URLs even if they have folders or complex structures
+  const parts = url.split('community/'); 
+  const fileNameWithParams = parts[1]; // Get everything after 'community/'
+  return fileNameWithParams.split('?')[0]; // Strip query params like ?v=123
 };
 
 export async function DELETE(req: Request) {
   try {
-    const { searchParams } = new URL(req.url);
-    const id = searchParams.get('id');
+    const { id, userEmail } = await req.json();
 
+    // Basic Validation
     if (!id || !ObjectId.isValid(id)) {
       return NextResponse.json({ error: "Valid ID required" }, { status: 400 });
+    }
+    if (!userEmail) {
+      return NextResponse.json({ error: "User authentication required" }, { status: 401 });
     }
 
     const client = await clientPromise;
     const db = client.db("punerimallus");
 
-    // 1. Fetch node to get ALL asset references before database deletion
+    // 1. Fetch node to verify ownership and grab asset list
     const node = await db.collection("community_circles").findOne({ 
       _id: new ObjectId(id) 
     });
@@ -37,7 +41,21 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: "Node not found" }, { status: 404 });
     }
 
-    // 2. Comprehensive Asset Purge from 'community' bucket
+    // 🔒 SECURE Bouncer Check
+    // We lowercase both to prevent "Unauthorized" errors caused by typos
+    const owner = node.submittedBy?.toLowerCase();
+    const requester = userEmail?.toLowerCase();
+
+    if (!owner || owner !== requester) {
+      console.log(`[AUTH_FAIL] Owner: ${owner}, Requester: ${requester}`);
+      return NextResponse.json(
+        { error: "Unauthorized access: You don't own this node" }, 
+        { status: 403 }
+      );
+    }
+
+    // 2. Comprehensive Asset Purge from Supabase
+    // Collect main image and gallery images into a unique set
     const allAssetUrls = new Set([
       node.image, 
       ...(node.imagePaths || [])
@@ -49,8 +67,9 @@ export async function DELETE(req: Request) {
 
     if (filesToDelete.length > 0) {
       try {
+        // We use supabaseAdmin here because client-side tokens don't usually have Delete permissions
         const { error: storageError } = await supabaseAdmin.storage
-          .from('community') // Using your existing bucket
+          .from('community')
           .remove(filesToDelete);
 
         if (storageError) {
@@ -61,13 +80,13 @@ export async function DELETE(req: Request) {
       }
     }
 
-    // 3. Delete from Database
+    // 3. Final Step: Delete from MongoDB
     const result = await db.collection("community_circles").deleteOne({ 
       _id: new ObjectId(id) 
     });
 
     return NextResponse.json({ 
-      message: "Node and all associated gallery assets dissolved",
+      message: "Node and associated assets successfully purged",
       deletedCount: result.deletedCount 
     });
 
