@@ -11,7 +11,7 @@ import { WhatsAppTribe } from '@/components/ui/WhatsappTribe';
 import { createBrowserClient } from '@supabase/ssr';
 import TribeAlert from '@/components/TribeAlert'; 
 import TribeConfirm from '@/components/TribeConfirm';
-
+import TribeDisclaimer from '@/components/TribeDisclaimer';
 const EXTERNAL_CATEGORIES = ["SAMAJAM", "TEMPLE", "CHURCH", "ORGANIZATION"];
 const TABS = [
     { id: "ALL", label: "All Circles" },
@@ -66,7 +66,7 @@ const handleDelete = async () => {
     });
 
     if (res.ok) {
-      triggerToast("Node successfully purged from the Tribe", "success");
+      triggerToast("Community successfully deleted from the Tribe", "success");
       setCircles(prev => prev.filter(c => c._id !== deleteId));
     } else {
       const errorData = await res.json();
@@ -252,7 +252,8 @@ const handleDelete = async () => {
                 </div>
             </div>
         </div>
-
+                        {/* 🔥 STRATEGIC PLACEMENT: Above the Grid */}
+<TribeDisclaimer type="COMMUNITY" />
         {/* Community Grid */}
         <AnimatePresence mode="popLayout">
             {filteredCircles.length > 0 ? (

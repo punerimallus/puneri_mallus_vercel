@@ -2,15 +2,16 @@
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
-import { Clock, MapPin, ExternalLink, Zap, ChevronRight } from 'lucide-react';
+import { Clock, MapPin, ExternalLink, Zap, ChevronRight, History } from 'lucide-react';
 
 interface EventCardProps {
   title: string;
   date: string;
   image: string;
   category: string;
+  categoryLogo?: string; // 🔥 Added for logo support
   isUpcoming?: boolean;
-  showDescription?: boolean; // NEW: Toggle description visibility
+  showDescription?: boolean; 
   description?: string;
   time?: string;
   location?: string;
@@ -23,6 +24,7 @@ export default function EventCard({
   date, 
   image, 
   category, 
+  categoryLogo, // 🔥 New Prop
   isUpcoming = false, 
   showDescription = true, 
   description, 
@@ -91,43 +93,50 @@ export default function EventCard({
           alt={title} 
           fill 
           className="object-cover transition-all duration-1000 group-hover:scale-105" 
-          // FIXED: Standardized sizes for responsive grid performance
           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-          priority={isUpcoming} // Added priority to upcoming events to boost LCP score
+          priority={isUpcoming} 
         />
         <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/20 to-transparent z-10" />
           
-          {/* CATEGORY BADGE */}
-          {category && (
-            <span className="absolute top-5 right-5 bg-brandRed text-white font-black text-[9px] px-4 py-2 rounded-full tracking-[0.2em] uppercase z-20 shadow-2xl border border-white/10">
-              {category}
-            </span>
-          )}
+          {/* 🔥 UPDATED: LOGO BADGE (Increased Size & Full Frame) */}
+          <div className="absolute top-5 right-5 z-20">
+            {/* Increased to w-14 h-14 */}
+            <div className="relative w-14 h-14 flex items-center justify-center">
+              {/* Outer Glow Ring */}
+              <div className={`absolute inset-0 rounded-full blur-lg transition-opacity duration-700 ${isUpcoming ? 'bg-brandRed opacity-40 group-hover:opacity-80' : 'bg-zinc-600 opacity-20'}`} />
+              
+              {/* Logo Container - Removed padding to allow full coverage */}
+              <div className={`relative w-full h-full rounded-full border-2 overflow-hidden flex items-center justify-center backdrop-blur-md shadow-2xl transition-all ${
+                isUpcoming ? 'bg-zinc-950/90 border-white/20' : 'bg-zinc-900/90 border-white/5 opacity-60 grayscale'
+              }`}>
+                {categoryLogo ? (
+                  /* object-cover ensures the circle is entirely covered */
+                  <img src={categoryLogo} alt={category} className="w-full h-full object-cover" />
+                ) : (
+                  /* Fallback icon if no logo provided */
+                  isUpcoming ? <Zap size={20} className="text-brandRed" /> : <History size={20} className="text-zinc-500" />
+                )}
+              </div>
+            </div>
+          </div>
 
-          {/* COUNTDOWN OVERLAY - UPDATED LEGIBILITY */}
+          {/* COUNTDOWN OVERLAY - MAINTAINED */}
           {isUpcoming && isLive && (
             <div className="absolute inset-0 bg-black/70 flex items-center justify-center backdrop-blur-md opacity-0 group-hover:opacity-100 transition-all duration-700 z-30">
               <div className="text-center">
                 <p className="text-[10px] tracking-[.4em] text-brandRed mb-5 uppercase font-black">Syncing Pulse</p>
                 
                 <div className="flex gap-4 text-white font-black italic text-4xl tracking-tighter">
-                   {/* Days */}
                    <div className="flex flex-col items-center">
                      <span className="leading-none">{timeLeft.days}</span>
                      <span className="text-[10px] not-italic text-zinc-400 uppercase font-black tracking-widest mt-2">Days</span>
                    </div>
-                   
                    <div className="text-brandRed animate-pulse self-start mt-[-4px]">:</div>
-                   
-                   {/* Hours */}
                    <div className="flex flex-col items-center">
                      <span className="leading-none">{timeLeft.hours}</span>
                      <span className="text-[10px] not-italic text-zinc-400 uppercase font-black tracking-widest mt-2">Hrs</span>
                    </div>
-                   
                    <div className="text-brandRed animate-pulse self-start mt-[-4px]">:</div>
-                   
-                   {/* Minutes */}
                    <div className="flex flex-col items-center">
                      <span className="leading-none">{timeLeft.mins}</span>
                      <span className="text-[10px] not-italic text-zinc-400 uppercase font-black tracking-widest mt-2">Mins</span>
@@ -138,10 +147,9 @@ export default function EventCard({
           )}
         </div>
 
-        {/* CONTENT SECTION */}
+        {/* CONTENT SECTION - MAINTAINED */}
         <div className="p-8 md:p-10 flex-1 flex flex-col relative z-20">
           <div className="flex items-start gap-5 mb-6">
-            {/* STYLIZED DATE CALENDAR */}
             <div className="flex flex-col items-center justify-center w-14 h-16 bg-white rounded-2xl overflow-hidden shadow-2xl group-hover:-rotate-3 transition-transform duration-700 shrink-0">
               <div className="w-full bg-brandRed h-4" />
               <div className="flex flex-col items-center justify-center flex-1 text-black">
@@ -161,38 +169,32 @@ export default function EventCard({
             </div>
           </div>
 
-          {/* STANDARDIZED DESCRIPTION POINTERS */}
-{showDescription && description && (
-  <div className="mb-8 relative pl-2">
-    <ul className="space-y-3">
-      {description.split('-').map((segment, idx) => {
-        const trimmed = segment.trim();
-        if (!trimmed) return null; // Skips empty segments
-        
-        return (
-          <motion.li 
-            key={idx} 
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: idx * 0.1 }}
-            className="text-zinc-300 text-[11px] sm:text-[12px] font-medium leading-relaxed italic flex items-start gap-3 group/item"
-          >
-            {/* Standardized Red Pointer with Glow */}
-            <div className="mt-1.5 shrink-0">
-               <div className="w-1.5 h-1.5 rounded-full bg-brandRed shadow-[0_0_8px_#FF0000] group-hover/item:scale-125 transition-transform" />
+          {showDescription && description && (
+            <div className="mb-8 relative pl-2">
+              <ul className="space-y-3">
+                {description.split('-').map((segment, idx) => {
+                  const trimmed = segment.trim();
+                  if (!trimmed) return null;
+                  return (
+                    <motion.li 
+                      key={idx} 
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: idx * 0.1 }}
+                      className="text-zinc-300 text-[11px] sm:text-[12px] font-medium leading-relaxed italic flex items-start gap-3 group/item"
+                    >
+                      <div className="mt-1.5 shrink-0">
+                         <div className="w-1.5 h-1.5 rounded-full bg-brandRed shadow-[0_0_8px_#FF0000] group-hover/item:scale-125 transition-transform" />
+                      </div>
+                      <span className="group-hover/item:text-white transition-colors">{trimmed}</span>
+                    </motion.li>
+                  );
+                })}
+              </ul>
             </div>
-            
-            <span className="group-hover/item:text-white transition-colors">
-              {trimmed}
-            </span>
-          </motion.li>
-        );
-      })}
-    </ul>
-  </div>
-)}
+          )}
 
-          {/* FOOTER: VENUE & TICKETS */}
+          {/* FOOTER - MAINTAINED */}
           <div className="mt-auto space-y-4">
             {location && (
               <div className="flex items-center justify-between bg-white/5 p-3 px-4 rounded-xl border border-white/5 backdrop-blur-md">

@@ -97,7 +97,7 @@ export default function SliderAdmin() {
       setSlides(slides.filter((_, i) => i !== deleteIdx));
       setConfirmOpen(false);
       setDeleteIdx(null);
-      showAlert("Slot Purged from Sequence", "info");
+      showAlert("Slot removed from Sequence", "info");
     }
   };
 

@@ -23,6 +23,7 @@ interface TribeEvent {
   mapUrl?: string;
   ticketUrl?: string;
   category: string;
+  categoryLogo?: string; // 🔥 NEW
   image: string;
   featured: boolean;
   description: string;
@@ -44,6 +45,7 @@ export default function AdminEventsPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [eventToDelete, setEventToDelete] = useState<{id: string, title: string} | null>(null);
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false); // New state for logo
   const timeContainerRef = useRef<HTMLDivElement>(null);
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -52,8 +54,25 @@ export default function AdminEventsPage() {
 
   const [form, setForm] = useState({ 
     title: '', date: '', time: '', location: '', mapUrl: '', 
-    ticketUrl: '', category: 'CULTURAL', image: '', featured: false, description: '' 
+    ticketUrl: '', category: 'CULTURAL', image: '', featured: false, description: '',categoryLogo: ''
   });
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      setLogoUploading(true);
+      const fileName = `logo-${Date.now()}`;
+      const { error: uploadError } = await supabase.storage.from('events').upload(`logos/${fileName}`, file);
+      if (uploadError) throw uploadError;
+      const { data } = supabase.storage.from('events').getPublicUrl(`logos/${fileName}`);
+      setForm({ ...form, categoryLogo: data.publicUrl });
+      showAlert("Category Logo Synchronized", "success");
+    } catch (error: any) {
+      showAlert('Logo Upload Failed', "error");
+    } finally {
+      setLogoUploading(false);
+    }
+  };
 
   const fetchFromMongo = async () => {
     setLoading(true);
@@ -192,7 +211,7 @@ export default function AdminEventsPage() {
   const resetForm = () => {
     setForm({ 
       title: '', date: '', time: '', location: '', mapUrl: '', 
-      ticketUrl: '', category: 'CULTURAL', image: '', featured: false, description: '' 
+      ticketUrl: '', category: 'CULTURAL', image: '', featured: false, description: '',categoryLogo: ''
     });
     setIsEditingId(null);
   };
@@ -229,7 +248,7 @@ export default function AdminEventsPage() {
         message={`Warning: You are about to permanently delete "${eventToDelete?.title}". This cannot be undone.`}
         onConfirm={async () => {
             const res = await fetch(`/api/events/delete?id=${eventToDelete?.id}`, { method: 'DELETE' });
-            if(res.ok) { fetchFromMongo(); setConfirmOpen(false); showAlert("Object Purged", "success"); }
+            if(res.ok) { fetchFromMongo(); setConfirmOpen(false); showAlert("Object removed", "success"); }
         }}
         onCancel={() => setConfirmOpen(false)}
       />
@@ -270,6 +289,64 @@ export default function AdminEventsPage() {
                   </div>
                 </div>
               </div>
+              {/* 🔥 ENHANCED: CATEGORY & LOGO SECTION */}
+<div className="grid grid-cols-1 gap-6">
+  <div className="space-y-1 text-[10px]">
+    <label className="font-black uppercase tracking-[0.3em] text-zinc-600 ml-2">Category</label>
+    <input 
+      list="event-cats" 
+      className="w-full bg-black border border-white/10 p-5 rounded-2xl font-bold focus:border-brandRed outline-none uppercase tracking-widest" 
+      value={form.category} 
+      onChange={e => setForm({...form, category: e.target.value})} 
+    />
+    <datalist id="event-cats">
+      <option value="CULTURAL" /><option value="JAMMING" /><option value="SPORTS" />
+      <option value="WORKSHOP" /><option value="FESTIVAL" /><option value="MEETUP" />
+    </datalist>
+  </div>
+
+  <div className="space-y-1 text-[10px]">
+    <label className="font-black uppercase tracking-[0.3em] text-zinc-600 ml-2">Category Logo (Circle Icon)</label>
+    <div className="flex gap-4">
+      {/* 🔥 Increased size to w-20 h-20 for better Admin visibility */}
+      <div className="w-20 h-20 bg-zinc-900 border border-white/10 rounded-full overflow-hidden shrink-0 flex items-center justify-center p-0 shadow-inner group relative">
+        {form.categoryLogo ? (
+          <img 
+            src={form.categoryLogo} 
+            className="w-full h-full object-cover" 
+            alt="Logo Preview" 
+          />
+        ) : (
+          <Zap className="text-zinc-800" size={24} />
+        )}
+        
+        {/* Simple "Remove" overlay if a logo exists */}
+        {form.categoryLogo && (
+          <button 
+            type="button"
+            onClick={() => setForm({...form, categoryLogo: ''})}
+            className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-brandRed"
+          >
+            <X size={20} />
+          </button>
+        )}
+      </div>
+
+      <label className="flex-1 flex items-center justify-center gap-3 bg-black border border-white/5 rounded-2xl cursor-pointer hover:border-brandRed transition-all group">
+        {logoUploading ? (
+          <Loader2 className="animate-spin text-brandRed" size={18} />
+        ) : (
+          <Camera size={18} className="text-zinc-500 group-hover:text-brandRed transition-colors" />
+        )}
+        <div className="flex flex-col">
+          <span className="text-[10px] font-black uppercase tracking-widest">Select Icon</span>
+          <span className="text-[8px] text-zinc-600 font-bold uppercase tracking-tight">Square PNG recommended</span>
+        </div>
+        <input type="file" className="hidden" onChange={handleLogoUpload} accept="image/*" />
+      </label>
+    </div>
+  </div>
+</div>
 
               <div className="space-y-1 text-[10px]">
                 <label className="font-black uppercase tracking-[0.3em] text-zinc-600 ml-2">Ticket / Booking URL</label>

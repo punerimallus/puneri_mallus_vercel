@@ -16,7 +16,7 @@ export default function FarewellPage() {
         </h1>
         
         <p className="text-zinc-500 font-medium leading-relaxed mb-10">
-          You’ve officially left the tribe. Your data has been purged from our records, and your seat at the table is now empty. 
+          You’ve officially left the tribe. Your data has been removed from our records, and your seat at the table is now empty. 
           <br /><br />
           <span className="italic text-zinc-400">Puna reminds you: The door is always open if you decide to return.</span>
         </p>

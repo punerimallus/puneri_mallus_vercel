@@ -193,12 +193,41 @@ useEffect(() => {
                         <div className="px-3 py-1 text-2xl font-black text-black leading-none pb-2">{day}</div>
                     </div>
 
-                    <div className="absolute top-6 right-6 bg-zinc-950/80 px-3 py-1.5 rounded-full border border-white/10 flex items-center gap-2 md:backdrop-blur-md">
-                        {item.isUpcoming ? <Zap size={10} className="text-brandRed fill-brandRed animate-pulse" /> : <History size={10} className="text-zinc-500" />}
-                        <span className={`text-[7px] font-black uppercase tracking-widest ${item.isUpcoming ? 'text-brandRed' : 'text-zinc-500'}`}>
-                            {item.isUpcoming ? 'Upcoming' : 'Past'}
-                        </span>
-                    </div>
+                    {/* 🔥 LOGO BADGE: Increased Size & Full Coverage */}
+<div className="absolute top-6 right-6 z-20">
+  {/* Increased container to w-14 h-14 (56px) */}
+  <div className="relative w-14 h-14 flex items-center justify-center">
+    {/* Dynamic Background Glow */}
+    <motion.div 
+      animate={item.isUpcoming ? { opacity: [0.4, 0.7, 0.4], scale: [1, 1.1, 1] } : { opacity: 0.2 }}
+      transition={{ repeat: Infinity, duration: 3 }}
+      className={`absolute inset-0 rounded-full blur-lg ${item.isUpcoming ? 'bg-brandRed' : 'bg-zinc-600'}`} 
+    />
+    
+    {/* Circular Logo Container - Removed extra padding (p-0) to allow image to cover */}
+    <div className={`relative w-full h-full rounded-full border-2 overflow-hidden flex items-center justify-center backdrop-blur-md transition-all duration-500 ${
+      item.isUpcoming 
+      ? 'bg-zinc-950/90 border-white/20 shadow-2xl' 
+      : 'bg-zinc-900/90 border-white/5 grayscale opacity-60'
+    }`}>
+      {item.categoryLogo ? (
+        <img 
+          src={item.categoryLogo} 
+          alt="Category" 
+          /* 🔥 object-cover ensures the circle is entirely covered by the image */
+          className="w-full h-full object-cover" 
+        />
+      ) : (
+        /* Fallback icon remains if no logo is found */
+        item.isUpcoming ? (
+          <Zap size={20} className="text-brandRed fill-brandRed/20" />
+        ) : (
+          <History size={20} className="text-zinc-500" />
+        )
+      )}
+    </div>
+  </div>
+</div>
                   </div>
 
                   <div className="p-8 space-y-6">

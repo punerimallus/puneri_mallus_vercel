@@ -5,8 +5,14 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! // Use Service Role for cleanup
+  process.env.SUPABASE_SERVICE_ROLE_KEY! 
 );
+
+// Helper to extract filename from Supabase URL
+const getFileName = (url: string) => {
+  if (!url) return null;
+  return url.split('/').pop();
+};
 
 export async function POST(request: Request) {
   try {
@@ -21,16 +27,32 @@ export async function POST(request: Request) {
       category: eventData.category?.trim().toUpperCase() || 'GENERAL',
       title: eventData.title?.trim().toUpperCase(),
       location: eventData.location?.trim().toUpperCase(),
+      // Ensure categoryLogo is included in the set
+      categoryLogo: eventData.categoryLogo || '',
       updated_at: new Date()
     };
 
     if (_id) {
       const oldEvent = await db.collection("events").findOne({ _id: new ObjectId(_id) });
 
-      if (oldEvent?.image && oldEvent.image !== sanitizedEvent.image) {
-        const fileName = oldEvent.image.split('/').pop();
-        if (fileName) {
-          await supabase.storage.from('events').remove([`posters/${fileName}`]);
+      if (oldEvent) {
+        const filesToDelete: string[] = [];
+
+        // 1. Cleanup Old Poster if changed
+        if (oldEvent.image && oldEvent.image !== sanitizedEvent.image) {
+          const posterFile = getFileName(oldEvent.image);
+          if (posterFile) filesToDelete.push(`posters/${posterFile}`);
+        }
+
+        // 2. 🔥 NEW: Cleanup Old Category Logo if changed
+        if (oldEvent.categoryLogo && oldEvent.categoryLogo !== sanitizedEvent.categoryLogo) {
+          const logoFile = getFileName(oldEvent.categoryLogo);
+          if (logoFile) filesToDelete.push(`logos/${logoFile}`);
+        }
+
+        // Execute Supabase removal
+        if (filesToDelete.length > 0) {
+          await supabase.storage.from('events').remove(filesToDelete);
         }
       }
 
@@ -47,25 +69,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, id: result.insertedId });
     }
   } catch (error: any) {
+    console.error("EVENT_MANAGE_ERROR:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
 /**
- * FIXED GET: Checks for events with a date greater than NOW
+ * GET: Checks for events with a date greater than NOW for Navbar Zap indicators
  */
 export async function GET() {
   try {
     const client = await clientPromise;
     const db = client.db("punerimallus");
     
-    // Find any event happening today or in the future
-    // We check both the isUpcoming toggle AND the date logic for safety
     const now = new Date().toISOString();
     
+    // Safety check for navbar "Live" signals
     const upcoming = await db.collection("events").findOne({
       $or: [
-        { isUpcoming: true },
+        { featured: true }, // Often featured events are what we want to signal
         { date: { $gte: now } }
       ]
     });
@@ -73,6 +95,6 @@ export async function GET() {
     return NextResponse.json({ hasUpcoming: !!upcoming });
   } catch (error) {
     console.error("API_SIGNAL_CHECK_ERROR:", error);
-    return NextResponse.json({ hasUpcoming: false }); // Always return an object to prevent Navbar crash
+    return NextResponse.json({ hasUpcoming: false });
   }
 }

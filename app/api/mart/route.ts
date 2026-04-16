@@ -6,7 +6,10 @@ import {
   sendMartPendingEmail, 
   sendMartLiveEmail, 
   sendMartRejectedEmail,
-  sendAdminMartAlert 
+  sendAdminMartAlert,
+  sendMartVerificationPendingEmail, 
+  sendAdminVerificationAlert,
+  sendMartVerificationSuccessEmail // 🔥 Added for verification approval
 } from "@/lib/mail";
 
 const supabaseAdmin = createClient(
@@ -50,13 +53,13 @@ export async function POST(req: Request) {
       isApproved: false, 
       isVerified: false,
       isPremium: false,
+      verificationStatus: null,
       isDraft: data.isDraft ?? false,
       order: 999, 
       createdAt: new Date(),
       updatedAt: new Date()
     });
 
-    // 📧 No email for drafts
     if (!data.isDraft) {
       if (data.userEmail) {
         await sendMartPendingEmail(data.userEmail, data.name);
@@ -71,7 +74,7 @@ export async function POST(req: Request) {
 }
 
 /**
- * 3. PATCH: UPDATE EXISTING LISTING
+ * 3. PATCH: UPDATE / AUDIT / VERIFY
  */
 export async function PATCH(req: Request) {
   try {
@@ -91,29 +94,37 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ success: true, message: `Reordered ${result.modifiedCount} items` });
     }
 
-    const { id, userEmail, updatedData, isVerified, isPremium, isApproved, isRejected } = body;
+    const { id, userEmail, updatedData, isVerified, isPremium, isApproved, isRejected, verificationDocs, auditType } = body;
 
-    // --- CASE B: ADMIN AUDIT ---
+    // --- CASE B: ADMIN AUDIT (Approval / Verification / Premium) ---
     if (id && (isVerified !== undefined || isPremium !== undefined || isApproved !== undefined || isRejected === true)) {
       const updateFields: any = { updatedAt: new Date() };
       
-      if (isVerified !== undefined) updateFields.isVerified = isVerified;
+      if (isVerified !== undefined) {
+        updateFields.isVerified = isVerified;
+        updateFields.verificationStatus = isVerified ? 'VERIFIED' : null;
+
+        // 🔥 Trigger Success Email on Verification Approval
+        if (isVerified === true) {
+          const item = await db.collection("mallu_mart").findOne({ _id: new ObjectId(id) });
+          if (item?.userEmail) {
+            await sendMartVerificationSuccessEmail(item.userEmail, item.name);
+          }
+        }
+      }
+      
       if (isPremium !== undefined) updateFields.isPremium = isPremium;
       
       if (isRejected === true) {
         updateFields.isApproved = false;
         const item = await db.collection("mallu_mart").findOne({ _id: new ObjectId(id) });
-        if (item?.userEmail) {
-          await sendMartRejectedEmail(item.userEmail, item.name);
-        }
+        if (item?.userEmail) await sendMartRejectedEmail(item.userEmail, item.name);
       } 
       else if (isApproved !== undefined) {
         updateFields.isApproved = isApproved;
         if (isApproved === true) {
           const item = await db.collection("mallu_mart").findOne({ _id: new ObjectId(id) });
-          if (item?.userEmail) {
-            await sendMartLiveEmail(item.userEmail, item.name);
-          }
+          if (item?.userEmail) await sendMartLiveEmail(item.userEmail, item.name);
         }
       }
 
@@ -121,7 +132,33 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ success: true, message: "Admin audit synced" });
     }
 
-    // --- CASE C: USER EDIT ---
+    // --- CASE C: USER SUBMITTING VERIFICATION REQUEST ---
+    if (id && userEmail && verificationDocs && auditType === 'SUBMIT_VERIFICATION') {
+      const existing = await db.collection("mallu_mart").findOne({ 
+        _id: new ObjectId(id), 
+        userEmail: userEmail 
+      });
+
+      if (!existing) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+      await db.collection("mallu_mart").updateOne(
+        { _id: new ObjectId(id) },
+        { 
+          $set: { 
+            verificationDocs: verificationDocs,
+            verificationStatus: 'PENDING',
+            updatedAt: new Date()
+          } 
+        }
+      );
+
+      await sendMartVerificationPendingEmail(userEmail, existing.name);
+      await sendAdminVerificationAlert(existing.name);
+
+      return NextResponse.json({ success: true, message: "Verification files submitted" });
+    }
+
+    // --- CASE D: USER EDIT (Standard) ---
     if (!userEmail || !updatedData) {
       return NextResponse.json({ error: "Missing parameters" }, { status: 400 });
     }
@@ -136,12 +173,6 @@ export async function PATCH(req: Request) {
     const { _id: _, ...cleanData } = updatedData;
     if (cleanData.category) cleanData.category = cleanData.category.toUpperCase();
 
-    /**
-     * 🔥 SMART NOTIFICATION LOGIC:
-     * 1. Must NOT be a draft.
-     * 2. Only notify if it was previously a Draft OR previously Approved.
-     * 3. This prevents double-emails if the user edits a 'Pending' item multiple times.
-     */
     const shouldNotify = !cleanData.isDraft && (existing.isDraft || existing.isApproved);
 
     await db.collection("mallu_mart").updateOne(
@@ -149,7 +180,7 @@ export async function PATCH(req: Request) {
       { 
         $set: { 
           ...cleanData,
-          isApproved: false, // Forces re-review on every user edit
+          isApproved: false, 
           isDraft: cleanData.isDraft ?? false,
           updatedAt: new Date() 
         } 
@@ -183,15 +214,22 @@ export async function DELETE(req: Request) {
     const post = await db.collection("mallu_mart").findOne(query);
     if (!post) return NextResponse.json({ error: "Unauthorized or not found" }, { status: 401 });
 
-    // Secure Storage Cleanup: Trust DB paths over request body
-    const finalPaths = post.imagePaths || (post.imagePath ? [post.imagePath] : []);
+    const posterPaths = post.imagePaths || (post.imagePath ? [post.imagePath] : []);
+    const verificationPaths = post.verificationDocs ? Object.values(post.verificationDocs) : [];
     
-    if (finalPaths.length > 0) {
-      await supabaseAdmin.storage.from('mallu-mart').remove(finalPaths);
+    const allFiles = [...posterPaths, ...verificationPaths].map(path => {
+        if (typeof path === 'string' && path.includes('/')) return path.split('/').pop();
+        return path;
+    }).filter(Boolean);
+    
+    if (allFiles.length > 0) {
+      await supabaseAdmin.storage.from('mallu-mart').remove(allFiles);
     }
 
     await db.collection("mallu_mart").deleteOne({ _id: new ObjectId(id) });
-    return NextResponse.json({ message: "Cleaned up successfully" });
+    
+    // 🔥 Cleanup complete: Removed "Node" and "Purged"
+    return NextResponse.json({ message: "Business and associated documents removed successfully" });
   } catch (error) {
     return NextResponse.json({ error: "Delete failed" }, { status: 500 });
   }

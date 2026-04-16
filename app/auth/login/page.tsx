@@ -64,7 +64,8 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-black flex items-start justify-center p-6 pt-24 md:pt-32 relative overflow-hidden">
+    /* 🔥 UPDATED: items-start and pt-44 to push container down from navbar */
+    <div className="min-h-screen bg-black flex items-start justify-center p-6 pt-32 md:pt-44 relative overflow-hidden">
       
       {/* BACKGROUND IMAGE */}
       <div className="absolute inset-0 z-0">
@@ -105,7 +106,6 @@ export default function LoginPage() {
 
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="relative group">
-                {/* Fixed Icon Position and Opacity */}
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-brandRed transition-colors z-20" size={16} />
                 <input 
                   type="email" 
@@ -113,8 +113,8 @@ export default function LoginPage() {
                   required
                   autoComplete="off"
                   suppressHydrationWarning
-                  /* pl-12 clears the icon; placeholder:text-zinc-500 makes it visible */
-                  className="relative w-full bg-black/40 border border-white/10 p-4 pl-12 rounded-xl font-bold text-[10px] tracking-widest focus:border-brandRed transition-all outline-none text-white placeholder:text-zinc-500 z-10"
+                  /* 🔥 UPDATED: Increased text size to 13px and tracking for better visibility */
+                  className="relative w-full bg-black/40 border border-white/10 p-4 pl-12 rounded-xl font-bold text-[13px] tracking-wide focus:border-brandRed transition-all outline-none text-white placeholder:text-zinc-500 placeholder:text-[10px] placeholder:tracking-widest z-10"
                   value={email} 
                   onChange={(e) => setEmail(e.target.value)}
                 />
@@ -126,8 +126,8 @@ export default function LoginPage() {
                   type={showPassword ? "text" : "password"} 
                   placeholder="PASSWORD" 
                   required
-                  /* pl-12 clears the icon; pr-12 clears the eye icon */
-                  className="relative w-full bg-black/40 border border-white/10 p-4 pl-12 pr-12 rounded-xl font-bold text-[10px] tracking-widest focus:border-brandRed transition-all outline-none text-white placeholder:text-zinc-500 z-10"
+                  /* 🔥 UPDATED: Increased text size to 13px and tracking for better visibility */
+                  className="relative w-full bg-black/40 border border-white/10 p-4 pl-12 pr-12 rounded-xl font-bold text-[13px] tracking-wide focus:border-brandRed transition-all outline-none text-white placeholder:text-zinc-500 placeholder:text-[10px] placeholder:tracking-widest z-10"
                   value={password} 
                   onChange={(e) => setPassword(e.target.value)}
                 />

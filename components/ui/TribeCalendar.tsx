@@ -4,9 +4,9 @@ import { createPortal } from 'react-dom';
 import { 
   format, addMonths, subMonths, startOfMonth, endOfMonth, 
   startOfWeek, endOfWeek, isSameMonth, isSameDay, eachDayOfInterval, 
-  getYear, setYear, isAfter, parseISO
+  getYear, setYear, isAfter, parseISO, isValid
 } from 'date-fns';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface TribeCalendarProps {
@@ -20,41 +20,50 @@ interface TribeCalendarProps {
 export default function TribeCalendar({ value, onChange, onClose, maxDate, anchorRef }: TribeCalendarProps) {
   const calendarRef = useRef<HTMLDivElement>(null);
   
+  // Helper to safely parse dates (Handles ISO and Human Readable like "APR 16, 2026")
+  const safeParse = (dateStr: string): Date => {
+    if (!dateStr || dateStr === "DD-MM-YYYY" || dateStr === "SET DATE") return new Date();
+    const parsed = new Date(dateStr); // Native Date is more forgiving than parseISO for human formats
+    return isValid(parsed) ? parsed : new Date();
+  };
+
   const [currentMonth, setCurrentMonth] = useState(() => {
-    if (value && value !== "DD-MM-YYYY") {
-      try { return parseISO(value); } catch (e) { console.error(e); }
-    }
-    if (maxDate) return parseISO(maxDate);
-    return new Date();
+    const initial = value ? safeParse(value) : (maxDate ? safeParse(maxDate) : new Date());
+    return startOfMonth(initial);
   });
 
   const [showYearPicker, setShowYearPicker] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [coords, setCoords] = useState({ top: 0, left: 0 });
   
-  const selectedDate = (value && value !== "DD-MM-YYYY") ? parseISO(value) : null;
-  const years = Array.from({ length: new Date().getFullYear() - 1949 }, (_, i) => 1950 + i).reverse();
+  const selectedDate = (value && value !== "DD-MM-YYYY" && value !== "SET DATE") ? safeParse(value) : null;
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: 101 }, (_, i) => (currentYear + 10) - i); // Shows 10 years in future to 90 in past
 
-  // --- 1. DYNAMIC POSITIONING ---
   const updatePosition = useCallback(() => {
     if (anchorRef?.current) {
       const rect = anchorRef.current.getBoundingClientRect();
+      const calendarWidth = 300;
+      let left = rect.left;
+      
+      // Prevent overflow on right side of screen
+      if (left + calendarWidth > window.innerWidth) {
+        left = window.innerWidth - calendarWidth - 20;
+      }
+
       setCoords({
         top: rect.bottom + window.scrollY + 8,
-        left: Math.min(rect.left, window.innerWidth - 320)
+        left: Math.max(20, left) // Prevent overflow on left side
       });
     }
   }, [anchorRef]);
 
-  // --- 2. CLICK OUTSIDE & EVENT LISTENERS ---
   useEffect(() => {
     setMounted(true);
     updatePosition();
     
     const handleClickOutside = (event: MouseEvent) => {
-      // Don't close if clicking the input field that opened it
       if (anchorRef?.current?.contains(event.target as Node)) return;
-      // Don't close if clicking inside the calendar itself
       if (calendarRef.current && !calendarRef.current.contains(event.target as Node)) {
         onClose();
       }
@@ -73,25 +82,20 @@ export default function TribeCalendar({ value, onChange, onClose, maxDate, ancho
 
   if (!mounted || !anchorRef?.current) return null;
 
-  const calendarStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: `${coords.top}px`,
-    left: `${coords.left}px`,
-    width: '300px',
-  };
-
   const renderHeader = () => (
     <div className="flex items-center justify-between px-4 py-4 border-b border-white/10 bg-zinc-950">
       <button type="button" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} className="p-2 hover:bg-brandRed/20 rounded-full transition-colors">
         <ChevronLeft size={20} className="text-brandRed" />
       </button>
-      <button type="button" onClick={() => setShowYearPicker(!showYearPicker)} className="text-[11px] font-black uppercase tracking-widest text-white hover:text-brandRed transition-colors">
-        {format(currentMonth, 'MMMM yyyy')}
+      
+      <button type="button" onClick={() => setShowYearPicker(!showYearPicker)} className="text-[11px] font-black uppercase tracking-widest text-white hover:text-brandRed transition-colors flex items-center gap-2">
+        {isValid(currentMonth) ? format(currentMonth, 'MMMM yyyy') : 'Select Month'}
       </button>
+
       <button 
         type="button" 
         onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} 
-        disabled={maxDate ? isAfter(addMonths(startOfMonth(currentMonth), 1), parseISO(maxDate)) : false}
+        disabled={maxDate ? isAfter(addMonths(startOfMonth(currentMonth), 1), safeParse(maxDate)) : false}
         className="p-2 hover:bg-brandRed/20 rounded-full transition-colors disabled:opacity-10"
       >
         <ChevronRight size={20} className="text-brandRed" />
@@ -102,17 +106,22 @@ export default function TribeCalendar({ value, onChange, onClose, maxDate, ancho
   const content = (
     <motion.div 
       ref={calendarRef}
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
+      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      style={calendarStyle}
+      style={{
+        position: 'absolute',
+        top: `${coords.top}px`,
+        left: `${coords.left}px`,
+        width: '300px',
+      }}
       className="bg-zinc-950 border border-white/10 rounded-[32px] shadow-[0_20px_60px_rgba(0,0,0,0.9)] z-[9999] overflow-hidden backdrop-blur-3xl"
     >
       <AnimatePresence mode="wait">
         {showYearPicker ? (
           <motion.div key="years" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-[320px] overflow-y-auto p-4 grid grid-cols-3 gap-2 bg-zinc-950 scrollbar-hide">
             {years.map(year => {
-                const isYearDisabled = maxDate ? year > getYear(parseISO(maxDate)) : false;
+                const isYearDisabled = maxDate ? year > getYear(safeParse(maxDate)) : false;
                 return (
                     <button 
                         key={year} 
@@ -120,7 +129,7 @@ export default function TribeCalendar({ value, onChange, onClose, maxDate, ancho
                         disabled={isYearDisabled}
                         onClick={() => { setCurrentMonth(setYear(currentMonth, year)); setShowYearPicker(false); }} 
                         className={`py-3 rounded-xl text-[10px] font-black tracking-widest transition-all 
-                            ${getYear(currentMonth) === year ? 'bg-brandRed text-white' : 'text-zinc-500 hover:bg-white/5'}
+                            ${getYear(currentMonth) === year ? 'bg-brandRed text-white shadow-[0_0_15px_rgba(255,0,0,0.3)]' : 'text-zinc-500 hover:bg-white/5'}
                             ${isYearDisabled ? 'opacity-10 cursor-not-allowed' : ''}
                         `}
                     >
@@ -138,14 +147,22 @@ export default function TribeCalendar({ value, onChange, onClose, maxDate, ancho
               ))}
             </div>
             <div className="grid grid-cols-7 gap-1 p-2">
-              {eachDayOfInterval({ start: startOfWeek(startOfMonth(currentMonth)), end: endOfWeek(endOfMonth(currentMonth)) }).map((day, idx) => {
-                const isDisabled = maxDate ? isAfter(day, parseISO(maxDate)) : false;
+              {eachDayOfInterval({ 
+                start: startOfWeek(startOfMonth(currentMonth)), 
+                end: endOfWeek(endOfMonth(currentMonth)) 
+              }).map((day, idx) => {
+                const isDisabled = maxDate ? isAfter(day, safeParse(maxDate)) : false;
                 const isCurrentMonth = isSameMonth(day, currentMonth);
+                const isSelected = selectedDate && isSameDay(day, selectedDate);
+                
                 return (
                   <button
                     key={idx} type="button" disabled={isDisabled}
                     onClick={() => { if (!isDisabled) { onChange(format(day, 'yyyy-MM-dd')); onClose(); } }}
-                    className={`h-9 w-full rounded-xl text-[11px] font-bold transition-all flex items-center justify-center ${!isCurrentMonth ? 'opacity-10' : 'text-zinc-300'} ${selectedDate && isSameDay(day, selectedDate) ? 'bg-brandRed text-white shadow-[0_0_15px_rgba(255,0,0,0.4)]' : 'hover:bg-white/5'} ${isDisabled ? 'opacity-10 cursor-not-allowed' : ''}`}
+                    className={`h-9 w-full rounded-xl text-[11px] font-bold transition-all flex items-center justify-center 
+                      ${!isCurrentMonth ? 'opacity-10' : 'text-zinc-300'} 
+                      ${isSelected ? 'bg-brandRed text-white shadow-[0_0_15px_rgba(255,0,0,0.4)]' : 'hover:bg-white/5'} 
+                      ${isDisabled ? 'opacity-10 cursor-not-allowed' : ''}`}
                   >
                     {format(day, 'd')}
                   </button>
@@ -160,13 +177,13 @@ export default function TribeCalendar({ value, onChange, onClose, maxDate, ancho
         <button 
           type="button" 
           onClick={() => { 
-            const target = maxDate ? parseISO(maxDate) : new Date();
+            const target = maxDate ? safeParse(maxDate) : new Date();
             onChange(format(target, 'yyyy-MM-dd')); 
             onClose(); 
           }} 
-          className="text-[9px] font-black uppercase tracking-widest text-brandRed hover:scale-105 transition-transform"
+          className="text-[9px] font-black uppercase tracking-widest text-brandRed flex items-center gap-2 hover:scale-105 transition-transform"
         >
-          {maxDate ? 'Limit' : 'Today'}
+          <Zap size={10} fill="currentColor" /> {maxDate ? 'Limit' : 'Today'}
         </button>
       </div>
     </motion.div>

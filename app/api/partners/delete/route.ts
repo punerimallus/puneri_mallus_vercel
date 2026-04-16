@@ -59,7 +59,7 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: "Dissolution failed" }, { status: 500 });
     }
 
-    return NextResponse.json({ message: "Ally connection dissolved and assets purged." });
+    return NextResponse.json({ message: "Ally connection dissolved and assets removed." });
 
   } catch (e: any) {
     console.error("PARTNER_DELETE_CRITICAL_ERROR:", e);

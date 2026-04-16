@@ -242,3 +242,108 @@ export const sendRejectedCommunityEmail = async (to: string, communityName: stri
   };
   return await transporter.sendMail(mailOptions);
 };
+
+
+export async function sendMartVerificationPendingEmail(userEmail: string, businessName: string) {
+  const mailOptions = {
+    from: `"Puneri Mallus Admin" <${process.env.EMAIL_USER}>`,
+    to: userEmail,
+    subject: `VERIFICATION INITIATED: ${businessName}`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 600px; margin: auto; background: #000; color: #fff; padding: 40px; border-radius: 20px; border: 1px solid #333;">
+        <h2 style="color: #FF0000; text-transform: uppercase; font-style: italic; letter-spacing: -1px;">Protocol Initiated.</h2>
+        <p style="color: #888; font-size: 12px; text-transform: uppercase; letter-spacing: 2px;">Verification Request Received</p>
+        <hr style="border: 0; border-top: 1px solid #222; margin: 20px 0;">
+        <p>Hello,</p>
+        <p>We have successfully received the verification documents for <strong>${businessName}</strong>.</p>
+        <p>Our moderation team is currently auditing your submission. This process typically takes <strong>24-48 hours</strong>. Once verified, your listing will receive the <strong>Shield Badge</strong>, increasing trust across the Tribe.</p>
+        <div style="background: #111; padding: 20px; border-radius: 10px; margin-top: 20px; border: 1px solid #222;">
+          <p style="margin: 0; font-size: 11px; color: #666; text-transform: uppercase;">Current Status:</p>
+          <p style="margin: 5px 0 0 0; color: #FFA500; font-weight: bold;">PENDING AUDIT</p>
+        </div>
+        <p style="margin-top: 30px; font-size: 12px; color: #444;">If you did not initiate this request, please contact us immediately.</p>
+      </div>
+    `,
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+  } catch (error) {
+    console.error("MAIL_VERIFY_USER_ERROR:", error);
+  }
+}
+
+/**
+ * 📧 NOTIFY ADMIN: New Verification Audit Required
+ * Sent to punerimallus@gmail.com to alert you of new documents.
+ */
+export async function sendAdminVerificationAlert(businessName: string) {
+  const mailOptions = {
+    from: `"Tribe System" <${process.env.EMAIL_USER}>`,
+    to: "punerimallus@gmail.com", // Your admin email
+    subject: `🚨 ACTION REQUIRED: Verification Audit for ${businessName}`,
+    html: `
+      <div style="font-family: sans-serif; background: #f9f9f9; padding: 40px; color: #333;">
+        <div style="max-width: 600px; margin: auto; background: #fff; padding: 30px; border-top: 4px solid #FF0000; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+          <h2 style="margin-top: 0;">New Verification Request</h2>
+          <p>A business owner has submitted documents for verification on Mallu Mart.</p>
+          <table style="width: 100%; margin: 20px 0; border-collapse: collapse;">
+            <tr>
+              <td style="padding: 10px; border-bottom: 1px solid #eee; font-weight: bold;">Business:</td>
+              <td style="padding: 10px; border-bottom: 1px solid #eee;">${businessName}</td>
+            </tr>
+            <tr>
+              <td style="padding: 10px; border-bottom: 1px solid #eee; font-weight: bold;">Priority:</td>
+              <td style="padding: 10px; border-bottom: 1px solid #eee; color: #FF0000;">HIGH</td>
+            </tr>
+          </table>
+          <p>Please log in to the <strong>Admin Terminal</strong> to audit the Shop Act and ID documents.</p>
+          <a href="${process.env.NEXT_PUBLIC_BASE_URL}/admin/mart" 
+             style="display: inline-block; background: #000; color: #fff; padding: 15px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; margin-top: 10px;">
+             Open Admin Terminal
+          </a>
+        </div>
+      </div>
+    `,
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+  } catch (error) {
+    console.error("MAIL_ADMIN_VERIFY_ALERT_ERROR:", error);
+  }
+}
+
+/**
+ * 📧 NOTIFY USER: Verification Successful
+ * Sent when Admin hits the "Verify" button.
+ */
+export async function sendMartVerificationSuccessEmail(userEmail: string, businessName: string) {
+  const mailOptions = {
+    from: `"Puneri Mallus Admin" <${process.env.EMAIL_USER}>`,
+    to: userEmail,
+    subject: `SHIELD EARNED: ${businessName} is now Verified!`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 600px; margin: auto; background: #000; color: #fff; padding: 40px; border-radius: 20px; border: 1px solid #333;">
+        <div style="text-align: center; margin-bottom: 20px;">
+           <h1 style="color: #FF0000; font-size: 40px; margin: 0;">🛡️</h1>
+        </div>
+        <h2 style="color: #fff; text-transform: uppercase; font-style: italic; text-align: center; letter-spacing: -1px;">Trust Protocol Complete.</h2>
+        <p style="color: #888; font-size: 12px; text-transform: uppercase; text-align: center; letter-spacing: 2px;">Verification Status: APPROVED</p>
+        <hr style="border: 0; border-top: 1px solid #222; margin: 20px 0;">
+        <p>Excellent news,</p>
+        <p>Your business <strong>${businessName}</strong> has passed our manual audit. Your profile now features the <strong>Verified Shield Badge</strong>.</p>
+        <p>This badge signals to the Tribe that your business is legitimate, significantly increasing your trust score and visibility in the directory.</p>
+        <div style="background: #111; padding: 20px; border-radius: 10px; margin-top: 20px; border: 1px solid #222; text-align: center;">
+          <a href="${process.env.NEXT_PUBLIC_BASE_URL}/directory" style="color: #FF0000; text-decoration: none; font-weight: bold; text-transform: uppercase; font-size: 12px; letter-spacing: 1px;">View Your Verified Listing →</a>
+        </div>
+      </div>
+    `,
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+  } catch (error) {
+    console.error("MAIL_VERIFY_SUCCESS_ERROR:", error);
+  }
+}

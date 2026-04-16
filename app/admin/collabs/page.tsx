@@ -165,7 +165,7 @@ export default function AdminCollabPage() {
         body: JSON.stringify({ id: collabToDelete?.id })
       });
       if (res.ok) {
-        showAlert("Object Purged from Terminal", "success");
+        showAlert("Object Deleted from Terminal", "success");
         fetchAds();
       }
     } catch (error) {

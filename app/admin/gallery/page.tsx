@@ -82,7 +82,7 @@ export default function GalleryAdmin() {
       setImages(newImages);
       setConfirmOpen(false);
       setTargetIdx(null);
-      showAlert("Slot Purged", "info");
+      showAlert("Slot removed", "info");
     }
   };
 
