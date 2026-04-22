@@ -340,7 +340,7 @@ useEffect(() => {
             </div>
 
             {message && (
-              <p className={`text-[12px] font-black uppercase text-center py-2 px-4 rounded-lg bg-black/50 border ${message.includes('VERIFIED') || message.includes('SENT') ? 'text-green-400 border-green-400/20' : 'text-brandRed border-brandRed/20'}`}>
+              <p className={`text-[10px] font-black uppercase text-center py-2 px-4 rounded-lg bg-black/50 border ${message.includes('VERIFIED') || message.includes('SENT') ? 'text-green-400 border-green-400/20' : 'text-brandRed border-brandRed/20'}`}>
                 {message}
               </p>
             )}
