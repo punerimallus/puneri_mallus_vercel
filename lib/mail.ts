@@ -28,6 +28,34 @@ export const sendVerificationEmail = async (to: string, token: string) => {
 
   return await transporter.sendMail(mailOptions);
 };
+export interface MailOptions {
+  to: string;
+  subject: string;
+  text?: string;
+  html?: string;
+  attachments?: {
+    filename: string;
+    content: string | Buffer;
+    encoding?: string;
+  }[];
+}
+export const sendMail = async ({ to, subject, text, html, attachments }: MailOptions) => {
+  const mailOptions = {
+    from: `"Puneri Mallus Box Office" <${process.env.EMAIL_USER}>`,
+    to: to,
+    subject: subject,
+    text: text,
+    html: html || text, // Fallback to text if html is not provided
+    attachments: attachments,
+  };
+
+  try {
+    return await transporter.sendMail(mailOptions);
+  } catch (error) {
+    console.error("GENERIC_MAIL_SEND_ERROR:", error);
+    throw new Error("Failed to send email");
+  }
+};
 
 export const sendPendingCommunityEmail = async (to: string, communityName: string) => {
   const mailOptions = {
@@ -543,3 +571,87 @@ export const sendFootballReceiptEmail = async (to: string, teamName: string, ord
 
   return await transporter.sendMail(mailOptions);
 };
+
+export async function sendEventTicketEmail(to: string, bookingId: string, tickets: any[], totalAmount: number, pdfBase64: string, eventData: any) {
+  const ticketNumbers = tickets.map(t => t.ticketNumber).join(', ');
+  
+  // Create Google Calendar Link dynamically
+  const calTitle = encodeURIComponent(eventData?.title || 'Puneri Mallus Event');
+  const calLocation = encodeURIComponent(eventData?.location || 'Pune');
+  const calDetails = encodeURIComponent('Your event passes are attached in your email!');
+  const googleCalendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${calTitle}&location=${calLocation}&details=${calDetails}`;
+
+  const mailOptions = {
+    from: `"Puneri Mallus Box Office" <${process.env.EMAIL_USER}>`,
+    to: to,
+    subject: `🎟️ Your Passes are Confirmed! - ${eventData?.title || 'Puneri Mallus'}`,
+    html: `
+      <div style="font-family: 'Segoe UI', Helvetica, Arial, sans-serif; background-color: #f4f5f9; padding: 40px 20px; color: #000;">
+        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
+          
+          <!-- Header -->
+          <div style="text-align: center; padding: 40px 20px 20px;">
+            <h1 style="color: #FF0000; font-size: 32px; font-weight: 900; font-style: italic; text-transform: uppercase; letter-spacing: -1px; margin: 0;">Puneri Mallus</h1>
+            <h2 style="color: #000; font-size: 20px; font-weight: 900; margin: 15px 0 5px; text-transform: uppercase;">Your passes are ready!</h2>
+            <p style="color: #666; font-size: 14px; margin: 0;">Booking ID: <strong style="color: #000;">${bookingId.split('-')[0].toUpperCase()}</strong></p>
+          </div>
+
+          <!-- Ticket Card -->
+          <div style="margin: 20px; background-color: #fafafa; border-radius: 16px; padding: 25px; border: 1px dashed #ccc; position: relative;">
+            <h3 style="margin: 0 0 15px; font-size: 18px; color: #000; text-transform: uppercase; font-weight: 900;">Exclusive Access</h3>
+            
+            ${tickets.map(t => `
+              <div style="margin-bottom: 15px;">
+                <p style="margin: 0; color: #888; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; font-weight: bold;">Category</p>
+                <p style="margin: 2px 0 0; color: #FF0000; font-size: 16px; font-weight: 900;">${t.categoryName}</p>
+              </div>
+            `).join('')}
+
+            <div style="margin-top: 25px; padding-top: 20px; border-top: 1px dashed #ddd;">
+              <p style="margin: 0; color: #888; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; font-weight: bold;">Pass Identifiers</p>
+              <p style="margin: 5px 0 0; color: #000; font-size: 18px; font-weight: 900; letter-spacing: 1px;">${ticketNumbers}</p>
+            </div>
+          </div>
+
+          <!-- Add to Calendar Button -->
+          <div style="text-align: center; margin: 30px 20px;">
+            <a href="${googleCalendarUrl}" target="_blank" style="display: inline-block; background-color: #000; color: #fff; padding: 16px 32px; border-radius: 50px; text-decoration: none; font-weight: bold; text-transform: uppercase; font-size: 12px; letter-spacing: 1px;">
+              🗓️ Add to Google Calendar
+            </a>
+          </div>
+
+          <!-- Order Summary (Fixed Spacing with Table) -->
+          <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 20px;">
+            <tr>
+              <td align="left" style="color: #666; font-size: 14px; font-weight: bold; text-transform: uppercase;">Total Paid</td>
+              <td align="right" style="color: #FF0000; font-size: 20px; font-weight: 900;">₹${totalAmount.toLocaleString('en-IN')}</td>
+            </tr>
+          </table>
+
+          <div style="text-align: center; padding: 20px; background-color: #FF0000;">
+            <p style="margin: 0; color: #fff; font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Open the attached PDF to view your passes</p>
+          </div>
+
+        </div>
+      </div>
+    `,
+    attachments: [
+      {
+        filename: `PM_Passes_${bookingId.split('-')[0]}.pdf`,
+        content: pdfBase64,
+        encoding: 'base64'
+      }
+    ]
+  };
+
+  try {
+    const nodemailer = require('nodemailer');
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+    });
+    return await transporter.sendMail(mailOptions);
+  } catch (error) {
+    console.error("MAIL_TICKET_ERROR:", error);
+  }
+}

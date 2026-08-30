@@ -11,8 +11,10 @@ import { logAdminActivity } from '@/app/admin/action';
 import { useAlert } from '@/context/AlertContext';
 import TribeConfirm from '@/components/TribeConfirm';
 import TribeCalendar from '@/components/ui/TribeCalendar';
-import TribeTimePicker from '@/components/ui/TribeTimePicker'; // Import Custom Calendar
-import { AnimatePresence } from 'framer-motion';
+import TribeTimePicker from '@/components/ui/TribeTimePicker';
+import { AnimatePresence, motion } from 'framer-motion';
+// 🔥 NEW: Import the TicketConfig component
+import TicketConfig from '@/components/admin/TicketConfig'; 
 
 interface TribeEvent {
   _id: string;
@@ -36,6 +38,10 @@ export default function AdminEventsPage() {
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  
+  // 🔥 NEW: State for the Ticket Management Modal
+  const [manageTicketsEvent, setManageTicketsEvent] = useState<TribeEvent | null>(null);
+  
   const { showAlert } = useAlert();
   
   // --- REFS & CALENDAR STATES ---
@@ -151,7 +157,8 @@ export default function AdminEventsPage() {
       location: form.location.trim().toUpperCase(),
       category: form.category.trim().toUpperCase(),
       mapUrl: formatUrl(form.mapUrl),
-      ticketUrl: formatUrl(form.ticketUrl),
+      // 🔥 NEW: Check for INTERNAL flag before formatting URL
+      ticketUrl: form.ticketUrl === 'INTERNAL' ? 'INTERNAL' : formatUrl(form.ticketUrl),
     };
 
     try {
@@ -183,7 +190,6 @@ export default function AdminEventsPage() {
     const eventDateTime = new Date(`${event.date} ${event.time}`);
     const isUpcoming = isNaN(eventDateTime.getTime()) || eventDateTime >= now;
 
-    // 🔥 Removed the limit check for past events, kept only for upcoming
     if (!isUpcoming) {
       showAlert("Past events are automatically sorted by date. Toggle disabled.", "error");
       return;
@@ -254,6 +260,8 @@ export default function AdminEventsPage() {
 
   return (
     <div className="min-h-screen bg-black pt-48 pb-20 px-6 lg:px-16 text-white selection:bg-brandRed/30">
+      
+      {/* PURGE COMMAND CONFIRMATION */}
       <TribeConfirm 
         isOpen={confirmOpen}
         title="Purge Command"
@@ -265,7 +273,27 @@ export default function AdminEventsPage() {
         onCancel={() => setConfirmOpen(false)}
       />
 
+      {/* 🔥 NEW: TICKET CONFIGURATION MODAL */}
+      <AnimatePresence>
+        {manageTicketsEvent && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setManageTicketsEvent(null)} />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+              className="relative w-full max-w-4xl bg-zinc-950 border border-white/10 rounded-[40px] p-8 shadow-2xl z-10 max-h-[90vh] overflow-y-auto custom-scrollbar"
+            >
+              <button onClick={() => setManageTicketsEvent(null)} className="absolute top-6 right-6 text-zinc-500 hover:text-white transition-colors">
+                <X size={24} />
+              </button>
+              <TicketConfig eventId={manageTicketsEvent._id} eventTitle={manageTicketsEvent.title} />
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       <div className="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12">
+        
+        {/* LEFT COLUMN: EVENT FORM */}
         <div className="lg:col-span-4">
           <div className="bg-zinc-950 p-8 rounded-[40px] border border-white/5 sticky top-32 shadow-2xl">
             <div className="flex justify-between items-center mb-8">
@@ -302,73 +330,89 @@ export default function AdminEventsPage() {
                 </div>
               </div>
 
-<div className="grid grid-cols-1 gap-6">
-  <div className="space-y-1 text-[10px]">
-    <label className="font-black uppercase tracking-[0.3em] text-zinc-600 ml-2">Category</label>
-    <input 
-      list="event-cats" 
-      className="w-full bg-black border border-white/10 p-5 rounded-2xl font-bold focus:border-brandRed outline-none uppercase tracking-widest" 
-      value={form.category} 
-      onChange={e => setForm({...form, category: e.target.value})} 
-    />
-    <datalist id="event-cats">
-      <option value="CULTURAL" /><option value="JAMMING" /><option value="SPORTS" />
-      <option value="WORKSHOP" /><option value="FESTIVAL" /><option value="MEETUP" />
-    </datalist>
-  </div>
-
-  <div className="space-y-1 text-[10px]">
-    <label className="font-black uppercase tracking-[0.3em] text-zinc-600 ml-2">Category Logo (Circle Icon)</label>
-    <div className="flex gap-4">
-      <div className="w-20 h-20 bg-zinc-900 border border-white/10 rounded-full overflow-hidden shrink-0 flex items-center justify-center p-0 shadow-inner group relative">
-        {form.categoryLogo ? (
-          <img 
-            src={form.categoryLogo} 
-            className="w-full h-full object-cover" 
-            alt="Logo Preview" 
-          />
-        ) : (
-          <Zap className="text-zinc-800" size={24} />
-        )}
-        
-        {form.categoryLogo && (
-          <button 
-            type="button"
-            onClick={() => setForm({...form, categoryLogo: ''})}
-            className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-brandRed"
-          >
-            <X size={20} />
-          </button>
-        )}
-      </div>
-
-      <label className="flex-1 flex items-center justify-center gap-3 bg-black border border-white/5 rounded-2xl cursor-pointer hover:border-brandRed transition-all group">
-        {logoUploading ? (
-          <Loader2 className="animate-spin text-brandRed" size={18} />
-        ) : (
-          <Camera size={18} className="text-zinc-500 group-hover:text-brandRed transition-colors" />
-        )}
-        <div className="flex flex-col">
-          <span className="text-[10px] font-black uppercase tracking-widest">Select Icon</span>
-          <span className="text-[8px] text-zinc-600 font-bold uppercase tracking-tight">Square PNG recommended</span>
-        </div>
-        <input type="file" className="hidden" onChange={handleLogoUpload} accept="image/*" />
-      </label>
-    </div>
-  </div>
-</div>
-
-              <div className="space-y-1 text-[10px]">
-                <label className="font-black uppercase tracking-[0.3em] text-zinc-600 ml-2">Ticket / Booking URL</label>
-                <div className="relative">
-                  <Ticket className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-700" size={14} />
+              <div className="grid grid-cols-1 gap-6">
+                <div className="space-y-1 text-[10px]">
+                  <label className="font-black uppercase tracking-[0.3em] text-zinc-600 ml-2">Category</label>
                   <input 
-                    placeholder="https://booking-link.com"
-                    className="w-full bg-black border border-white/10 p-5 pl-12 rounded-2xl font-bold focus:border-brandRed outline-none text-brandRed italic" 
-                    value={form.ticketUrl||''} 
-                    onChange={e => setForm({...form, ticketUrl: e.target.value})} 
+                    list="event-cats" 
+                    className="w-full bg-black border border-white/10 p-5 rounded-2xl font-bold focus:border-brandRed outline-none uppercase tracking-widest" 
+                    value={form.category} 
+                    onChange={e => setForm({...form, category: e.target.value})} 
                   />
+                  <datalist id="event-cats">
+                    <option value="CULTURAL" /><option value="JAMMING" /><option value="SPORTS" />
+                    <option value="WORKSHOP" /><option value="FESTIVAL" /><option value="MEETUP" />
+                  </datalist>
                 </div>
+
+                <div className="space-y-1 text-[10px]">
+                  <label className="font-black uppercase tracking-[0.3em] text-zinc-600 ml-2">Category Logo (Circle Icon)</label>
+                  <div className="flex gap-4">
+                    <div className="w-20 h-20 bg-zinc-900 border border-white/10 rounded-full overflow-hidden shrink-0 flex items-center justify-center p-0 shadow-inner group relative">
+                      {form.categoryLogo ? (
+                        <img src={form.categoryLogo} className="w-full h-full object-cover" alt="Logo Preview" />
+                      ) : (
+                        <Zap className="text-zinc-800" size={24} />
+                      )}
+                      
+                      {form.categoryLogo && (
+                        <button 
+                          type="button"
+                          onClick={() => setForm({...form, categoryLogo: ''})}
+                          className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-brandRed"
+                        >
+                          <X size={20} />
+                        </button>
+                      )}
+                    </div>
+
+                    <label className="flex-1 flex items-center justify-center gap-3 bg-black border border-white/5 rounded-2xl cursor-pointer hover:border-brandRed transition-all group">
+                      {logoUploading ? (
+                        <Loader2 className="animate-spin text-brandRed" size={18} />
+                      ) : (
+                        <Camera size={18} className="text-zinc-500 group-hover:text-brandRed transition-colors" />
+                      )}
+                      <div className="flex flex-col">
+                        <span className="text-[10px] font-black uppercase tracking-widest">Select Icon</span>
+                        <span className="text-[8px] text-zinc-600 font-bold uppercase tracking-tight">Square PNG recommended</span>
+                      </div>
+                      <input type="file" className="hidden" onChange={handleLogoUpload} accept="image/*" />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* 🔥 NEW: TICKETING MODE TOGGLE */}
+              <div className="space-y-3">
+                <label className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-600 ml-2">Ticketing Mode</label>
+                <div className="flex gap-4">
+                  <button 
+                    type="button" 
+                    onClick={() => setForm({...form, ticketUrl: 'INTERNAL'})} 
+                    className={`flex-1 p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all flex justify-center items-center gap-2 ${form.ticketUrl === 'INTERNAL' ? 'bg-brandRed border-brandRed text-white shadow-[0_0_15px_rgba(255,0,0,0.3)]' : 'bg-black border-white/10 text-zinc-500 hover:border-white/30'}`}
+                  >
+                    <Ticket size={16} /> Internal Box Office
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={() => setForm({...form, ticketUrl: form.ticketUrl === 'INTERNAL' ? '' : form.ticketUrl})} 
+                    className={`flex-1 p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all flex justify-center items-center gap-2 ${form.ticketUrl !== 'INTERNAL' ? 'bg-zinc-800 border-zinc-600 text-white' : 'bg-black border-white/10 text-zinc-500 hover:border-white/30'}`}
+                  >
+                    <ExternalLink size={16} /> External Link
+                  </button>
+                </div>
+
+                {form.ticketUrl !== 'INTERNAL' && (
+                  <div className="relative mt-2">
+                    <LinkIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-700" size={14} />
+                    <input 
+                      placeholder="https://in.bookmyshow.com/..."
+                      className="w-full bg-black border border-white/10 p-5 pl-12 rounded-2xl font-bold focus:border-brandRed outline-none text-brandRed italic" 
+                      value={form.ticketUrl || ''} 
+                      onChange={e => setForm({...form, ticketUrl: e.target.value})} 
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -388,11 +432,11 @@ export default function AdminEventsPage() {
                         <>
                           <div className="fixed inset-0 z-[90]" onClick={() => setShowCalendar(false)} />
                           <TribeCalendar 
-  value={form.date} 
-  onChange={handleDateSelect} 
-  onClose={() => setShowCalendar(false)}
-  anchorRef={dateContainerRef}
-/>
+                            value={form.date} 
+                            onChange={handleDateSelect} 
+                            onClose={() => setShowCalendar(false)}
+                            anchorRef={dateContainerRef}
+                          />
                         </>
                       )}
                     </AnimatePresence>
@@ -400,40 +444,31 @@ export default function AdminEventsPage() {
                 </div>
 
                 <div className="space-y-1">
-  <label className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-600 ml-2">Clock</label>
-  <div className="relative" ref={timeContainerRef}>
-    <div 
-      className="bg-zinc-900 border border-white/5 rounded-2xl h-16 flex items-center px-4 cursor-pointer hover:border-brandRed/50 transition-all relative z-0" 
-      onClick={() => setShowTimePicker(!showTimePicker)}
-    >
-      <Clock size={16} className="text-brandRed" />
-      <span className="ml-3 text-[11px] font-black uppercase tracking-widest truncate">{form.time || "SET TIME"}</span>
-    </div>
+                  <label className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-600 ml-2">Clock</label>
+                  <div className="relative" ref={timeContainerRef}>
+                    <div 
+                      className="bg-zinc-900 border border-white/5 rounded-2xl h-16 flex items-center px-4 cursor-pointer hover:border-brandRed/50 transition-all relative z-0" 
+                      onClick={() => setShowTimePicker(!showTimePicker)}
+                    >
+                      <Clock size={16} className="text-brandRed" />
+                      <span className="ml-3 text-[11px] font-black uppercase tracking-widest truncate">{form.time || "SET TIME"}</span>
+                    </div>
 
-    <AnimatePresence>
-      {showTimePicker && (
-        <>
-          <div className="fixed inset-0 z-[90]" onClick={() => setShowTimePicker(false)} />
-          <TribeTimePicker 
-            value={form.time} 
-            onChange={(time) => setForm({...form, time})} 
-            onClose={() => setShowTimePicker(false)}
-            anchorRef={timeContainerRef}
-          />
-        </>
-      )}
-    </AnimatePresence>
-  </div>
-</div>
-              </div>
-
-              <div className="space-y-1 text-[10px]">
-                <label className="font-black uppercase tracking-[0.3em] text-zinc-600 ml-2">Category</label>
-                <input list="event-cats" className="w-full bg-black border border-white/10 p-5 rounded-2xl font-bold focus:border-brandRed outline-none uppercase tracking-widest" value={form.category} onChange={e => setForm({...form, category: e.target.value})} />
-                <datalist id="event-cats">
-                  <option value="CULTURAL" /><option value="JAMMING" /><option value="SPORTS" />
-                  <option value="WORKSHOP" /><option value="FESTIVAL" /><option value="MEETUP" />
-                </datalist>
+                    <AnimatePresence>
+                      {showTimePicker && (
+                        <>
+                          <div className="fixed inset-0 z-[90]" onClick={() => setShowTimePicker(false)} />
+                          <TribeTimePicker 
+                            value={form.time} 
+                            onChange={(time) => setForm({...form, time})} 
+                            onClose={() => setShowTimePicker(false)}
+                            anchorRef={timeContainerRef}
+                          />
+                        </>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-1 text-[10px]">
@@ -473,6 +508,7 @@ export default function AdminEventsPage() {
           </div>
         </div>
 
+        {/* RIGHT COLUMN: TERMINAL / EVENT LIST */}
         <div className="lg:col-span-8 space-y-16">
           <div className="flex justify-between items-end border-b border-white/5 pb-8">
             <h2 className="text-5xl font-black uppercase italic tracking-tighter leading-none">Live <span className="text-brandRed">Terminal .</span></h2>
@@ -496,6 +532,12 @@ export default function AdminEventsPage() {
                 {upcoming.map(event => (
                   <div key={event._id} className="relative group">
                     <div className="absolute top-4 right-4 z-40 flex gap-2 opacity-0 group-hover:opacity-100 transition-all scale-90 group-hover:scale-100">
+                      
+                      {/* 🔥 NEW: Manage Tickets Button */}
+                      <button onClick={() => setManageTicketsEvent(event)} className="p-4 bg-black/80 backdrop-blur-md hover:bg-green-600 rounded-2xl transition-all border border-white/10 text-white">
+                        <Ticket size={16}/>
+                      </button>
+
                       <button onClick={() => toggleFeatured(event)} className={`p-4 rounded-2xl backdrop-blur-md border border-white/10 transition-all ${event.featured ? 'bg-brandRed text-white shadow-lg' : 'bg-black/80 hover:bg-brandRed text-white'}`}>
                         <Star size={16} fill={event.featured ? "currentColor" : "none"} />
                       </button>
@@ -510,7 +552,6 @@ export default function AdminEventsPage() {
           </section>
 
           <section className="space-y-8 pt-10">
-            {/* 🔥 Removed Featured Limits Header for Past Events */}
             <h3 className="text-[10px] font-black uppercase tracking-[0.5em] text-zinc-600 flex items-center gap-4">
               Past Archive 
               <div className="h-px flex-1 bg-zinc-900" />
@@ -519,7 +560,6 @@ export default function AdminEventsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-10 opacity-60 grayscale hover:grayscale-0 hover:opacity-100 transition-all duration-500">
               {past.map(event => (
                 <div key={event._id} className="relative group">
-                  {/* 🔥 Removed Star button mapping for past events */}
                   <div className="absolute top-4 right-4 z-40 flex gap-2 opacity-0 group-hover:opacity-100 transition-all scale-90 group-hover:scale-100">
                     <button onClick={() => startEdit(event)} className="p-4 bg-black/80 backdrop-blur-md hover:bg-blue-600 rounded-2xl transition-all border border-white/10 text-white"><Edit3 size={16}/></button>
                     <button onClick={() => {setEventToDelete({id: event._id, title: event.title}); setConfirmOpen(true);}} className="p-4 bg-black/80 backdrop-blur-md hover:bg-red-600 rounded-2xl transition-all border border-white/10 text-white"><Trash2 size={16}/></button>

@@ -283,14 +283,14 @@ export default function EventsPage() {
                     <div className="flex flex-col gap-3">
                         <div className="flex gap-2">
                            {item.isUpcoming && (
-                             <Link 
-                               href={item.ticketUrl || '#'}
-                               target="_blank" 
-                               className="flex-[2] bg-brandRed text-white py-4 rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-white hover:text-black transition-all flex items-center justify-center gap-2 shadow-lg active:scale-95"
-                             >
-                               <Ticket size={16} /> Register Now 
-                             </Link>
-                           )}
+  <Link 
+    href={item.ticketUrl === 'INTERNAL' ? `/events/${item._id}/book` : (item.ticketUrl || '#')}
+    target={item.ticketUrl === 'INTERNAL' ? "_self" : "_blank"} 
+    className="flex-[2] bg-brandRed text-white py-4 rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-white hover:text-black transition-all flex items-center justify-center gap-2 shadow-lg active:scale-95"
+  >
+    <Ticket size={16} /> Register Now 
+  </Link>
+)}
                            
                            <button onClick={() => {setExpandedId(isExpanded ? null : item._id); }}
                               className={`flex-1 py-4 rounded-2xl font-black uppercase text-[11px] tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg active:scale-95 ${item.isUpcoming ? 'bg-white text-black hover:bg-zinc-200' : 'bg-zinc-800 text-zinc-400 hover:text-white'}`}
