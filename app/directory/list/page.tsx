@@ -13,7 +13,7 @@ import TribeTimePicker from '@/components/ui/TribeTimePicker';
 import EmailVerificationGate from '@/components/EmailVerificationGate'; 
 
 const FIXED_CATEGORIES = [
-  "FOOD & BEVERAGE", "REAL ESTATE", "HEALTH & WELLNESS", "EDUCATION", 
+  "FOOD & BEVERAGE", "REAL ESTATE", "HEALTH & WELLNESS",  "SPORTS" ,"EDUCATION", 
   "IT SERVICES", "AUTOMOBILE", "BEAUTY & SALON", "HOME DECOR", 
   "LEGAL & FINANCE", "TRAVEL & TOURISM", "EVENT MANAGEMENT", "OTHER"
 ];
