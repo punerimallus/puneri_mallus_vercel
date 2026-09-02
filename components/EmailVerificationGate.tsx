@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mail, ArrowRight, Loader2, ShieldCheck, CheckCircle2, Briefcase } from 'lucide-react';
+import { Mail, ArrowRight, Loader2, ShieldCheck, CheckCircle2, Briefcase, AlertCircle } from 'lucide-react';
 import { createBrowserClient } from '@supabase/ssr';
 
 interface OwnerData {
@@ -9,7 +9,6 @@ interface OwnerData {
   phone: string;
   businessName: string;
   email: string;
-  // 🔥 ADD THIS LINE:
   verified_email?: string;
 }
 
@@ -22,7 +21,7 @@ interface EmailVerificationGateProps {
 export default function EmailVerificationGate({ userId, source, onVerified }: EmailVerificationGateProps) {
   const [step, setStep] = useState<1 | 2 | 3>(1); 
   
-  // 🔥 Auto-fetched fields (hidden from UI)
+  // Auto-fetched fields (hidden from UI)
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   
@@ -49,8 +48,6 @@ export default function EmailVerificationGate({ userId, source, onVerified }: Em
         
       if (data) {
         setFullName(data.full_name || 'Unknown');
-        
-        // 🔥 THE FIX: Strip the +91 so only the 10 digits get passed to the forms
         const cleanPhone = data.phone_number ? data.phone_number.replace(/^\+91/, '') : '';
         setPhone(cleanPhone);
       }
@@ -101,13 +98,12 @@ export default function EmailVerificationGate({ userId, source, onVerified }: Em
       const cleanEmail = email.trim().toLowerCase();
       
       interval = setInterval(async () => {
-        // 🔥 THE FIX: Changed 'email' to 'verified_email' to match your database column
         const { data, error } = await supabase
           .from('directory_owners')
           .select('is_verified')
           .eq('user_id', userId)
           .eq('source', source)
-          .eq('verified_email', cleanEmail) // <--- THIS WAS THE BUG!
+          .eq('verified_email', cleanEmail) 
           .order('created_at', { ascending: false }) 
           .limit(1)
           .maybeSingle(); 
@@ -171,25 +167,83 @@ export default function EmailVerificationGate({ userId, source, onVerified }: Em
 
         {/* STEP 2: WAITING ROOM / POLLER */}
         {step === 2 && (
-          <motion.div key="step2" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="py-8 text-center space-y-6 relative z-10">
-            <div className="relative w-24 h-24 mx-auto">
+          <motion.div key="step2" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="py-4 text-center space-y-5 relative z-10">
+            <div className="relative w-16 h-16 mx-auto">
               <div className="absolute inset-0 bg-brandRed/20 rounded-full animate-ping" />
               <div className="relative w-full h-full bg-zinc-900 border border-brandRed/50 rounded-full flex items-center justify-center">
-                <Mail size={32} className="text-brandRed" />
+                <Mail size={24} className="text-brandRed" />
               </div>
             </div>
+            
             <div>
-              <h4 className="text-2xl font-black uppercase tracking-tight text-white italic mb-2">Check Your Inbox</h4>
-              <p className="text-sm text-zinc-400 font-medium leading-relaxed">
-                We sent a secure link to <strong className="text-white">{email}</strong>.<br/>
-                Open it to verify your business identity.
+              <h4 className="text-2xl font-black uppercase tracking-tight text-white italic mb-1">Check Your Inbox</h4>
+              <p className="text-[13px] text-zinc-300 font-medium">
+                We sent a secure verification link to <strong className="text-white">{email}</strong>.
               </p>
             </div>
-            <div className="flex items-center justify-center gap-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 animate-pulse pt-4">
+
+            {/* INSTRUCTION BOX */}
+            <div className="bg-black/60 border border-brandRed/30 rounded-2xl p-5 text-left space-y-4 shadow-inner">
+              <div className="flex items-start gap-3">
+                <div className="w-5 h-5 rounded-full bg-brandRed/20 flex-shrink-0 flex items-center justify-center mt-0.5">
+                  <span className="text-brandRed text-xs font-bold">1</span>
+                </div>
+                <p className="text-[13px] text-zinc-300 leading-snug">
+                  Look for an email from <strong className="text-white tracking-wide">no-reply@punerimallus.com</strong>
+                </p>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="w-5 h-5 rounded-full bg-brandRed/20 flex-shrink-0 flex items-center justify-center mt-0.5">
+                  <span className="text-brandRed text-xs font-bold">2</span>
+                </div>
+                <p className="text-[13px] text-zinc-300 leading-snug">
+                  <strong className="text-brandRed flex items-center gap-1.5"><AlertCircle size={14}/> Check your SPAM folder</strong> if you don't see it immediately.
+                </p>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="w-5 h-5 rounded-full bg-brandRed/20 flex-shrink-0 flex items-center justify-center mt-0.5">
+                  <span className="text-brandRed text-xs font-bold">3</span>
+                </div>
+                <p className="text-[13px] text-zinc-300 leading-snug">
+                  Click the Verify button, then <strong className="text-white underline decoration-brandRed underline-offset-4">return to this exact tab</strong>. It will automatically detect your verification!
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-center gap-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 animate-pulse pt-2">
               <Loader2 size={14} className="animate-spin" /> Waiting for Verification...
             </div>
+
+            {/* MANUAL ESCAPE HATCH FOR DIFFERENT BROWSER PROFILES */}
+            <div className="pt-2">
+              <button 
+                type="button" 
+                onClick={async () => {
+                  const cleanEmail = email.trim().toLowerCase();
+                  const { data } = await supabase
+                    .from('directory_owners')
+                    .select('is_verified')
+                    .eq('user_id', userId)
+                    .eq('source', source)
+                    .eq('verified_email', cleanEmail)
+                    .maybeSingle();
+
+                  if (data && data.is_verified) {
+                    setStep(3);
+                    setTimeout(() => onVerified({ fullName, phone, businessName, email: cleanEmail }), 1500);
+                  } else {
+                    alert("Verification not detected yet. Make sure you clicked the link in your email!");
+                  }
+                }}
+                className="w-full bg-zinc-900 border border-white/10 hover:border-white/30 py-3 rounded-xl text-[11px] font-bold uppercase tracking-widest text-zinc-300 transition-all shadow-md active:scale-95"
+              >
+                I already clicked it! Refresh Status
+              </button>
+            </div>
             
-            <button type="button" onClick={() => setStep(1)} className="mt-6 w-full text-center text-[10px] text-zinc-500 hover:text-white font-bold uppercase tracking-widest transition-colors">
+            <button type="button" onClick={() => setStep(1)} className="w-full text-center text-[10px] text-zinc-500 hover:text-white font-bold uppercase tracking-widest transition-colors pt-2">
               Wrong email? Go Back
             </button>
           </motion.div>
