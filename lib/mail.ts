@@ -36,7 +36,7 @@ export interface MailOptions {
 export const sendMail = async ({ to, subject, text, html, attachments }: MailOptions) => {
   try {
     return await resend.emails.send({
-      from: 'Puneri Mallus System <no-reply@punerimallus.com>',
+      from: 'Puneri Mallus Tribe <no-reply@punerimallus.com>',
       to: to,
       subject: subject,
       text: text || "You have a new message from Puneri Mallus.",
@@ -103,7 +103,7 @@ export const sendApprovedCommunityEmail = async (to: string, communityName: stri
 
 export const sendAdminPendingAlert = async (communityName: string, pendingCount: number) => {
   return await resend.emails.send({
-    from: 'Tribe System <no-reply@punerimallus.com>',
+    from: 'Puneri Mallus Tribe <no-reply@punerimallus.com>',
     to: process.env.EMAIL_USER || "punerimallus1@gmail.com",
     subject: "🚨 Action Required: New Community Pending",
     text: `New Submission. A new community ${communityName} has been submitted. Communities awaiting approval: ${pendingCount}. Open Admin Dashboard: https://puneri-mallus-vercel.vercel.app/admin/community`,
@@ -124,7 +124,7 @@ export const sendAdminPendingAlert = async (communityName: string, pendingCount:
 
 export const sendMartPendingEmail = async (to: string, businessName: string) => {
   return await resend.emails.send({
-    from: 'Mallu Connect <no-reply@punerimallus.com>',
+    from: 'Puneri Mallus Tribe <no-reply@punerimallus.com>',
     to: to,
     subject: `🕒 Audit Pending: ${businessName}`,
     text: `Broadcast Received. Your listing for ${businessName} has been received and added to our audit queue. Current Status: Under Review. We will update you once live.`,
@@ -152,7 +152,7 @@ export const sendMartLiveEmail = async (to: string, businessName: string) => {
   const directLink = `${baseUrl}/directory`;
 
   return await resend.emails.send({
-    from: 'Mallu Connect <no-reply@punerimallus.com>',
+    from: 'Puneri Mallus Tribe <no-reply@punerimallus.com>',
     to: to,
     subject: `🚀 Broadcast Success: ${businessName} is Live!`,
     text: `Now Live! Great news! Your business ${businessName} has been approved and is now visible to the entire community. View your profile here: ${directLink}`,
@@ -176,7 +176,7 @@ export const sendMartLiveEmail = async (to: string, businessName: string) => {
 
 export const sendMartRejectedEmail = async (to: string, businessName: string) => {
   return await resend.emails.send({
-    from: 'Mallu Connect <no-reply@punerimallus.com>',
+    from: 'Puneri Mallus Tribe <no-reply@punerimallus.com>',
     to: to,
     subject: `⚠️ Action Required: Directory Listing Update`,
     text: `Audit Update. Your listing for ${businessName} was not approved during our recent audit. Please ensure your details are complete. Edit your listing: https://punerimallusvercel.vercel.app/directory`,
@@ -197,7 +197,7 @@ export const sendMartRejectedEmail = async (to: string, businessName: string) =>
 
 export const sendAdminMartAlert = async (businessName: string, category: string) => {
   return await resend.emails.send({
-    from: 'Tribe System <no-reply@punerimallus.com>',
+    from: 'Puneri Mallus Tribe <no-reply@punerimallus.com>',
     to: process.env.EMAIL_USER || "punerimallus1@gmail.com",
     subject: `🚨 NEW DIRECTORY LISTING: ${businessName}`,
     text: `New Listing Submission. A new professional listing for ${businessName} (Category: ${category}) has been broadcasted and needs review. Open Audit Dashboard: https://punerimallusvercel.vercel.app/admin/mart`,
@@ -240,7 +240,7 @@ export const sendRejectedCommunityEmail = async (to: string, communityName: stri
 export async function sendMartVerificationPendingEmail(userEmail: string, businessName: string) {
   try {
     await resend.emails.send({
-      from: 'Mallu Connect <no-reply@punerimallus.com>',
+      from: 'Puneri Mallus Tribe <no-reply@punerimallus.com>',
       to: userEmail,
       subject: `VERIFICATION INITIATED: ${businessName}`,
       text: `Protocol Initiated. We have received the verification documents for ${businessName}. Current Status: PENDING AUDIT. This process typically takes 24-48 hours.`,
@@ -268,7 +268,7 @@ export async function sendMartVerificationPendingEmail(userEmail: string, busine
 export async function sendAdminVerificationAlert(businessName: string) {
   try {
     await resend.emails.send({
-      from: 'Tribe System <no-reply@punerimallus.com>',
+      from: 'Puneri Mallus Tribe <no-reply@punerimallus.com>',
       to: process.env.EMAIL_USER || "punerimallus1@gmail.com",
       subject: `🚨 ACTION REQUIRED: Verification Audit for ${businessName}`,
       text: `New Verification Request. A business owner has submitted documents for ${businessName}. Priority: HIGH. Open Admin Terminal to audit documents.`,
@@ -304,7 +304,7 @@ export async function sendAdminVerificationAlert(businessName: string) {
 export async function sendMartVerificationSuccessEmail(userEmail: string, businessName: string) {
   try {
     await resend.emails.send({
-      from: 'Mallu Connect <no-reply@punerimallus.com>',
+      from: 'Puneri Mallus Tribe <no-reply@punerimallus.com>',
       to: userEmail,
       subject: `SHIELD EARNED: ${businessName} is now Verified!`,
       text: `Trust Protocol Complete. Excellent news, your business ${businessName} has passed our manual audit. Your profile now features the Verified Shield Badge.`,
@@ -333,7 +333,7 @@ export async function sendMartVerificationSuccessEmail(userEmail: string, busine
 export async function sendMartSubscriptionEmail(to: string, plan: string, orderId: string, paymentId: string) {
   try {
     await resend.emails.send({
-      from: 'Mallu Connect <no-reply@punerimallus.com>',
+      from: 'Puneri Mallus Tribe <no-reply@punerimallus.com>',
       to: to,
       subject: `🔓 Unlocked: Mallu Mart ${plan} Access`,
       text: `Access Granted. You now have full access to Mallu Mart professional profiles. Plan: Mallu Mart ${plan}. Order ID: ${orderId}. Payment ID: ${paymentId}.`,
@@ -371,7 +371,7 @@ export async function sendMartSubscriptionEmail(to: string, plan: string, orderI
 export async function sendPremiumMembershipEmail(to: string, orderId: string, paymentId: string) {
   try {
     await resend.emails.send({
-      from: 'Puneri Mallus VIP <no-reply@punerimallus.com>',
+      from: 'Puneri Mallus Tribe <no-reply@punerimallus.com>',
       to: to,
       subject: `👑 Welcome to the Inner Circle`,
       text: `Inner Circle Access. Welcome to the elite tier of the Puneri Mallus Tribe. Plan: Lifetime Premium. Order ID: ${orderId}. Payment ID: ${paymentId}. Your permanent Gold Premium Badge is now active.`,
@@ -415,7 +415,7 @@ export async function sendAdminAccessEmail(to: string, tempPassword: string) {
   
   try {
     await resend.emails.send({
-      from: 'Tribe System <no-reply@punerimallus.com>',
+      from: 'Puneri Mallus Tribe <no-reply@punerimallus.com>',
       to: to,
       subject: `🔐 SYSTEM ACCESS: Admin Protocol Authorized`,
       text: `Protocol Authorized. You have been granted admin access. Admin ID: ${to}. Temporary Key: ${tempPassword}. Access Terminal: ${loginUrl}`,
@@ -454,7 +454,7 @@ export async function sendAdminAccessEmail(to: string, tempPassword: string) {
 
 export const sendBusinessVerificationEmail = async (to: string, verifyLink: string, businessName: string) => {
   return await resend.emails.send({
-    from: 'Mallu Connect <no-reply@punerimallus.com>',
+    from: 'Puneri Mallus Tribe <no-reply@punerimallus.com>',
     to: to,
     subject: "🏢 Verify your Business Identity",
     text: `Identity Check. We received a request to list ${businessName} in the directory. Please verify your email to proceed: ${verifyLink}`,
@@ -477,7 +477,7 @@ export const sendBusinessVerificationEmail = async (to: string, verifyLink: stri
 
 export const sendFootballReceiptEmail = async (to: string, teamName: string, orderId: string, paymentId: string) => {
   return await resend.emails.send({
-    from: 'Puneri Mallus Box Office <tickets@punerimallus.com>',
+    from: 'Puneri Mallus Tribe <no-reply@punerimallus.com>',
     to: to,
     subject: `⚽ Registration Confirmed: ${teamName}`,
     text: `Slot Secured. Your team ${teamName} is officially registered for the tournament. Order ID: ${orderId}. Payment Ref: ${paymentId}.`,
@@ -511,7 +511,7 @@ export async function sendEventTicketEmail(to: string, bookingId: string, ticket
 
   try {
     return await resend.emails.send({
-      from: 'Puneri Mallus Box Office <tickets@punerimallus.com>',
+      from: 'Puneri Mallus Tribe <no-reply@punerimallus.com>',
       to: to,
       subject: `🎟️ Your Passes are Confirmed! - ${eventData?.title || 'Puneri Mallus'}`,
       text: `Your passes are ready! Booking ID: ${bookingId.split('-')[0].toUpperCase()}. Total Paid: ₹${totalAmount.toLocaleString('en-IN')}. Please open the attached PDF to view and scan your passes.`,
