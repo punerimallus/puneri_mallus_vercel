@@ -5,9 +5,10 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 export const sendVerificationEmail = async (to: string, token: string) => {
   return await resend.emails.send({
-    from: 'Puneri Mallus Tribe <hello@punerimallus.com>',
+    from: 'Puneri Mallus Tribe <no-reply@punerimallus.com>',
     to: to,
     subject: "🔐 Your Tribe Verification Code",
+    text: `Verify your Access. Welcome to the tribe. Your registration code is: ${token}. This code is valid for 10 minutes.`,
     html: `
       <div style="font-family: sans-serif; max-width: 400px; margin: auto; background: #000; color: #fff; padding: 30px; border-radius: 20px; border: 1px solid #333; text-align: center;">
         <h2 style="color: #ff0000; text-transform: uppercase;">Verify your Access</h2>
@@ -35,10 +36,10 @@ export interface MailOptions {
 export const sendMail = async ({ to, subject, text, html, attachments }: MailOptions) => {
   try {
     return await resend.emails.send({
-      from: 'Puneri Mallus System <system@punerimallus.com>',
+      from: 'Puneri Mallus System <no-reply@punerimallus.com>',
       to: to,
       subject: subject,
-      text: text || "",
+      text: text || "You have a new message from Puneri Mallus.",
       html: html || text,
       attachments: attachments,
     });
@@ -50,9 +51,10 @@ export const sendMail = async ({ to, subject, text, html, attachments }: MailOpt
 
 export const sendPendingCommunityEmail = async (to: string, communityName: string) => {
   return await resend.emails.send({
-    from: 'Puneri Mallus Tribe <hello@punerimallus.com>',
+    from: 'Puneri Mallus Tribe <no-reply@punerimallus.com>',
     to: to,
     subject: "We've received your community submission!",
+    text: `Submission Received. Thank you for adding ${communityName} to our community list. Current Status: Pending Review. Our team will notify you once approved.`,
     html: `
       <div style="font-family: 'Segoe UI', Helvetica, Arial, sans-serif; max-width: 500px; margin: auto; background: #030303; color: #ffffff; padding: 50px 40px; border-radius: 40px; border: 1px solid #222; text-align: center;">
         <h2 style="font-weight: 900; text-transform: uppercase; font-size: 24px; margin-bottom: 15px; color: #fff;">Submission <span style="color: #ff0000;">Received</span></h2>
@@ -77,9 +79,10 @@ export const sendApprovedCommunityEmail = async (to: string, communityName: stri
   const directLink = `${baseUrl}/community/${communityId}`;
 
   return await resend.emails.send({
-    from: 'Puneri Mallus Tribe <hello@punerimallus.com>',
+    from: 'Puneri Mallus Tribe <no-reply@punerimallus.com>',
     to: to,
     subject: "Great news! Your community is now live",
+    text: `Now Live! Congratulations! Your community ${communityName} has been approved by ${adminName}. View it here: ${directLink}`,
     html: `
       <div style="font-family: 'Segoe UI', Helvetica, Arial, sans-serif; max-width: 500px; margin: auto; background: #030303; color: #ffffff; padding: 50px 40px; border-radius: 40px; border: 1px solid #00ffff; text-align: center;">
         <h2 style="font-weight: 900; text-transform: uppercase; font-size: 24px; margin-bottom: 15px; color: #fff;">Now <span style="color: #00ffff;">Live!</span></h2>
@@ -100,9 +103,10 @@ export const sendApprovedCommunityEmail = async (to: string, communityName: stri
 
 export const sendAdminPendingAlert = async (communityName: string, pendingCount: number) => {
   return await resend.emails.send({
-    from: 'Tribe System <system@punerimallus.com>',
+    from: 'Tribe System <no-reply@punerimallus.com>',
     to: process.env.EMAIL_USER || "punerimallus1@gmail.com",
     subject: "🚨 Action Required: New Community Pending",
+    text: `New Submission. A new community ${communityName} has been submitted. Communities awaiting approval: ${pendingCount}. Open Admin Dashboard: https://puneri-mallus-vercel.vercel.app/admin/community`,
     html: `
       <div style="font-family: sans-serif; max-width: 450px; margin: auto; background: #fff; color: #000; padding: 40px; border: 2px solid #ff0000; border-radius: 20px;">
         <h2 style="color: #ff0000; text-transform: uppercase;">New Submission</h2>
@@ -120,9 +124,10 @@ export const sendAdminPendingAlert = async (communityName: string, pendingCount:
 
 export const sendMartPendingEmail = async (to: string, businessName: string) => {
   return await resend.emails.send({
-    from: 'Mallu Connect <malluconnect@punerimallus.com>',
+    from: 'Mallu Connect <no-reply@punerimallus.com>',
     to: to,
     subject: `🕒 Audit Pending: ${businessName}`,
+    text: `Broadcast Received. Your listing for ${businessName} has been received and added to our audit queue. Current Status: Under Review. We will update you once live.`,
     html: `
       <div style="font-family: 'Segoe UI', Helvetica, Arial, sans-serif; max-width: 500px; margin: auto; background: #030303; color: #ffffff; padding: 50px 40px; border-radius: 40px; border: 1px solid #222; text-align: center;">
         <h2 style="font-weight: 900; text-transform: uppercase; font-size: 24px; margin-bottom: 15px; color: #fff;">Broadcast <span style="color: #ff0000;">Received</span></h2>
@@ -147,9 +152,10 @@ export const sendMartLiveEmail = async (to: string, businessName: string) => {
   const directLink = `${baseUrl}/directory`;
 
   return await resend.emails.send({
-    from: 'Mallu Connect <malluconnect@punerimallus.com>',
+    from: 'Mallu Connect <no-reply@punerimallus.com>',
     to: to,
     subject: `🚀 Broadcast Success: ${businessName} is Live!`,
+    text: `Now Live! Great news! Your business ${businessName} has been approved and is now visible to the entire community. View your profile here: ${directLink}`,
     html: `
       <div style="font-family: 'Segoe UI', Helvetica, Arial, sans-serif; max-width: 500px; margin: auto; background: #030303; color: #ffffff; padding: 50px 40px; border-radius: 40px; border: 1px solid #ff0000; text-align: center;">
         <h2 style="font-weight: 900; text-transform: uppercase; font-size: 24px; margin-bottom: 15px; color: #fff;">Now <span style="color: #ff0000;">Live!</span></h2>
@@ -170,9 +176,10 @@ export const sendMartLiveEmail = async (to: string, businessName: string) => {
 
 export const sendMartRejectedEmail = async (to: string, businessName: string) => {
   return await resend.emails.send({
-    from: 'Mallu Connect <malluconnect@punerimallus.com>',
+    from: 'Mallu Connect <no-reply@punerimallus.com>',
     to: to,
     subject: `⚠️ Action Required: Directory Listing Update`,
+    text: `Audit Update. Your listing for ${businessName} was not approved during our recent audit. Please ensure your details are complete. Edit your listing: https://punerimallusvercel.vercel.app/directory`,
     html: `
       <div style="font-family: 'Segoe UI', sans-serif; max-width: 500px; margin: auto; background: #030303; color: #ffffff; padding: 50px 40px; border-radius: 40px; border: 1px solid #ffae00; text-align: center;">
         <h2 style="font-weight: 900; text-transform: uppercase; font-size: 24px; margin-bottom: 15px; color: #fff;">Audit <span style="color: #ffae00;">Update</span></h2>
@@ -190,9 +197,10 @@ export const sendMartRejectedEmail = async (to: string, businessName: string) =>
 
 export const sendAdminMartAlert = async (businessName: string, category: string) => {
   return await resend.emails.send({
-    from: 'Tribe System <system@punerimallus.com>',
+    from: 'Tribe System <no-reply@punerimallus.com>',
     to: process.env.EMAIL_USER || "punerimallus1@gmail.com",
     subject: `🚨 NEW DIRECTORY LISTING: ${businessName}`,
+    text: `New Listing Submission. A new professional listing for ${businessName} (Category: ${category}) has been broadcasted and needs review. Open Audit Dashboard: https://punerimallusvercel.vercel.app/admin/mart`,
     html: `
       <div style="font-family: sans-serif; max-width: 450px; margin: auto; background: #fff; color: #000; padding: 40px; border: 2px solid #ff0000; border-radius: 20px;">
         <h2 style="color: #ff0000; text-transform: uppercase;">New Listing Submission</h2>
@@ -209,9 +217,10 @@ export const sendAdminMartAlert = async (businessName: string, category: string)
 
 export const sendRejectedCommunityEmail = async (to: string, communityName: string) => {
   return await resend.emails.send({
-    from: 'Puneri Mallus Tribe <hello@punerimallus.com>',
+    from: 'Puneri Mallus Tribe <no-reply@punerimallus.com>',
     to: to,
     subject: "Update regarding your community submission",
+    text: `Audit Update. Your submission for ${communityName} was not approved for the community grid at this time. Please ensure all fields are correctly filled and images are clear.`,
     html: `
       <div style="font-family: 'Segoe UI', sans-serif; max-width: 500px; margin: auto; background: #030303; color: #ffffff; padding: 50px 40px; border-radius: 40px; border: 1px solid #ffae00; text-align: center;">
         <h2 style="font-weight: 900; text-transform: uppercase; font-size: 24px; margin-bottom: 15px; color: #fff;">Audit <span style="color: #ffae00;">Update</span></h2>
@@ -231,9 +240,10 @@ export const sendRejectedCommunityEmail = async (to: string, communityName: stri
 export async function sendMartVerificationPendingEmail(userEmail: string, businessName: string) {
   try {
     await resend.emails.send({
-      from: 'Mallu Connect <malluconnect@punerimallus.com>',
+      from: 'Mallu Connect <no-reply@punerimallus.com>',
       to: userEmail,
       subject: `VERIFICATION INITIATED: ${businessName}`,
+      text: `Protocol Initiated. We have received the verification documents for ${businessName}. Current Status: PENDING AUDIT. This process typically takes 24-48 hours.`,
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; background: #000; color: #fff; padding: 40px; border-radius: 20px; border: 1px solid #333;">
           <h2 style="color: #FF0000; text-transform: uppercase; font-style: italic; letter-spacing: -1px;">Protocol Initiated.</h2>
@@ -258,9 +268,10 @@ export async function sendMartVerificationPendingEmail(userEmail: string, busine
 export async function sendAdminVerificationAlert(businessName: string) {
   try {
     await resend.emails.send({
-      from: 'Tribe System <system@punerimallus.com>',
+      from: 'Tribe System <no-reply@punerimallus.com>',
       to: process.env.EMAIL_USER || "punerimallus1@gmail.com",
       subject: `🚨 ACTION REQUIRED: Verification Audit for ${businessName}`,
+      text: `New Verification Request. A business owner has submitted documents for ${businessName}. Priority: HIGH. Open Admin Terminal to audit documents.`,
       html: `
         <div style="font-family: sans-serif; background: #f9f9f9; padding: 40px; color: #333;">
           <div style="max-width: 600px; margin: auto; background: #fff; padding: 30px; border-top: 4px solid #FF0000; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
@@ -293,9 +304,10 @@ export async function sendAdminVerificationAlert(businessName: string) {
 export async function sendMartVerificationSuccessEmail(userEmail: string, businessName: string) {
   try {
     await resend.emails.send({
-      from: 'Mallu Connect <malluconnect@punerimallus.com>',
+      from: 'Mallu Connect <no-reply@punerimallus.com>',
       to: userEmail,
       subject: `SHIELD EARNED: ${businessName} is now Verified!`,
+      text: `Trust Protocol Complete. Excellent news, your business ${businessName} has passed our manual audit. Your profile now features the Verified Shield Badge.`,
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; background: #000; color: #fff; padding: 40px; border-radius: 20px; border: 1px solid #333;">
           <div style="text-align: center; margin-bottom: 20px;">
@@ -321,9 +333,10 @@ export async function sendMartVerificationSuccessEmail(userEmail: string, busine
 export async function sendMartSubscriptionEmail(to: string, plan: string, orderId: string, paymentId: string) {
   try {
     await resend.emails.send({
-      from: 'Mallu Connect <malluconnect@punerimallus.com>',
+      from: 'Mallu Connect <no-reply@punerimallus.com>',
       to: to,
       subject: `🔓 Unlocked: Mallu Mart ${plan} Access`,
+      text: `Access Granted. You now have full access to Mallu Mart professional profiles. Plan: Mallu Mart ${plan}. Order ID: ${orderId}. Payment ID: ${paymentId}.`,
       html: `
         <div style="font-family: 'Segoe UI', sans-serif; max-width: 500px; margin: auto; background: #030303; color: #ffffff; padding: 40px; border-radius: 30px; border: 1px solid #ff0000;">
           <h2 style="color: #FF0000; text-transform: uppercase; font-style: italic; font-weight: 900; letter-spacing: -1px; text-align: center; margin-top: 0;">Access Granted</h2>
@@ -358,9 +371,10 @@ export async function sendMartSubscriptionEmail(to: string, plan: string, orderI
 export async function sendPremiumMembershipEmail(to: string, orderId: string, paymentId: string) {
   try {
     await resend.emails.send({
-      from: 'Puneri Mallus VIP <vip@punerimallus.com>',
+      from: 'Puneri Mallus VIP <no-reply@punerimallus.com>',
       to: to,
       subject: `👑 Welcome to the Inner Circle`,
+      text: `Inner Circle Access. Welcome to the elite tier of the Puneri Mallus Tribe. Plan: Lifetime Premium. Order ID: ${orderId}. Payment ID: ${paymentId}. Your permanent Gold Premium Badge is now active.`,
       html: `
         <div style="font-family: 'Segoe UI', sans-serif; max-width: 500px; margin: auto; background: #030303; color: #ffffff; padding: 40px; border-radius: 30px; border: 1px solid #EAB308;">
           <div style="text-align: center; margin-bottom: 15px;">
@@ -401,9 +415,10 @@ export async function sendAdminAccessEmail(to: string, tempPassword: string) {
   
   try {
     await resend.emails.send({
-      from: 'Tribe System <system@punerimallus.com>',
+      from: 'Tribe System <no-reply@punerimallus.com>',
       to: to,
       subject: `🔐 SYSTEM ACCESS: Admin Protocol Authorized`,
+      text: `Protocol Authorized. You have been granted admin access. Admin ID: ${to}. Temporary Key: ${tempPassword}. Access Terminal: ${loginUrl}`,
       html: `
         <div style="font-family: 'Segoe UI', sans-serif; max-width: 500px; margin: auto; background: #030303; color: #ffffff; padding: 40px; border-radius: 30px; border: 1px solid #ff0000;">
           <div style="text-align: center; margin-bottom: 15px;">
@@ -439,9 +454,10 @@ export async function sendAdminAccessEmail(to: string, tempPassword: string) {
 
 export const sendBusinessVerificationEmail = async (to: string, verifyLink: string, businessName: string) => {
   return await resend.emails.send({
-    from: 'Mallu Connect <malluconnect@punerimallus.com>',
+    from: 'Mallu Connect <no-reply@punerimallus.com>',
     to: to,
     subject: "🏢 Verify your Business Identity",
+    text: `Identity Check. We received a request to list ${businessName} in the directory. Please verify your email to proceed: ${verifyLink}`,
     html: `
       <div style="font-family: sans-serif; max-width: 400px; margin: auto; background: #000; color: #fff; padding: 30px; border-radius: 20px; border: 1px solid #333; text-align: center;">
         <h2 style="color: #ff0000; text-transform: uppercase;">Identity Check</h2>
@@ -464,6 +480,7 @@ export const sendFootballReceiptEmail = async (to: string, teamName: string, ord
     from: 'Puneri Mallus Box Office <tickets@punerimallus.com>',
     to: to,
     subject: `⚽ Registration Confirmed: ${teamName}`,
+    text: `Slot Secured. Your team ${teamName} is officially registered for the tournament. Order ID: ${orderId}. Payment Ref: ${paymentId}.`,
     html: `
       <div style="font-family: sans-serif; max-width: 400px; margin: auto; background: #000; color: #fff; padding: 30px; border-radius: 20px; border: 1px solid #333; text-align: center;">
         <h2 style="color: #ff0000; text-transform: uppercase;">Slot Secured</h2>
@@ -497,6 +514,7 @@ export async function sendEventTicketEmail(to: string, bookingId: string, ticket
       from: 'Puneri Mallus Box Office <tickets@punerimallus.com>',
       to: to,
       subject: `🎟️ Your Passes are Confirmed! - ${eventData?.title || 'Puneri Mallus'}`,
+      text: `Your passes are ready! Booking ID: ${bookingId.split('-')[0].toUpperCase()}. Total Paid: ₹${totalAmount.toLocaleString('en-IN')}. Please open the attached PDF to view and scan your passes.`,
       html: `
         <div style="font-family: 'Segoe UI', Helvetica, Arial, sans-serif; background-color: #f4f5f9; padding: 40px 20px; color: #000;">
           <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">

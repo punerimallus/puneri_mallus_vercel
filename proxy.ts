@@ -48,6 +48,7 @@ export async function proxy(request: NextRequest) {
 
       // 🟡 Public Read / Protected Write (Guests can view, but only logged-in users can modify)
       { path: '/api/community', methods: ['GET'] },
+      { path: '/api/test-email', methods: ['GET'] },
       { path: '/api/events', methods: ['GET'] },
       { path: '/api/mart', methods: ['GET'] },
       { path: '/api/partners', methods: ['GET'] },
