@@ -55,7 +55,7 @@ export async function GET(request: Request) {
         <h1>Identity Verified!</h1>
         <p class="subtitle">Your email address has been successfully confirmed.</p>
         <div class="instruction">
-          <p>Switching back to your original tab automatically...</p>
+          <p>Switch back to your original tab...</p>
         </div>
       </div>
       <script>

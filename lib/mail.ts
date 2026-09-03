@@ -94,7 +94,7 @@ export const sendApprovedCommunityEmail = async (to: string, communityName: stri
         <div style="padding: 12px; background: #f9fafb; border-radius: 12px; margin-bottom: 28px; border: 1px solid #e5e7eb;">
           <p style="margin: 0; font-size: 12px; color: #4b5563;">Approved by: <b>${adminName}</b></p>
         </div>
-        <a href="${directLink}" style="display: inline-block; background: #2563eb; color: #ffffff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">View community page</a>
+        <a href="${directLink}" style="display: inline-block; background: #dc2626; color: #ffffff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">View community page</a>
         <p style="margin-top: 32px; font-size: 12px; color: #9ca3af;">
           Thank you for being a part of the Puneri Mallus Tribe.
         </p>
@@ -167,7 +167,7 @@ export const sendMartLiveEmail = async (to: string, businessName: string) => {
         <div style="padding: 12px; background: #f9fafb; border-radius: 12px; margin-bottom: 28px; border: 1px solid #e5e7eb;">
           <p style="margin: 0; font-size: 12px; color: #4b5563;">Your profile is now discoverable by the tribe.</p>
         </div>
-        <a href="${directLink}" style="display: inline-block; background: #2563eb; color: #ffffff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">View in directory</a>
+        <a href="${directLink}" style="display: inline-block; background: #dc2626; color: #ffffff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">View in directory</a>
         <p style="margin-top: 32px; font-size: 12px; color: #9ca3af;">
           Thank you for powering the Puneri Mallus economy.
         </p>
@@ -322,7 +322,7 @@ export async function sendMartVerificationSuccessEmail(userEmail: string, busine
           <p>Your business <strong>${businessName}</strong> has passed our manual audit. Your profile now features the <strong>Verified Badge</strong>.</p>
           <p>This badge signals to the Tribe that your business is legitimate, increasing your trust score and visibility in the directory.</p>
           <div style="background: #f9fafb; padding: 18px; border-radius: 10px; margin-top: 20px; border: 1px solid #e5e7eb; text-align: center;">
-            <a href="${process.env.NEXT_PUBLIC_BASE_URL}/directory" style="color: #2563eb; text-decoration: none; font-weight: 600; font-size: 13px;">View your verified listing →</a>
+            <a href="${process.env.NEXT_PUBLIC_BASE_URL}/directory" style="color: #dc2626; text-decoration: none; font-weight: 600; font-size: 13px;">View your verified listing →</a>
           </div>
         </div>
       `,
@@ -357,7 +357,7 @@ export async function sendMartSubscriptionEmail(to: string, plan: string, orderI
             </ul>
           </div>
           <div style="text-align: center;">
-            <a href="${process.env.NEXT_PUBLIC_BASE_URL || 'punerimallus.com'}/directory" style="display: inline-block; background: #2563eb; color: #fff; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 13px;">Open directory</a>
+            <a href="${process.env.NEXT_PUBLIC_BASE_URL || 'punerimallus.com'}/directory" style="display: inline-block; background: #dc2626; color: #fff; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 13px;">Open directory</a>
           </div>
           <p style="margin-top: 32px; font-size: 11px; color: #9ca3af; text-align: center;">
             If your account doesn't reflect these changes, reply to this email and we'll help.
@@ -399,7 +399,7 @@ export async function sendPremiumMembershipEmail(to: string, orderId: string, pa
             </ul>
           </div>
           <div style="text-align: center;">
-            <a href="${process.env.NEXT_PUBLIC_BASE_URL || 'punerimallus.com'}/profile" style="display: inline-block; background: #2563eb; color: #fff; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 13px;">View your profile</a>
+            <a href="${process.env.NEXT_PUBLIC_BASE_URL || 'punerimallus.com'}/profile" style="display: inline-block; background: #dc2626; color: #fff; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 13px;">View your profile</a>
           </div>
           <p style="margin-top: 32px; font-size: 11px; color: #9ca3af; text-align: center;">
             If your account doesn't reflect these changes, reply to this email and we'll help.
@@ -427,7 +427,7 @@ export async function sendAdminAccessEmail(to: string, tempPassword: string) {
           <p style="text-align: center; color: #6b7280; font-size: 14px; margin-bottom: 28px;">Use the credentials below to log in to the Puneri Mallus admin dashboard.</p>
           <div style="background: #f9fafb; padding: 22px; border-radius: 12px; border: 1px solid #e5e7eb; margin-bottom: 28px;">
             <p style="margin: 0 0 12px 0; font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">Login page</p>
-            <a href="${loginUrl}" style="color: #2563eb; word-break: break-all; font-size: 13px; text-decoration: none;">${loginUrl}</a>
+            <a href="${loginUrl}" style="color: #dc2626; word-break: break-all; font-size: 13px; text-decoration: none;">${loginUrl}</a>
             <p style="margin: 20px 0 12px 0; font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">Admin ID</p>
             <p style="margin: 0; font-family: monospace; color: #111827; font-size: 14px;">${to}</p>
             <p style="margin: 20px 0 12px 0; font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">Temporary password</p>
@@ -463,7 +463,7 @@ export const sendBusinessVerificationEmail = async (to: string, verifyLink: stri
         <p style="font-size: 14px; color: #6b7280; line-height: 1.6; margin-bottom: 28px;">
           Hi, we received a request to list <br/><strong style="color: #111827; font-size: 16px;">${businessName}</strong><br/> in the directory. Click below to confirm this email address.
         </p>
-        <a href="${verifyLink}" style="display: inline-block; background: #2563eb; color: #fff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px;">
+        <a href="${verifyLink}" style="display: inline-block; background: #dc2626; color: #fff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px;">
           Confirm email
         </a>
         <p style="font-size: 11px; color: #9ca3af; margin-top: 32px; line-height: 1.5;">
@@ -527,7 +527,7 @@ export async function sendEventTicketEmail(to: string, bookingId: string, ticket
               ${tickets.map(t => `
                 <div style="margin-bottom: 12px;">
                   <p style="margin: 0; color: #6b7280; font-size: 11px; letter-spacing: 0.5px;">Category</p>
-                  <p style="margin: 2px 0 0; color: #2563eb; font-size: 15px; font-weight: 600;">${t.categoryName}</p>
+                  <p style="margin: 2px 0 0; color: #dc2626; font-size: 15px; font-weight: 600;">${t.categoryName}</p>
                 </div>
               `).join('')}
               <div style="margin-top: 20px; padding-top: 16px; border-top: 1px dashed #e5e7eb;">
