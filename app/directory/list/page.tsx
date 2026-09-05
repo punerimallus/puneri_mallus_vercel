@@ -7,10 +7,11 @@ import {
   CheckCircle, ArrowRight, Loader2, ShieldCheck, 
   Instagram, Globe, Phone, Check, MousePointer2, ArrowLeft, X, Image as ImageIcon, MapPin, Star, Clock, MessageCircle, Plus, Trash2, Briefcase
 } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 import TribeConfirm from '@/components/TribeConfirm';
 import TribeTimePicker from '@/components/ui/TribeTimePicker';
-import EmailVerificationGate from '@/components/EmailVerificationGate'; // 🔥 Importing your untouched Gate
+import EmailVerificationGate from '@/components/EmailVerificationGate';
 
 const FIXED_CATEGORIES = [
   "FOOD & BEVERAGE", "REAL ESTATE", "HEALTH & WELLNESS",  "SPORTS" ,"EDUCATION", 
@@ -59,6 +60,10 @@ function ListContent() {
   const [step, setStep] = useState(1);
   const [user, setUser] = useState<any>(null);
   
+  // DASHBOARD INTERCEPT STATES
+  const [userBusinesses, setUserBusinesses] = useState<any[]>([]);
+  const [showNewForm, setShowNewForm] = useState(false);
+
   const [isVerified, setIsVerified] = useState<boolean>(false);
   const [verifiedEmail, setVerifiedEmail] = useState<string>(''); 
 
@@ -97,8 +102,6 @@ function ListContent() {
   const handleFirstInteraction = async () => {
     if (!trackingFired.current && user?.id) {
       trackingFired.current = true;
-      console.log("⌨️ Form interaction detected! Upserting status to STARTED_FILLING...");
-      
       await supabase
         .from('directory_owners')
         .upsert({ 
@@ -118,24 +121,47 @@ function ListContent() {
       try {
         const { data: ownerRecords } = await supabase
           .from('directory_owners')
-          .select('is_verified, verified_email')
+          .select('is_verified, verified_email, phone_number')
           .eq('user_id', user.id)
           .eq('source', 'MALLU_MART')
           .limit(1);
 
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('phone_number')
+          .eq('id', user.id)
+          .maybeSingle();
+
         const ownerRecord = ownerRecords?.[0];
+        let prefillEmail = ownerRecord?.verified_email || (user.email && !user.email.includes('supabase.co') ? user.email : '');
+        
+        let rawPhone = profile?.phone_number || ownerRecord?.phone_number || user.phone || '';
+        let cleanUserPhone = rawPhone.replace(/\D/g, '');
+        if (cleanUserPhone.length > 10) cleanUserPhone = cleanUserPhone.slice(-10);
 
         if (ownerRecord) {
           setIsVerified(ownerRecord.is_verified);
-          if (ownerRecord.verified_email) {
-            setVerifiedEmail(ownerRecord.verified_email);
-          }
+          if (ownerRecord.verified_email) setVerifiedEmail(ownerRecord.verified_email);
         }
 
+        const res = await fetch(`/api/mart?t=${Date.now()}`, { cache: 'no-store' });
+        const allMartData = await res.json();
+
+        const myBusinesses = allMartData.filter((i: any) => {
+          const matchId = i.userId === user.id;
+          const matchEmail = (prefillEmail && i.userEmail === prefillEmail) || (user.email && i.userEmail === user.email);
+          
+          const itemPhone = i.contact ? i.contact.replace(/\D/g, '') : '';
+          const cleanItemPhone = itemPhone.length > 10 ? itemPhone.slice(-10) : itemPhone;
+          const matchPhone = cleanUserPhone && cleanItemPhone && cleanUserPhone === cleanItemPhone;
+          
+          return matchId || matchEmail || matchPhone;
+        });
+        
+        setUserBusinesses(myBusinesses);
+
         if (editId) {
-          const res = await fetch(`/api/mart?t=${Date.now()}`, { cache: 'no-store' });
-          const data = await res.json();
-          const item = data.find((i: any) => i._id === editId);
+          const item = allMartData.find((i: any) => i._id === editId);
           if (item) {
             const isCustomCat = !FIXED_CATEGORIES.includes(item.category);
             
@@ -143,7 +169,7 @@ function ListContent() {
               ...item,
               category: isCustomCat ? "OTHER" : item.category,
               customCategory: isCustomCat ? item.category : '',
-              whatsapp: item.whatsapp || item.contact || '' 
+              whatsapp: item.whatsapp || item.contact || ''
             });
             
             setShowOtherCategory(isCustomCat);
@@ -157,7 +183,15 @@ function ListContent() {
               previewUrl: `https://bhfrgcphqmbocplfcvbg.supabase.co/storage/v1/object/public/mallu-mart/${p}`
             })));
           }
+          setShowNewForm(true); 
+        } else if (myBusinesses.length > 0) {
+          setShowNewForm(false);
+          setStep(1);
+        } else {
+          setFormData(prev => ({ ...prev, contact: cleanUserPhone, whatsapp: cleanUserPhone }));
+          setShowNewForm(true);
         }
+
       } catch (err) { 
         console.error(err); 
       } finally { 
@@ -243,8 +277,6 @@ function ListContent() {
     return formattedUrl;
   };
 
-  // 🔥 Split into TWO functions: Validation & Execution
-
   const handlePreSubmit = (e: React.FormEvent, isDraftMode: boolean = false) => {
     e.preventDefault();
 
@@ -262,7 +294,7 @@ function ListContent() {
       const targetNumber = sameForWhatsapp ? formData.contact : formData.whatsapp;
       if (targetNumber.length !== 10) return triggerAlert("Invalid Number", "Please enter a valid 10-digit WhatsApp number.");
 
-      // 🔥 THE MAGIC: If they are NOT verified yet, show the existing Gate component!
+      // 🔥 THE MAGIC: If they are NOT verified yet, launch the Gate!
       if (!isVerified) {
         setStep(3);
         return; 
@@ -271,21 +303,15 @@ function ListContent() {
       if (!formData.name) return triggerAlert("Required", "Please at least provide a Business Name to save a draft.");
     }
 
-    // If they ARE verified (or saving a draft), execute normally
+    // If they are verified or saving draft, submit normally
     let submitEmail = verifiedEmail || user?.email || "";
     if (!submitEmail || submitEmail.includes('supabase.co')) {
-      const manualEmail = window.prompt("We need a valid email address for notifications. Please enter it below:");
-      if (manualEmail && manualEmail.includes('@')) {
-        submitEmail = manualEmail;
-      } else {
-        return triggerAlert("Required", "A valid email is required to submit your listing.");
-      }
+      return triggerAlert("Required", "A valid email is required to submit your listing.");
     }
 
     executeSubmit(isDraftMode, submitEmail);
   };
 
-  // The actual database upload logic
   const executeSubmit = async (isDraftMode: boolean, submitEmail: string) => {
     setLoading(true);
     try {
@@ -317,7 +343,7 @@ function ListContent() {
         userEmail: submitEmail.toLowerCase(), 
         userId: user?.id, 
         isApproved: false, 
-        emailVerified: isVerified, // We only get here if they are verified
+        emailVerified: isVerified, 
         isDraft: isDraftMode 
       };
 
@@ -368,9 +394,7 @@ function ListContent() {
                 {draftSaved ? "Draft Saved" : "Broadcast Successful"}
               </span>
               <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-tight">
-                {draftSaved 
-                  ? "Finish and submit whenever you're ready" 
-                  : "Visible once approved by the Admin"}
+                {draftSaved ? "Finish and submit whenever you're ready" : "Visible once approved by the Admin"}
               </span>
             </div>
           </motion.div>
@@ -379,8 +403,8 @@ function ListContent() {
 
       <div className="max-w-4xl mx-auto">
         
-        {/* Progress Bar (Hidden when showing Gate) */}
-        {step !== 3 && (
+        {/* Progress Bar (Hidden during Dashboard and Gate) */}
+        {showNewForm && step !== 3 && (
           <div className="flex gap-3 mb-16">
             {[1, 2].map((s) => (
               <div key={s} className={`h-2 flex-1 rounded-full transition-all duration-700 ${step >= s ? 'bg-brandRed shadow-[0_0_20px_#FF0000]' : 'bg-zinc-800'}`} />
@@ -389,7 +413,60 @@ function ListContent() {
         )}
 
         <AnimatePresence mode="wait">
-         {step === 1 && (
+
+         {/* --- STEP 0: MY BUSINESSES DASHBOARD --- */}
+         {!showNewForm && (
+           <motion.div key="step0" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="space-y-10">
+             <div className="flex justify-between items-center gap-4">
+               <div>
+                 <h1 className="text-4xl md:text-6xl font-black italic uppercase leading-none text-white">Your <span className="text-brandRed">Listings</span></h1>
+                 <p className="text-zinc-400 text-[11px] font-bold uppercase tracking-widest mt-2">Manage your businesses</p>
+               </div>
+               <Link href="/directory" className="p-3 md:p-4 bg-zinc-900 rounded-2xl border border-white/10 hover:bg-brandRed transition-all"><X /></Link>
+             </div>
+
+             <div className="space-y-4">
+               {userBusinesses.map(bus => (
+                 <div key={bus._id} className="bg-zinc-900/40 border border-white/10 p-6 md:p-8 rounded-[32px] flex flex-col md:flex-row items-start md:items-center justify-between gap-6 hover:border-brandRed/30 transition-all shadow-xl">
+                   <div className="flex items-center gap-5">
+                     <div className="w-16 h-16 rounded-2xl bg-black border border-white/10 overflow-hidden relative shrink-0">
+                       <Image 
+                         src={bus.imagePaths?.[0] ? `https://bhfrgcphqmbocplfcvbg.supabase.co/storage/v1/object/public/mallu-mart/${bus.imagePaths[0]}` : (bus.imagePath ? `https://bhfrgcphqmbocplfcvbg.supabase.co/storage/v1/object/public/mallu-mart/${bus.imagePath}` : "/about/placeholder.jpeg")}
+                         alt="Thumbnail" fill className="object-cover" sizes="64px"
+                       />
+                     </div>
+                     <div>
+                       <h3 className="text-xl font-black uppercase tracking-tight text-white mb-1 truncate max-w-[200px] md:max-w-xs">{bus.name}</h3>
+                       <div className="flex items-center gap-2">
+                         <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">{bus.category}</span>
+                         <span className="text-zinc-700">•</span>
+                         <span className={`text-[10px] font-black uppercase tracking-widest ${bus.isApproved ? 'text-green-500' : (bus.isDraft ? 'text-zinc-400' : 'text-amber-500')}`}>
+                           {bus.isApproved ? 'Live' : (bus.isDraft ? 'Draft' : 'In Review')}
+                         </span>
+                       </div>
+                     </div>
+                   </div>
+                   <button onClick={() => router.push(`/directory/list?edit=${bus._id}`)} className="w-full md:w-auto px-8 py-4 bg-white text-black font-black uppercase tracking-widest text-[11px] rounded-2xl hover:bg-brandRed hover:text-white transition-all active:scale-95 text-center shadow-lg">
+                     Edit Listing
+                   </button>
+                 </div>
+               ))}
+             </div>
+
+             <div className="pt-6">
+               <button onClick={() => {
+                 setFormData(prev => ({...prev, name: '', contact: '', whatsapp: ''}));
+                 setShowNewForm(true);
+                 setStep(1);
+               }} className="w-full py-8 border-2 border-dashed border-white/10 hover:border-brandRed/50 hover:bg-brandRed/5 bg-zinc-900/20 text-zinc-400 hover:text-white rounded-[32px] font-black uppercase tracking-[0.2em] text-[11px] transition-all flex items-center justify-center gap-3">
+                 <Plus size={18} /> Add Another Business
+               </button>
+             </div>
+           </motion.div>
+         )}
+
+         {/* --- STEP 1 --- */}
+         {showNewForm && step === 1 && (
           <motion.div key="step1" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="space-y-10" onFocusCapture={handleFirstInteraction} onChangeCapture={handleFirstInteraction}>
             <div className="flex justify-between items-center gap-4">
               <h1 className="text-4xl md:text-6xl font-black italic uppercase leading-none text-white">Business <span className="text-brandRed">Core</span></h1>
@@ -491,7 +568,8 @@ function ListContent() {
           </motion.div>
          )}
 
-          {step === 2 && (
+         {/* --- STEP 2 --- */}
+          {showNewForm && step === 2 && (
             <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-12">
               <div className="flex items-center gap-4 md:gap-6">
                 <button onClick={() => setStep(1)} className="p-3 md:p-4 bg-zinc-900 rounded-2xl border border-white/10 hover:bg-brandRed transition-all"><ArrowLeft /></button>
@@ -693,10 +771,9 @@ function ListContent() {
           )}
 
          {/* 🔥 STEP 3: THE VERIFICATION GATE WRAPPER */}
-         {step === 3 && (
+         {showNewForm && step === 3 && (
            <motion.div key="step3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="py-2 space-y-8">
              
-             {/* 🔥 THE CONSTANT HEADER WITH GO BACK BUTTON */}
              <div className="flex items-center gap-4 md:gap-6">
                <button onClick={() => setStep(2)} className="p-3 md:p-4 bg-zinc-900 rounded-2xl border border-white/10 hover:bg-brandRed transition-all">
                  <ArrowLeft />
@@ -707,18 +784,15 @@ function ListContent() {
                </div>
              </div>
              
-             {/* THE UNTOUCHED GATE */}
              <EmailVerificationGate 
                userId={user.id} 
                source="MALLU_MART"
                prefillBusinessName={formData.name}
-               onCancel={() => setStep(2)} // Fallback if they click the text button
+               onCancel={() => setStep(2)} 
                onVerified={(ownerData) => {
                  const confirmedEmail = ownerData.verified_email || ownerData.email;
                  setVerifiedEmail(confirmedEmail);
                  setIsVerified(true);
-                 
-                 // Instantly upload to MongoDB using their verified email
                  executeSubmit(false, confirmedEmail);
                }} 
              />

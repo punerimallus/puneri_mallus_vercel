@@ -399,7 +399,7 @@ export default function ProfessionalDetailsPage() {
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-10 p-6 rounded-[32px] bg-brandRed/10 border border-brandRed/20 backdrop-blur-xl flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-4 text-center md:text-left">
               <ShieldCheck className="text-brandRed shrink-0" size={28} />
-              <p className="text-[10px] font-black uppercase tracking-widest text-white italic">Identity Verification Required for Green Badge</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-white italic">Identity Verification Required for Red Badge</p>
             </div>
             <button onClick={() => setIsVerifyOpen(true)} className="w-full md:w-auto px-8 py-3 bg-white text-black text-[10px] font-black uppercase rounded-xl hover:bg-brandRed hover:text-white transition-all shadow-xl">
               Verify Now
