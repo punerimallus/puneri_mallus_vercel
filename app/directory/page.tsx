@@ -154,16 +154,16 @@ export default function MalluMartPage() {
     if (!itemToDelete || !currentUser) return;
 
     try {
-      const res = await fetch('/api/mart', {
+      // 1. Build the query parameters to match what the backend expects
+      const params = new URLSearchParams({
+        id: itemToDelete._id,
+        userEmail: itemToDelete.userEmail || '',
+        userId: currentUser.id || ''
+      });
+
+      // 2. Send the DELETE request with the parameters in the URL, not the body
+      const res = await fetch(`/api/mart?${params.toString()}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          id: itemToDelete._id, 
-          imagePaths: itemToDelete.imagePaths || [itemToDelete.imagePath], 
-          // 🚀 THE KEYS: Send original email AND current User ID
-          userEmail: itemToDelete.userEmail, 
-          userId: currentUser.id 
-        })
       });
 
       if (res.ok) {
@@ -172,7 +172,6 @@ export default function MalluMartPage() {
         setItemToDelete(null);
       } else {
         const errorData = await res.json();
-        // Fallback if triggerAlert isn't defined, use window.alert or your Alert component
         console.error("Deletion failed:", errorData.error);
         alert(errorData.error || "Unauthorized to delete this listing.");
       }
