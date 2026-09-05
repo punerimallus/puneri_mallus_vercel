@@ -93,25 +93,31 @@ function ListContent() {
   );
 
   // 🔥 THE NEW FIRST-KEYSTROKE TRACKER
+  // 🔥 THE NEW TRUE-INTERACTION TRACKER
   const trackingFired = useRef(false);
 
-  useEffect(() => {
-    const userStartedTyping = formData.name || formData.category || formData.area;
-
-    if (verifiedEmail && userStartedTyping && !trackingFired.current) {
-      const markStarted = async () => {
-        trackingFired.current = true; // Lock it instantly
-
-        await supabase
-          .from('directory_owners')
-          .update({ status: 'STARTED_FILLING' })
-          .eq('verified_email', verifiedEmail.trim().toLowerCase())
-          .eq('status', 'FORM_OPENED'); // Only upgrade if they are exactly at FORM_OPENED
-      };
+  const handleFirstInteraction = async () => {
+    if (!trackingFired.current && verifiedEmail) {
+      trackingFired.current = true; // Lock it instantly
       
-      markStarted();
+      console.log("⌨️ Form interaction detected! Updating status to STARTED_FILLING...");
+
+      const { data, error } = await supabase
+        .from('directory_owners')
+        .update({ status: 'STARTED_FILLING' })
+        .eq('verified_email', verifiedEmail.trim().toLowerCase())
+        // 🔥 FIX: Allow update from either of these previous states just in case
+        .in('status', ['FORM_OPENED', 'VERIFIED_NOT_STARTED']) 
+        .select();
+        
+      if (error) {
+        console.error("Error updating status:", error);
+      } else {
+        console.log("✅ Supabase Update Success:", data);
+      }
     }
-  }, [verifiedEmail, formData.name, formData.category, formData.area, supabase]);
+  };
+
 
   useEffect(() => {
     const init = async () => {
@@ -419,7 +425,7 @@ function ListContent() {
 
         <AnimatePresence mode="wait">
          {step === 1 && (
-          <motion.div key="step1" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="space-y-10">
+          <motion.div key="step1" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="space-y-10" onFocusCapture={handleFirstInteraction} onChangeCapture={handleFirstInteraction}>
             <div className="flex justify-between items-center gap-4">
               <h1 className="text-4xl md:text-6xl font-black italic uppercase leading-none text-white">Business <span className="text-brandRed">Core</span></h1>
               <Link href="/directory" className="p-3 md:p-4 bg-zinc-900 rounded-2xl border border-white/10 hover:bg-brandRed transition-all"><X /></Link>

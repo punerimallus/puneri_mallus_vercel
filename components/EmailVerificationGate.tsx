@@ -121,7 +121,7 @@ export default function EmailVerificationGate({ userId, source, onVerified }: Em
           // 🔥 NEW: Update Status to STARTED_FILLING automatically
           await supabase
             .from('directory_owners')
-            .update({ status: 'FORM OPENED' })
+            .update({ status: 'FORM_OPENED' })
             .eq('user_id', userId)
             .eq('source', source)
             .eq('verified_email', cleanEmail);
@@ -244,7 +244,7 @@ export default function EmailVerificationGate({ userId, source, onVerified }: Em
                     // 🔥 NEW: Update Status to STARTED_FILLING manually
                     await supabase
                       .from('directory_owners')
-                      .update({ status: 'STARTED_FILLING' })
+                      .update({ status: 'FORM_OPENED' })
                       .eq('user_id', userId)
                       .eq('source', source)
                       .eq('verified_email', cleanEmail);
