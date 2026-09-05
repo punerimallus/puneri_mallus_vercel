@@ -395,13 +395,15 @@ export default function ProfessionalDetailsPage() {
           </div>
         </div>
 
-        {currentUser?.email === item.userEmail && !item.isVerified && item.verificationStatus !== 'PENDING' && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-10 p-6 rounded-[32px] bg-brandRed/10 border border-brandRed/20 backdrop-blur-xl flex items-center justify-between gap-6">
-            <div className="flex items-center gap-4">
-              <ShieldCheck className="text-brandRed" size={28} />
-              <p className="text-[10px] font-black uppercase tracking-widest text-white italic">Identity Verification Required for Badge</p>
+        {currentUser && (currentUser.id === item.userId || currentUser.email === item.userEmail) && !item.isVerified && item.verificationStatus !== 'PENDING' && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-10 p-6 rounded-[32px] bg-brandRed/10 border border-brandRed/20 backdrop-blur-xl flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="flex items-center gap-4 text-center md:text-left">
+              <ShieldCheck className="text-brandRed shrink-0" size={28} />
+              <p className="text-[10px] font-black uppercase tracking-widest text-white italic">Identity Verification Required for Green Badge</p>
             </div>
-            <button onClick={() => setIsVerifyOpen(true)} className="px-8 py-3 bg-white text-black text-[10px] font-black uppercase rounded-xl hover:bg-brandRed hover:text-white transition-all">Verify Now</button>
+            <button onClick={() => setIsVerifyOpen(true)} className="w-full md:w-auto px-8 py-3 bg-white text-black text-[10px] font-black uppercase rounded-xl hover:bg-brandRed hover:text-white transition-all shadow-xl">
+              Verify Now
+            </button>
           </motion.div>
         )}
 

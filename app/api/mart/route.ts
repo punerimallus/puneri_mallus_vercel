@@ -49,10 +49,12 @@ export async function POST(req: Request) {
 
     if (data.category) data.category = data.category.toUpperCase();
 
+    // 🔥 FIX: Always force isVerified to false on new submissions!
+    // Email verification doesn't give them the green business badge.
     const result = await db.collection("mallu_mart").insertOne({
       ...data,
       isApproved: false, 
-      isVerified: false,
+      isVerified: false, 
       isPremium: false,
       verificationStatus: null,
       isDraft: data.isDraft ?? false,
@@ -61,17 +63,18 @@ export async function POST(req: Request) {
       updatedAt: new Date()
     });
 
-    // 🔥 NEW: UPDATE SUPABASE STATUS TRACKER
-    if (data.userEmail) {
+    if (data.userId) {
       await supabaseAdmin
         .from('directory_owners')
-        .update({ 
-          status: data.isDraft ? 'SAVED_AS_DRAFT' : 'SUBMITTED_FOR_PUBLISHING' 
-        })
-        .eq('verified_email', data.userEmail.trim().toLowerCase());
+        .upsert({ 
+          user_id: data.userId,
+          source: 'MALLU_MART',
+          status: data.isDraft ? 'SAVED_AS_DRAFT' : (data.emailVerified ? 'SUBMITTED_FOR_PUBLISHING' : 'PENDING_VERIFICATION')
+        }, { onConflict: 'user_id, source' });
     }
 
-    if (!data.isDraft) {
+    // Only send the admin emails right away if their EMAIL is already verified
+    if (!data.isDraft && data.emailVerified) {
       if (data.userEmail) {
         await sendMartPendingEmail(data.userEmail, data.name);
       }
@@ -179,30 +182,32 @@ export async function PATCH(req: Request) {
 
     const shouldNotify = !cleanData.isDraft && (existing.isDraft || existing.isApproved);
 
+    // 🔥 FIX: Never let a standard user edit change the isVerified status!
     await db.collection("mallu_mart").updateOne(
       { _id: new ObjectId(id) },
       { 
         $set: { 
           ...cleanData,
           isApproved: false, 
+          isVerified: existing.isVerified, // Keep the existing verification status intact!
           isDraft: cleanData.isDraft ?? false,
           updatedAt: new Date() 
         } 
       }
     );
 
-    // 🔥 NEW: UPDATE SUPABASE STATUS TRACKER
-    const targetEmail = userEmail || existing.userEmail;
-    if (targetEmail) {
+    const targetUserId = updatedData?.userId || existing.userId;
+    if (targetUserId) {
       await supabaseAdmin
         .from('directory_owners')
-        .update({ 
+        .upsert({ 
+          user_id: targetUserId,
+          source: 'MALLU_MART',
           status: cleanData.isDraft ? 'SAVED_AS_DRAFT' : 'SUBMITTED_FOR_PUBLISHING' 
-        })
-        .eq('verified_email', targetEmail.trim().toLowerCase());
+        }, { onConflict: 'user_id, source' });
     }
 
-    if (shouldNotify) {
+    if (shouldNotify && cleanData.emailVerified) {
       await sendMartPendingEmail(existing.userEmail || userEmail, cleanData.name || existing.name);
       await sendAdminMartAlert(cleanData.name || existing.name, cleanData.category || existing.category);
     }
@@ -219,7 +224,6 @@ export async function PATCH(req: Request) {
  */
 export async function DELETE(req: Request) {
   try {
-    // 1. Extract ALL data from URL to bypass body-stripping on ALL hosts
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
     const adminEmail = searchParams.get('adminEmail');
@@ -236,7 +240,6 @@ export async function DELETE(req: Request) {
     const post = await db.collection("mallu_mart").findOne({ _id: new ObjectId(id) });
     if (!post) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    // 2. CHECK FOR ADMIN (Query authorized_admins table)
     let isAdmin = false;
     if (adminEmail) {
       const { data: adminRecord } = await supabaseAdmin
@@ -248,7 +251,6 @@ export async function DELETE(req: Request) {
       if (adminRecord) isAdmin = true;
     }
 
-    // 3. CHECK FOR OWNER
     const isOwner = (userEmail && post.userEmail === userEmail) || (userId && post.userId === userId);
 
     if (!isAdmin && !isOwner) {
@@ -256,7 +258,6 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // 4. Cleanup Supabase Storage
     const posterPaths = post.imagePaths || (post.imagePath ? [post.imagePath] : []);
     const verificationPaths = post.verificationDocs ? Object.values(post.verificationDocs) : [];
     
@@ -273,7 +274,6 @@ export async function DELETE(req: Request) {
       }
     }
 
-    // 5. Delete from Mongo
     await db.collection("mallu_mart").deleteOne({ _id: new ObjectId(id) });
     
     return NextResponse.json({ message: "Business removed successfully" });

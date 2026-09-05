@@ -10,7 +10,7 @@ import {
 import Link from 'next/link';
 import TribeConfirm from '@/components/TribeConfirm';
 import TribeTimePicker from '@/components/ui/TribeTimePicker';
-import EmailVerificationGate from '@/components/EmailVerificationGate'; 
+import EmailVerificationGate from '@/components/EmailVerificationGate'; // 🔥 Importing your untouched Gate
 
 const FIXED_CATEGORIES = [
   "FOOD & BEVERAGE", "REAL ESTATE", "HEALTH & WELLNESS",  "SPORTS" ,"EDUCATION", 
@@ -59,7 +59,7 @@ function ListContent() {
   const [step, setStep] = useState(1);
   const [user, setUser] = useState<any>(null);
   
-  const [isVerified, setIsVerified] = useState<boolean | null>(null);
+  const [isVerified, setIsVerified] = useState<boolean>(false);
   const [verifiedEmail, setVerifiedEmail] = useState<string>(''); 
 
   const [gallery, setGallery] = useState<UnifiedImage[]>([]);
@@ -84,7 +84,7 @@ function ListContent() {
     name: '', category: '', customCategory: '', area: '', mapUrl: '', 
     description: '', contact: '', instagram: '',
     website: '', buttonText: '', buttonUrl: '', openTime: '09:00 AM',
-    closeTime: '06:00 PM',whatsapp: '', 
+    closeTime: '06:00 PM', whatsapp: '', 
   });
 
   const supabase = createBrowserClient(
@@ -92,32 +92,22 @@ function ListContent() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  // 🔥 THE NEW FIRST-KEYSTROKE TRACKER
-  // 🔥 THE NEW TRUE-INTERACTION TRACKER
   const trackingFired = useRef(false);
 
   const handleFirstInteraction = async () => {
-    if (!trackingFired.current && verifiedEmail) {
-      trackingFired.current = true; // Lock it instantly
+    if (!trackingFired.current && user?.id) {
+      trackingFired.current = true;
+      console.log("⌨️ Form interaction detected! Upserting status to STARTED_FILLING...");
       
-      console.log("⌨️ Form interaction detected! Updating status to STARTED_FILLING...");
-
-      const { data, error } = await supabase
+      await supabase
         .from('directory_owners')
-        .update({ status: 'STARTED_FILLING' })
-        .eq('verified_email', verifiedEmail.trim().toLowerCase())
-        // 🔥 FIX: Allow update from either of these previous states just in case
-        .in('status', ['FORM_OPENED', 'VERIFIED_NOT_STARTED']) 
-        .select();
-        
-      if (error) {
-        console.error("Error updating status:", error);
-      } else {
-        console.log("✅ Supabase Update Success:", data);
-      }
+        .upsert({ 
+          user_id: user.id,
+          source: 'MALLU_MART',
+          status: 'STARTED_FILLING'
+        }, { onConflict: 'user_id, source' });
     }
   };
-
 
   useEffect(() => {
     const init = async () => {
@@ -128,28 +118,18 @@ function ListContent() {
       try {
         const { data: ownerRecords } = await supabase
           .from('directory_owners')
-          .select('*')
+          .select('is_verified, verified_email')
           .eq('user_id', user.id)
           .eq('source', 'MALLU_MART')
-          .eq('is_verified', true)
           .limit(1);
 
         const ownerRecord = ownerRecords?.[0];
 
         if (ownerRecord) {
-          setIsVerified(true);
-          setVerifiedEmail(ownerRecord.verified_email || ownerRecord.email || user.email || ''); 
-          
-          if (!editId) {
-             setFormData(prev => ({
-               ...prev,
-               name: ownerRecord.business_name || '',
-               contact: ownerRecord.phone_number || '',
-               whatsapp: ownerRecord.phone_number || ''
-             }));
+          setIsVerified(ownerRecord.is_verified);
+          if (ownerRecord.verified_email) {
+            setVerifiedEmail(ownerRecord.verified_email);
           }
-        } else {
-          setIsVerified(false);
         }
 
         if (editId) {
@@ -167,12 +147,7 @@ function ListContent() {
             });
             
             setShowOtherCategory(isCustomCat);
-
-            if (item.whatsapp && item.contact !== item.whatsapp) {
-              setSameForWhatsapp(false);
-            } else {
-              setSameForWhatsapp(true);
-            }
+            setSameForWhatsapp(!item.whatsapp || item.contact === item.whatsapp);
 
             setServices(item.services?.length > 0 ? item.services : [{ id: Math.random().toString(), name: '', desc: '' }]);
             const paths = item.imagePaths || (item.imagePath ? [item.imagePath] : []);
@@ -183,8 +158,7 @@ function ListContent() {
             })));
           }
         }
-      }
-      catch (err) { 
+      } catch (err) { 
         console.error(err); 
       } finally { 
         setFetching(false); 
@@ -260,7 +234,7 @@ function ListContent() {
     setGallery([selected, ...newArr]);
   };
 
-  const processWebsite = (url:string) => {
+  const processWebsite = (url: string) => {
     if (!url) return "";
     let formattedUrl = url.trim().toLowerCase();
     if (!/^https?:\/\//i.test(formattedUrl)) {
@@ -269,44 +243,53 @@ function ListContent() {
     return formattedUrl;
   };
 
-  const handleSubmit = async (e: React.FormEvent, isDraftMode: boolean = false) => {
+  // 🔥 Split into TWO functions: Validation & Execution
+
+  const handlePreSubmit = (e: React.FormEvent, isDraftMode: boolean = false) => {
     e.preventDefault();
-    const finalWebsite = processWebsite(formData.website);
 
     if (!isDraftMode) {
       const phoneRegex = /^\d{10}$/; 
-      if (phoneRegex.test(formData.instagram.trim())) {
-        return triggerAlert("Invalid Instagram", "You entered a phone number instead of an Instagram handle.");
-      }
+      if (phoneRegex.test(formData.instagram.trim())) return triggerAlert("Invalid Instagram", "You entered a phone number instead of an Instagram handle.");
       const cleanWeb = formData.website.trim();
-      if (phoneRegex.test(cleanWeb)) {
-        return triggerAlert("Invalid Website", "Websites cannot be just a 10-digit phone number.");
-      }
+      if (phoneRegex.test(cleanWeb)) return triggerAlert("Invalid Website", "Websites cannot be just a 10-digit phone number.");
       if (gallery.length === 0) return triggerAlert("Required", "Upload at least 1 image.");
       if (!formData.description) return triggerAlert("Required", "Add a business description.");
+      
       const hasValidService = services.some(s => s.name.trim() !== '' && s.desc.trim() !== '');
-      if (!hasValidService) {
-        return triggerAlert("Required", "Please add at least one specific service with a name and description.");
-      }
+      if (!hasValidService) return triggerAlert("Required", "Please add at least one specific service with a name and description.");
+      
       const targetNumber = sameForWhatsapp ? formData.contact : formData.whatsapp;
       if (targetNumber.length !== 10) return triggerAlert("Invalid Number", "Please enter a valid 10-digit WhatsApp number.");
+
+      // 🔥 THE MAGIC: If they are NOT verified yet, show the existing Gate component!
+      if (!isVerified) {
+        setStep(3);
+        return; 
+      }
     } else {
       if (!formData.name) return triggerAlert("Required", "Please at least provide a Business Name to save a draft.");
     }
 
+    // If they ARE verified (or saving a draft), execute normally
     let submitEmail = verifiedEmail || user?.email || "";
     if (!submitEmail || submitEmail.includes('supabase.co')) {
-      const manualEmail = window.prompt("We need a valid email address to send your approval notification. Please enter it below:");
+      const manualEmail = window.prompt("We need a valid email address for notifications. Please enter it below:");
       if (manualEmail && manualEmail.includes('@')) {
         submitEmail = manualEmail;
-        setVerifiedEmail(manualEmail);
       } else {
         return triggerAlert("Required", "A valid email is required to submit your listing.");
       }
     }
 
+    executeSubmit(isDraftMode, submitEmail);
+  };
+
+  // The actual database upload logic
+  const executeSubmit = async (isDraftMode: boolean, submitEmail: string) => {
     setLoading(true);
     try {
+      const finalWebsite = processWebsite(formData.website);
       const currentExistingPaths = gallery.filter(img => img.type === 'existing').map(img => img.path);
       const pathsToDelete = initialPaths.filter(path => !currentExistingPaths.includes(path));
 
@@ -334,7 +317,7 @@ function ListContent() {
         userEmail: submitEmail.toLowerCase(), 
         userId: user?.id, 
         isApproved: false, 
-        isVerified: false,
+        emailVerified: isVerified, // We only get here if they are verified
         isDraft: isDraftMode 
       };
 
@@ -344,10 +327,10 @@ function ListContent() {
         body: JSON.stringify(editId ? { id: editId, userEmail: martData.userEmail, updatedData: martData } : martData),
       });
 
-      if(res.ok) {
+      if (res.ok) {
         setDraftSaved(isDraftMode);
         setShowSuccessToast(true);
-        setTimeout(() => router.push('/directory'), 2000);
+        setTimeout(() => router.push('/directory'), 2500);
       }
     } catch (err) { 
       triggerAlert("Error", "Failed to save data.");
@@ -356,30 +339,8 @@ function ListContent() {
     }
   };
 
-  if (fetching || isVerified === null) {
+  if (fetching) {
     return <div className="min-h-screen bg-black flex items-center justify-center"><Loader2 className="animate-spin text-brandRed" /></div>;
-  }
-
-  if (isVerified === false && user) {
-    return (
-      <div className="min-h-screen bg-[#030303] text-white pt-40 pb-20 px-6">
-        <EmailVerificationGate 
-          userId={user.id} 
-          source="MALLU_MART"
-          onVerified={(ownerData) => {
-            setVerifiedEmail(ownerData.verified_email || ownerData.email || user?.email || '');
-            if (!editId) {
-              setFormData(prev => ({
-                ...prev,
-                name: ownerData.businessName || '',
-                contact: ownerData.phone || ''
-              }));
-            }
-            setIsVerified(true);
-          }} 
-        />
-      </div>
-    );
   }
 
   return (
@@ -417,11 +378,15 @@ function ListContent() {
       </AnimatePresence>
 
       <div className="max-w-4xl mx-auto">
-        <div className="flex gap-3 mb-16">
-          {[1, 2].map((s) => (
-            <div key={s} className={`h-2 flex-1 rounded-full transition-all duration-700 ${step >= s ? 'bg-brandRed shadow-[0_0_20px_#FF0000]' : 'bg-zinc-800'}`} />
-          ))}
-        </div>
+        
+        {/* Progress Bar (Hidden when showing Gate) */}
+        {step !== 3 && (
+          <div className="flex gap-3 mb-16">
+            {[1, 2].map((s) => (
+              <div key={s} className={`h-2 flex-1 rounded-full transition-all duration-700 ${step >= s ? 'bg-brandRed shadow-[0_0_20px_#FF0000]' : 'bg-zinc-800'}`} />
+            ))}
+          </div>
+        )}
 
         <AnimatePresence mode="wait">
          {step === 1 && (
@@ -601,8 +566,7 @@ function ListContent() {
               </div>
 
               <div className="space-y-6">
-                <Field label="Instagram ID" icon={Instagram} value={formData.instagram} onChange={(e: any) => setFormData({...formData, instagram: e.target.value})} placeholder="Username" />
-                
+
                 <Field 
                   label="First Point of Contact (10 Digits)" 
                   icon={Phone} 
@@ -622,7 +586,7 @@ function ListContent() {
                   type="tel"
                 />
 
-                <label className="flex items-center gap-3 cursor-pointer group px-2 w-fit">
+                <label className="flex items-center gap-3 cursor-pointer group px-2 w-fit -mt-2 mb-4">
                   <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all duration-300 ${sameForWhatsapp ? 'bg-brandRed border-brandRed' : 'border-white/20 bg-black/50 group-hover:border-brandRed/50'}`}>
                     {sameForWhatsapp && <Check size={14} className="text-white" />}
                   </div>
@@ -672,6 +636,8 @@ function ListContent() {
                   )}
                 </AnimatePresence>
 
+                <Field label="Instagram ID" icon={Instagram} value={formData.instagram} onChange={(e: any) => setFormData({...formData, instagram: e.target.value})} placeholder="Username" />
+
                 <Field 
                   label="Official Website" 
                   icon={Globe} 
@@ -692,7 +658,7 @@ function ListContent() {
                     }}
                     whileTap={{ scale: 0.98 }}
                     transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                    onClick={(e) => handleSubmit(e, true)} 
+                    onClick={(e) => handlePreSubmit(e, true)} 
                     disabled={loading} 
                     className="flex-1 py-7 bg-zinc-900 text-zinc-300 border border-white/10 rounded-[30px] font-black uppercase tracking-[0.2em] text-[12px] flex items-center justify-center gap-2 disabled:opacity-50"
                   >
@@ -710,7 +676,7 @@ function ListContent() {
                     }}
                     whileTap={{ scale: 0.98 }}
                     transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                    onClick={(e) => handleSubmit(e, false)} 
+                    onClick={(e) => handlePreSubmit(e, false)} 
                     disabled={loading} 
                     className="flex-[2] py-7 bg-brandRed text-white rounded-[30px] font-black uppercase tracking-[0.4em] text-[15px] flex items-center justify-center gap-2 disabled:opacity-50"
                   >
@@ -725,6 +691,39 @@ function ListContent() {
               </div>
             </motion.div>
           )}
+
+         {/* 🔥 STEP 3: THE VERIFICATION GATE WRAPPER */}
+         {step === 3 && (
+           <motion.div key="step3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="py-2 space-y-8">
+             
+             {/* 🔥 THE CONSTANT HEADER WITH GO BACK BUTTON */}
+             <div className="flex items-center gap-4 md:gap-6">
+               <button onClick={() => setStep(2)} className="p-3 md:p-4 bg-zinc-900 rounded-2xl border border-white/10 hover:bg-brandRed transition-all">
+                 <ArrowLeft />
+               </button>
+               <div>
+                 <h1 className="text-3xl md:text-5xl font-black italic uppercase leading-none">One Last <span className="text-brandRed">Step</span></h1>
+                 <p className="text-xs md:text-sm text-zinc-400 font-medium mt-1">Verify your email to submit your listing for review.</p>
+               </div>
+             </div>
+             
+             {/* THE UNTOUCHED GATE */}
+             <EmailVerificationGate 
+               userId={user.id} 
+               source="MALLU_MART"
+               prefillBusinessName={formData.name}
+               onCancel={() => setStep(2)} // Fallback if they click the text button
+               onVerified={(ownerData) => {
+                 const confirmedEmail = ownerData.verified_email || ownerData.email;
+                 setVerifiedEmail(confirmedEmail);
+                 setIsVerified(true);
+                 
+                 // Instantly upload to MongoDB using their verified email
+                 executeSubmit(false, confirmedEmail);
+               }} 
+             />
+           </motion.div>
+         )}
         </AnimatePresence>
       </div>
     </div>

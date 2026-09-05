@@ -16,9 +16,11 @@ interface EmailVerificationGateProps {
   userId: string;
   source: 'MALLU_MART' | 'COMMUNITY'; 
   onVerified: (ownerData: OwnerData) => void;
+  prefillBusinessName?: string;
+  onCancel?: () => void; // 🔥 ADDED: Allows the parent form to handle "Go Back"
 }
 
-export default function EmailVerificationGate({ userId, source, onVerified }: EmailVerificationGateProps) {
+export default function EmailVerificationGate({ userId, source, onVerified, prefillBusinessName = '', onCancel }: EmailVerificationGateProps) {
   const [step, setStep] = useState<1 | 2 | 3>(1); 
   
   // Auto-fetched fields (hidden from UI)
@@ -26,7 +28,7 @@ export default function EmailVerificationGate({ userId, source, onVerified }: Em
   const [phone, setPhone] = useState('');
   
   // User-entered fields
-  const [businessName, setBusinessName] = useState('');
+  const [businessName, setBusinessName] = useState(prefillBusinessName);
   const [email, setEmail] = useState('');
   
   const [loading, setLoading] = useState(false);
@@ -118,10 +120,10 @@ export default function EmailVerificationGate({ userId, source, onVerified }: Em
           clearInterval(interval);
           setStep(3); 
 
-          // 🔥 NEW: Update Status to STARTED_FILLING automatically
+          // 🔥 FIX: Because we are verifying at the END of the flow, status should be SUBMITTED
           await supabase
             .from('directory_owners')
-            .update({ status: 'FORM_OPENED' })
+            .update({ status: 'SUBMITTED_FOR_PUBLISHING' })
             .eq('user_id', userId)
             .eq('source', source)
             .eq('verified_email', cleanEmail);
@@ -150,7 +152,7 @@ export default function EmailVerificationGate({ userId, source, onVerified }: Em
                 <ShieldCheck size={28} className="text-brandRed" />
               </div>
               <h2 className="text-2xl font-black italic uppercase text-white tracking-tighter">Owner <span className="text-brandRed">Verification.</span></h2>
-              <p className="text-zinc-400 text-[11px] font-bold uppercase tracking-widest">Verify identity before listing</p>
+              <p className="text-zinc-400 text-[11px] font-bold uppercase tracking-widest">Verify identity to submit listing</p>
             </div>
             
             <div className="space-y-3">
@@ -167,9 +169,18 @@ export default function EmailVerificationGate({ userId, source, onVerified }: Em
               {errorMsg && <p className="text-brandRed text-[10px] font-bold uppercase tracking-widest text-center pt-2">{errorMsg}</p>}
             </div>
 
-            <button type="submit" disabled={loading || !email.includes('@') || !businessName} className="w-full bg-brandRed py-5 rounded-2xl font-black uppercase tracking-widest text-[11px] flex items-center justify-center gap-3 hover:bg-white hover:text-black transition-all shadow-xl active:scale-95 disabled:opacity-50 text-white mt-2">
-              {loading ? <Loader2 className="animate-spin" size={18} /> : <>Verify & Continue <ArrowRight size={18} /></>}
-            </button>
+            <div className="space-y-3">
+              <button type="submit" disabled={loading || !email.includes('@') || !businessName} className="w-full bg-brandRed py-5 rounded-2xl font-black uppercase tracking-widest text-[11px] flex items-center justify-center gap-3 hover:bg-white hover:text-black transition-all shadow-xl active:scale-95 disabled:opacity-50 text-white mt-2">
+                {loading ? <Loader2 className="animate-spin" size={18} /> : <>Verify & Publish <ArrowRight size={18} /></>}
+              </button>
+              
+              {/* 🔥 FIX: Give them an escape hatch to go back to the main form */}
+              {onCancel && (
+                <button type="button" onClick={onCancel} className="w-full py-3 text-[10px] font-bold uppercase tracking-widest text-zinc-500 hover:text-white transition-colors">
+                  Cancel & Return to Form
+                </button>
+              )}
+            </div>
           </motion.form>
         )}
 
@@ -190,7 +201,6 @@ export default function EmailVerificationGate({ userId, source, onVerified }: Em
               </p>
             </div>
 
-            {/* INSTRUCTION BOX */}
             <div className="bg-black/60 border border-brandRed/30 rounded-2xl p-5 text-left space-y-4 shadow-inner">
               <div className="flex items-start gap-3">
                 <div className="w-5 h-5 rounded-full bg-brandRed/20 flex-shrink-0 flex items-center justify-center mt-0.5">
@@ -224,7 +234,6 @@ export default function EmailVerificationGate({ userId, source, onVerified }: Em
               <Loader2 size={14} className="animate-spin" /> Waiting for Verification...
             </div>
 
-            {/* MANUAL ESCAPE HATCH FOR DIFFERENT BROWSER PROFILES */}
             <div className="pt-2">
               <button 
                 type="button" 
@@ -241,10 +250,10 @@ export default function EmailVerificationGate({ userId, source, onVerified }: Em
                   if (data && data.is_verified) {
                     setStep(3);
                     
-                    // 🔥 NEW: Update Status to STARTED_FILLING manually
+                    // 🔥 FIX: Same fix here, change to SUBMITTED
                     await supabase
                       .from('directory_owners')
-                      .update({ status: 'FORM_OPENED' })
+                      .update({ status: 'SUBMITTED_FOR_PUBLISHING' })
                       .eq('user_id', userId)
                       .eq('source', source)
                       .eq('verified_email', cleanEmail);
@@ -274,7 +283,7 @@ export default function EmailVerificationGate({ userId, source, onVerified }: Em
             </div>
             <h2 className="text-2xl font-black italic uppercase text-white tracking-tighter">Identity Verified!</h2>
             <p className="text-zinc-400 text-[11px] font-bold uppercase tracking-widest flex items-center justify-center gap-2">
-              <Loader2 className="animate-spin" size={12} /> Opening Directory Form...
+              <Loader2 className="animate-spin" size={12} /> Publishing your Listing...
             </p>
           </motion.div>
         )}
