@@ -191,7 +191,7 @@ export default function PartnersPage() {
 
         <div className="space-y-24 md:space-y-40">
           
-          {/* 🔥 NEW: FOUNDERS SECTION */}
+    {/* 🔥 NEW: FOUNDERS SECTION */}
           {searchQuery === "" && (
             <section ref={(el) => { sectionRefs.current['Founders'] = el; }} className="scroll-mt-40">
               <div className="flex flex-col gap-3 mb-16">
@@ -208,8 +208,8 @@ export default function PartnersPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 md:gap-12 max-w-4xl mx-auto">
                 {FOUNDERS.map((founder) => (
-                  <Link key={founder._id} href={`/partners/${founder._id}`} className="block h-full">
-                    <div className="group h-full relative bg-brandRed/5 border border-brandRed/20 rounded-[40px] p-10 backdrop-blur-md hover:bg-brandRed/10 hover:border-brandRed transition-all duration-500 hover:-translate-y-2 hover:shadow-[0_20px_50px_rgba(255,0,0,0.15)] flex flex-col items-center text-center will-change-transform">
+                  <div key={founder._id} className="block h-full">
+                    <div className="group h-full relative bg-brandRed/5 border border-brandRed/20 rounded-[40px] p-10 backdrop-blur-md hover:bg-brandRed/10 hover:border-brandRed transition-all duration-500 hover:-translate-y-2 hover:shadow-[0_20px_50px_rgba(255,0,0,0.15)] flex flex-col items-center text-center will-change-transform cursor-default">
                       
                       <div className="relative w-48 h-48 md:w-56 md:h-56 rounded-full mb-8 p-1.5 border-2 border-brandRed/30 group-hover:border-brandRed transition-all duration-500 shadow-2xl">
                         <div className="w-full h-full rounded-full overflow-hidden relative bg-zinc-900">
@@ -233,12 +233,12 @@ export default function PartnersPage() {
                         </div>
                       </div>
                     </div>
-                  </Link>
+                  </div>
                 ))}
               </div>
             </section>
           )}
-
+          
           {/* STANDARD SECTIONS */}
           {groupedPartners.map(({ cat, members }) => (
             <section key={cat} ref={(el) => { sectionRefs.current[cat] = el; }} className="scroll-mt-40">
