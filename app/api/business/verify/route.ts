@@ -19,10 +19,14 @@ export async function GET(request: Request) {
 
   if (!token) return new NextResponse("Missing token", { status: 400 });
 
-  // Find the record and mark it verified
+  // Find the record and mark it verified, updating the status tracker
   const { error } = await supabaseAdmin
     .from('directory_owners')
-    .update({ is_verified: true, verification_token: null }) // Clear token after use
+    .update({ 
+      is_verified: true, 
+      verification_token: null,
+      status: 'VERIFIED_NOT_STARTED' // 🔥 NEW: Track that they verified but haven't started filling
+    }) 
     .eq('verification_token', token);
 
   if (error) return new NextResponse("Invalid or expired link", { status: 400 });
@@ -62,8 +66,6 @@ export async function GET(request: Request) {
         // Attempt to bring the user back to their original window/tab after 1 second
         setTimeout(() => {
           window.focus();
-          // Some modern browsers block automatic window closing unless opened by script, 
-          // but focusing helps pull the original tab forward if it's open side-by-side.
         }, 1000);
       </script>
     </body>
@@ -79,7 +81,7 @@ export async function POST(req: Request) {
     // Generate a secure random string
     const token = crypto.randomBytes(32).toString('hex');
 
-    // Upsert the UNVERIFIED record into the database
+    // Upsert the UNVERIFIED record into the database, setting status to PENDING
     await supabaseAdmin.from('directory_owners').upsert({
       user_id: userId,
       full_name: fullName,
@@ -88,7 +90,8 @@ export async function POST(req: Request) {
       verified_email: email,
       source: source,
       is_verified: false,
-      verification_token: token
+      verification_token: token,
+      status: 'PENDING_VERIFICATION' // 🔥 NEW: Track that link is sent but not clicked
     }, { onConflict: 'user_id, source' });
 
     // Generate the click link

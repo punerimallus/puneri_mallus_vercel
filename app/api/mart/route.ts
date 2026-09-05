@@ -61,6 +61,16 @@ export async function POST(req: Request) {
       updatedAt: new Date()
     });
 
+    // 🔥 NEW: UPDATE SUPABASE STATUS TRACKER
+    if (data.userEmail) {
+      await supabaseAdmin
+        .from('directory_owners')
+        .update({ 
+          status: data.isDraft ? 'SAVED_AS_DRAFT' : 'SUBMITTED_FOR_PUBLISHING' 
+        })
+        .eq('verified_email', data.userEmail.trim().toLowerCase());
+    }
+
     if (!data.isDraft) {
       if (data.userEmail) {
         await sendMartPendingEmail(data.userEmail, data.name);
@@ -130,7 +140,6 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ success: true, message: "Admin audit synced" });
     }
 
-    // 🔥 SECURITY FIX: Find the existing node without strictly enforcing email match upfront
     if (!id) return NextResponse.json({ error: "Missing ID" }, { status: 400 });
     const existing = await db.collection("mallu_mart").findOne({ _id: new ObjectId(id) });
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -181,6 +190,17 @@ export async function PATCH(req: Request) {
         } 
       }
     );
+
+    // 🔥 NEW: UPDATE SUPABASE STATUS TRACKER
+    const targetEmail = userEmail || existing.userEmail;
+    if (targetEmail) {
+      await supabaseAdmin
+        .from('directory_owners')
+        .update({ 
+          status: cleanData.isDraft ? 'SAVED_AS_DRAFT' : 'SUBMITTED_FOR_PUBLISHING' 
+        })
+        .eq('verified_email', targetEmail.trim().toLowerCase());
+    }
 
     if (shouldNotify) {
       await sendMartPendingEmail(existing.userEmail || userEmail, cleanData.name || existing.name);

@@ -118,6 +118,14 @@ export default function EmailVerificationGate({ userId, source, onVerified }: Em
           clearInterval(interval);
           setStep(3); 
 
+          // 🔥 NEW: Update Status to STARTED_FILLING automatically
+          await supabase
+            .from('directory_owners')
+            .update({ status: 'FORM OPENED' })
+            .eq('user_id', userId)
+            .eq('source', source)
+            .eq('verified_email', cleanEmail);
+
           setTimeout(() => {
             onVerified({ fullName, phone, businessName, email: cleanEmail });
           }, 1500);
@@ -189,7 +197,7 @@ export default function EmailVerificationGate({ userId, source, onVerified }: Em
                   <span className="text-brandRed text-xs font-bold">1</span>
                 </div>
                 <p className="text-[13px] text-zinc-300 leading-snug">
-                  Look for an email from <strong className="text-white tracking-wide">no-reply@punerimallus.com</strong>
+                  Look for an email from <strong className="text-white tracking-wide">hello@punerimallus.com</strong>
                 </p>
               </div>
 
@@ -232,6 +240,15 @@ export default function EmailVerificationGate({ userId, source, onVerified }: Em
 
                   if (data && data.is_verified) {
                     setStep(3);
+                    
+                    // 🔥 NEW: Update Status to STARTED_FILLING manually
+                    await supabase
+                      .from('directory_owners')
+                      .update({ status: 'STARTED_FILLING' })
+                      .eq('user_id', userId)
+                      .eq('source', source)
+                      .eq('verified_email', cleanEmail);
+
                     setTimeout(() => onVerified({ fullName, phone, businessName, email: cleanEmail }), 1500);
                   } else {
                     alert("Verification not detected yet. Make sure you clicked the link in your email!");

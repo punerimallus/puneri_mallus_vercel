@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { createBrowserClient } from '@supabase/ssr';
 import { 
   CheckCircle, ArrowRight, Loader2, ShieldCheck, 
-  Instagram, Globe,Phone,Check, MousePointer2, ArrowLeft, X, Image as ImageIcon, MapPin, Star,Clock, MessageCircle, Plus, Trash2, Briefcase
+  Instagram, Globe, Phone, Check, MousePointer2, ArrowLeft, X, Image as ImageIcon, MapPin, Star, Clock, MessageCircle, Plus, Trash2, Briefcase
 } from 'lucide-react';
 import Link from 'next/link';
 import TribeConfirm from '@/components/TribeConfirm';
@@ -32,7 +32,6 @@ interface UnifiedImage {
   previewUrl: string;
 }
 
-// 🔥 UPDATED: Field component now handles errors, loading spinners, and onBlur events natively
 const Field = ({ label, icon: Icon, placeholder, value, onChange, onBlur, error, loading, type = "text", maxLength }: any) => (
   <div className="space-y-2 w-full group relative mb-2">
     <div className="flex items-center justify-between ml-2">
@@ -74,7 +73,6 @@ function ListContent() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState({ title: '', message: '' });
 
-  // 🔥 UNIVERSAL NAME CHECKER STATES
   const [nameError, setNameError] = useState<string | null>(null);
   const [checkingName, setCheckingName] = useState(false);
   
@@ -94,6 +92,27 @@ function ListContent() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
+  // 🔥 THE NEW FIRST-KEYSTROKE TRACKER
+  const trackingFired = useRef(false);
+
+  useEffect(() => {
+    const userStartedTyping = formData.name || formData.category || formData.area;
+
+    if (verifiedEmail && userStartedTyping && !trackingFired.current) {
+      const markStarted = async () => {
+        trackingFired.current = true; // Lock it instantly
+
+        await supabase
+          .from('directory_owners')
+          .update({ status: 'STARTED_FILLING' })
+          .eq('verified_email', verifiedEmail.trim().toLowerCase())
+          .eq('status', 'FORM_OPENED'); // Only upgrade if they are exactly at FORM_OPENED
+      };
+      
+      markStarted();
+    }
+  }, [verifiedEmail, formData.name, formData.category, formData.area, supabase]);
+
   useEffect(() => {
     const init = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -106,7 +125,7 @@ function ListContent() {
           .select('*')
           .eq('user_id', user.id)
           .eq('source', 'MALLU_MART')
-          .eq('is_verified', true) // 🔥 THE FIX: This keeps the gate locked!
+          .eq('is_verified', true)
           .limit(1);
 
         const ownerRecord = ownerRecords?.[0];
@@ -124,8 +143,6 @@ function ListContent() {
              }));
           }
         } else {
-          // If the row exists but is_verified is false, it falls down here 
-          // and keeps the EmailVerificationGate on their screen.
           setIsVerified(false);
         }
 
@@ -170,7 +187,6 @@ function ListContent() {
     init();
   }, [editId, router, supabase]);
 
-  // 🔥 UNIVERSAL NAME CHECKER FUNCTION
   const verifyNameAvailability = async (nameVal: string) => {
     if (!nameVal.trim()) return setNameError(null);
     setCheckingName(true);
@@ -194,18 +210,11 @@ function ListContent() {
     setConfirmOpen(true);
   };
 
-  const handleContactChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value.replace(/\D/g, '');
-    if (val.length <= 10) {
-      setFormData({ ...formData, contact: val });
-    }
-  };
-
   const validateStep1 = () => {
     const { name, category, area, mapUrl, customCategory } = formData;
     if (!name || !category || !area || !mapUrl) return false;
     if (category === "OTHER" && !customCategory) return false;
-    if (nameError) return false; // 🔥 Block if name is taken
+    if (nameError) return false;
     return true;
   };
 
@@ -269,7 +278,6 @@ function ListContent() {
       }
       if (gallery.length === 0) return triggerAlert("Required", "Upload at least 1 image.");
       if (!formData.description) return triggerAlert("Required", "Add a business description.");
-      // 🔥 NEW: Check for at least one valid service
       const hasValidService = services.some(s => s.name.trim() !== '' && s.desc.trim() !== '');
       if (!hasValidService) {
         return triggerAlert("Required", "Please add at least one specific service with a name and description.");
@@ -418,7 +426,6 @@ function ListContent() {
             </div>
 
             <div className="grid grid-cols-1 gap-8">
-              {/* 🔥 ROW 1: FULL WIDTH NAME WITH CHECKER */}
               <Field 
                 label="Business Name" 
                 value={formData.name} 
@@ -432,7 +439,6 @@ function ListContent() {
                 placeholder="e.g. THE MALABAR KITCHEN" 
               />
 
-              {/* ROW 2: SECTOR & AREA */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-2">
                   <label className="text-[11px] font-black uppercase text-white tracking-[0.2em] ml-2">Market Sector</label>
@@ -451,14 +457,12 @@ function ListContent() {
                 <Field label="Operational Area" value={formData.area} onChange={(e: any) => setFormData({...formData, area: e.target.value})} placeholder="e.g. Baner" />
               </div>
 
-              {/* ROW 3: CUSTOM CATEGORY (CONDITIONAL) */}
               {showOtherCategory && (
                 <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
                   <Field label="Custom Category" value={formData.customCategory} onChange={(e: any) => setFormData({...formData, customCategory: e.target.value})} placeholder="e.g. CONSULTANCY" />
                 </motion.div>
               )}
 
-              {/* ROW 4: TIME PICKERS (BALANCED ROW) */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-2 border-2 border-white/20 p-5 rounded-2xl focus-within:border-brandRed transition-all bg-zinc-900/50 hover:bg-zinc-900" ref={openTimeRef}>
                   <label className="text-[11px] font-black uppercase text-white tracking-[0.2em] ml-2 flex items-center gap-2">
@@ -487,10 +491,8 @@ function ListContent() {
                 </div>
               </div>
 
-              {/* ROW 5: MAPS LINK */}
               <Field label="Google Maps Link" icon={MapPin} value={formData.mapUrl} onChange={(e: any) => setFormData({...formData, mapUrl: e.target.value})} placeholder="Paste shared link..." />
               
-              {/* SUBMIT BUTTON */}
               <div className="pt-4">
                 <button 
                   onClick={() => {
@@ -505,7 +507,6 @@ function ListContent() {
               </div>
             </div>
 
-            {/* PORTAL FOR PICKER */}
             <AnimatePresence>
               {pickerField && (
                 <TribeTimePicker 
@@ -530,7 +531,6 @@ function ListContent() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                    <div className="flex items-center gap-3 text-brandRed">
                      <Briefcase size={20} />
-                     {/* 🔥 Added asterisk to label */}
                      <span className="text-[12px] font-black uppercase tracking-widest text-white">Specific Services ({services.length}/10) *</span>
                    </div>
                    <button onClick={addService} className="p-3 bg-brandRed text-white rounded-xl hover:bg-white hover:text-black transition-all flex items-center justify-center gap-2 text-[10px] font-bold w-full sm:w-auto"><Plus size={16}/> ADD SERVICE</button>
@@ -552,7 +552,6 @@ function ListContent() {
                         onChange={(e) => updateService(s.id, 'desc', e.target.value)} 
                       />
                       
-                      {/* 🔥 THE FIX: Hide trash icon if only 1 service is left */}
                       {services.length > 1 && (
                         <button onClick={() => setServices(services.filter(x => x.id !== s.id))} className="p-3 text-zinc-600 hover:text-brandRed transition-colors flex justify-center">
                           <Trash2 size={18}/>
@@ -598,18 +597,16 @@ function ListContent() {
               <div className="space-y-6">
                 <Field label="Instagram ID" icon={Instagram} value={formData.instagram} onChange={(e: any) => setFormData({...formData, instagram: e.target.value})} placeholder="Username" />
                 
-                {/* 1. FIRST POINT OF CONTACT */}
                 <Field 
                   label="First Point of Contact (10 Digits)" 
                   icon={Phone} 
                   value={formData.contact} 
                   onChange={(e: any) => {
-                    const val = e.target.value.replace(/\D/g, ''); // Ensure numbers only
+                    const val = e.target.value.replace(/\D/g, ''); 
                     if (val.length <= 10) {
                       setFormData({ 
                         ...formData, 
                         contact: val, 
-                        // 🔥 Automatically sync to whatsapp if checkbox is checked
                         ...(sameForWhatsapp ? { whatsapp: val } : {}) 
                       });
                     }
@@ -619,7 +616,6 @@ function ListContent() {
                   type="tel"
                 />
 
-                {/* 2. THE CUSTOM CHECKBOX */}
                 <label className="flex items-center gap-3 cursor-pointer group px-2 w-fit">
                   <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all duration-300 ${sameForWhatsapp ? 'bg-brandRed border-brandRed' : 'border-white/20 bg-black/50 group-hover:border-brandRed/50'}`}>
                     {sameForWhatsapp && <Check size={14} className="text-white" />}
@@ -631,7 +627,6 @@ function ListContent() {
                     onChange={(e) => {
                       const isChecked = e.target.checked;
                       setSameForWhatsapp(isChecked);
-                      // If they check it again, instantly sync the current contact number over
                       if (isChecked) {
                         setFormData({ ...formData, whatsapp: formData.contact });
                       }
@@ -642,7 +637,6 @@ function ListContent() {
                   </span>
                 </label>
 
-                {/* 3. CONDITIONAL WHATSAPP FIELD */}
                 <AnimatePresence>
                   {!sameForWhatsapp && (
                     <motion.div
@@ -682,7 +676,6 @@ function ListContent() {
                 />
                 
                 <div className="flex flex-col md:flex-row gap-4 mt-12">
-                  {/* LEFT: SAVE AS DRAFT */}
                   <motion.button 
                     type="button"
                     initial={{ y: 0 }}
@@ -700,7 +693,6 @@ function ListContent() {
                     {loading ? <Loader2 className="animate-spin" size={18} /> : <>Save as Draft</>}
                   </motion.button>
 
-                  {/* RIGHT: BROADCAST TO MART */}
                   <motion.button 
                     type="button"
                     initial={{ y: 0 }}
