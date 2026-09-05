@@ -145,7 +145,7 @@ export async function POST(req: Request) {
       doc.text("CONFIRMED", 50, 160);
 
       // QR Code Generation
-      const baseUrlStr = process.env.NEXT_PUBLIC_BASE_URL || 'https://punerimallusvercel.vercel.app';
+      const baseUrlStr = process.env.NEXT_PUBLIC_BASE_URL || 'https://punerimallus.com';
       const scanUrl = `${baseUrlStr}/admin/scanner?bid=${booking.id}&tno=${ticket.ticketNumber}`;
       const qrCodeBase64 = await QRCode.toDataURL(scanUrl, { margin: 1, color: { dark: '#000', light: '#fff' } });
 

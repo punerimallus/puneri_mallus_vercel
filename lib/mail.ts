@@ -149,33 +149,6 @@ export const sendMartPendingEmail = async (to: string, businessName: string) => 
   });
 };
 
-export const sendMartLiveEmail = async (to: string, businessName: string) => {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'punerimallus.com';
-  const directLink = `${baseUrl}/directory`;
-
-  return await resend.emails.send({
-    from: FROM,
-    to: to,
-    subject: `${businessName} is live in the directory`,
-    text: `Great news! Your business ${businessName} has been approved and is now visible to the entire community. View your profile here: ${directLink}`,
-    html: `
-      <div style="font-family: 'Segoe UI', Helvetica, Arial, sans-serif; max-width: 480px; margin: auto; background: #ffffff; color: #111827; padding: 40px; border-radius: 20px; border: 1px solid #e5e7eb; text-align: center;">
-        <h2 style="font-weight: 700; font-size: 22px; margin-bottom: 15px; color: #111827;">You're live!</h2>
-        <p style="font-size: 15px; color: #4b5563; line-height: 1.6; margin-bottom: 28px;">
-          Great news! Your business <b style="color: #111827;">${businessName}</b> has been approved and is now visible to the entire community in the directory.
-        </p>
-        <div style="padding: 12px; background: #f9fafb; border-radius: 12px; margin-bottom: 28px; border: 1px solid #e5e7eb;">
-          <p style="margin: 0; font-size: 12px; color: #4b5563;">Your profile is now discoverable by the tribe.</p>
-        </div>
-        <a href="${directLink}" style="display: inline-block; background: #dc2626; color: #ffffff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">View in directory</a>
-        <p style="margin-top: 32px; font-size: 12px; color: #9ca3af;">
-          Thank you for powering the Puneri Mallus economy.
-        </p>
-      </div>
-    `,
-  });
-};
-
 export const sendMartRejectedEmail = async (to: string, businessName: string) => {
   return await resend.emails.send({
     from: FROM,
@@ -473,7 +446,52 @@ export const sendBusinessVerificationEmail = async (to: string, verifyLink: stri
     `,
   });
 };
+// Notice the 3 arguments here! (to, businessName, businessId)
+export const sendMartLiveEmail = async (to: string, businessName: string, businessId: string) => {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://punerimallus.com';
+  const listingUrl = `${baseUrl}/directory/${businessId}`;
 
+  return await resend.emails.send({
+    from: FROM, // Ensure FROM is defined in your file
+    to: to,
+    subject: "Your business is Live on Mallu Connect!",
+    text: `Great news! ${businessName} is now live in the directory. View it here: ${listingUrl}. Don't forget to log in and upload your documents to get your free Verified Badge!`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 420px; margin: auto; background: #ffffff; color: #111827; padding: 32px; border-radius: 16px; border: 1px solid #e5e7eb; text-align: center;">
+        
+        <h2 style="color: #111827; margin-bottom: 8px;">You are Live!</h2>
+        
+        <p style="font-size: 14px; color: #6b7280; line-height: 1.6; margin-bottom: 28px;">
+          Great news! <br/><strong style="color: #111827; font-size: 16px;">${businessName}</strong><br/> has been approved by our team and is now publicly visible in the directory.
+        </p>
+        
+        <a href="${listingUrl}" style="display: inline-block; background: #dc2626; color: #fff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px;">
+          View your listing
+        </a>
+
+        <!-- VERIFIED BADGE UPSELL SECTION -->
+        <div style="margin-top: 40px; padding-top: 24px; border-top: 1px solid #e5e7eb; text-align: left;">
+          <h3 style="color: #111827; font-size: 16px; margin-top: 0; margin-bottom: 8px;">
+            Get the Verified Badge
+          </h3>
+          <p style="font-size: 13px; color: #6b7280; line-height: 1.6; margin-bottom: 16px;">
+            Build ultimate trust with your customers. Log in to your listing to securely upload your business registration documents. Once reviewed, you'll receive the green Verified Badge next to your name!
+          </p>
+          
+          <div style="background: #f0fdf4; border: 1px dashed #bbf7d0; padding: 12px; border-radius: 8px; text-align: center;">
+            <p style="color: #166534; font-size: 12px; font-weight: 600; margin: 0;">
+              Bonus: Your listing & verification are completely FREE for the first year!
+            </p>
+          </div>
+        </div>
+
+        <p style="font-size: 11px; color: #9ca3af; margin-top: 32px; line-height: 1.5; text-align: center;">
+          The Mallu Connect Team
+        </p>
+      </div>
+    `,
+  });
+};
 export const sendFootballReceiptEmail = async (to: string, teamName: string, orderId: string, paymentId: string) => {
   return await resend.emails.send({
     from: FROM,

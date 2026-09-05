@@ -49,8 +49,7 @@ export async function POST(req: Request) {
 
     if (data.category) data.category = data.category.toUpperCase();
 
-    // 🔥 FIX: Always force isVerified to false on new submissions!
-    // Email verification doesn't give them the green business badge.
+    // Always force isVerified to false on new submissions!
     const result = await db.collection("mallu_mart").insertOne({
       ...data,
       isApproved: false, 
@@ -135,7 +134,8 @@ export async function PATCH(req: Request) {
         updateFields.isApproved = isApproved;
         if (isApproved === true) {
           const item = await db.collection("mallu_mart").findOne({ _id: new ObjectId(id) });
-          if (item?.userEmail) await sendMartLiveEmail(item.userEmail, item.name);
+          // 🔥 PASSING THE ID HERE FOR THE LIVE EMAIL LINK
+          if (item?.userEmail) await sendMartLiveEmail(item.userEmail, item.name, item._id.toString());
         }
       }
 
@@ -182,14 +182,14 @@ export async function PATCH(req: Request) {
 
     const shouldNotify = !cleanData.isDraft && (existing.isDraft || existing.isApproved);
 
-    // 🔥 FIX: Never let a standard user edit change the isVerified status!
+    // Never let a standard user edit change the isVerified status!
     await db.collection("mallu_mart").updateOne(
       { _id: new ObjectId(id) },
       { 
         $set: { 
           ...cleanData,
           isApproved: false, 
-          isVerified: existing.isVerified, // Keep the existing verification status intact!
+          isVerified: existing.isVerified, 
           isDraft: cleanData.isDraft ?? false,
           updatedAt: new Date() 
         } 
