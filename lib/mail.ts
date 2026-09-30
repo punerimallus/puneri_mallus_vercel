@@ -1,7 +1,20 @@
 import { Resend } from 'resend';
 
-// Initialize Resend with your API key from .env
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Created on first send, not at import: `new Resend()` throws without an API key,
+// which broke `next build` in environments (e.g. Vercel previews) where it isn't set.
+let resendClient: Resend | null = null;
+function getResend(): Resend {
+  if (!resendClient) {
+    if (!process.env.RESEND_API_KEY) throw new Error("RESEND_API_KEY is not set; cannot send email.");
+    resendClient = new Resend(process.env.RESEND_API_KEY);
+  }
+  return resendClient;
+}
+const resend = {
+  emails: {
+    send: (...args: Parameters<Resend['emails']['send']>) => getResend().emails.send(...args),
+  },
+};
 
 const FROM = 'Puneri Mallus Tribe <hello@punerimallus.com>';
 
