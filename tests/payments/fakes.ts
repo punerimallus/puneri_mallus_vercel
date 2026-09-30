@@ -1,3 +1,4 @@
+import { insertBookingWithAmountFallback } from '@/lib/payments/booking-amount';
 import { vi } from 'vitest';
 import { FulfilmentDeps, BookingInsert } from '@/lib/payments/fulfil';
 import { Allocation, GatewayPayment, PaymentOrder, SoldOutError } from '@/lib/payments/types';
@@ -93,12 +94,22 @@ export function makeWorld(initial: PaymentOrder[] = [makeOrder()], payments: Gat
         return { categoryId: i.categoryId, qty: i.qty, endSold: sold[i.categoryId] };
       });
     }),
+    // Behaves like production: ticket_bookings.amount_paid is an INTEGER column, so a fractional amount is
+    // rejected exactly as Postgres does ("invalid input syntax for type integer"). Goes through the same
+    // fallback the real wiring uses, so a regression to a plain insert fails the tests.
     upsertBooking: vi.fn(async (row: BookingInsert) => {
       const existing = [...bookings.values()].find((b) => b.razorpay_order_id === row.razorpay_order_id);
       if (existing) return existing.id;
-      const id = `booking-${nextBookingId++}`;
-      bookings.set(id, { ...row, id, status: 'CONFIRMED' });
-      return id;
+      const { data, error } = await insertBookingWithAmountFallback<BookingInsert, { id: string }>(row, async (r) => {
+        if (!Number.isInteger(r.amount_paid)) {
+          return { data: null, error: { message: `invalid input syntax for type integer: "${r.amount_paid}"`, code: '22P02' } };
+        }
+        const id = `booking-${nextBookingId++}`;
+        bookings.set(id, { ...r, id, status: 'CONFIRMED' });
+        return { data: { id }, error: null };
+      });
+      if (error || !data) throw new Error(error?.message || 'insert failed');
+      return data.id;
     }),
     setBookingStatus: vi.fn(async (id: string, status: 'CONFIRMED' | 'REFUNDED') => {
       const b = bookings.get(id);

@@ -2,6 +2,7 @@
 // Route handlers import from here; the logic itself lives in fulfil.ts / delivery.ts.
 
 import Razorpay from 'razorpay';
+import { insertBookingWithAmountFallback, insertWithWholeRupeeFallback } from './booking-amount';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { ObjectId } from 'mongodb';
 import clientPromise from '@/lib/mongodb';
@@ -150,7 +151,9 @@ export const fulfilmentDeps: FulfilmentDeps = {
       db.from('ticket_bookings').select('id').eq('razorpay_order_id', row.razorpay_order_id).limit(1).maybeSingle(),
     );
     if (existing) return (existing as { id: string }).id;
-    const { data, error } = await db.from('ticket_bookings').insert(row).select('id').single();
+    const { data, error } = await insertBookingWithAmountFallback<BookingInsert, { id: string }>(row, (r) =>
+      db.from('ticket_bookings').insert(r).select('id').single(),
+    );
     if (error) {
       if (error.code === '23505') {
         const again = await must(
@@ -160,7 +163,7 @@ export const fulfilmentDeps: FulfilmentDeps = {
       }
       throw new Error(error.message);
     }
-    return data.id;
+    return data!.id;
   },
 
   async setBookingStatus(bookingId, status) {
@@ -240,19 +243,21 @@ export const fulfilmentDeps: FulfilmentDeps = {
     const profile = (await must(
       db.from('profiles').select('email, phone_number').eq('id', order.user_id).maybeSingle(),
     )) as { email: string | null; phone_number: string | null } | null;
-    await must(
-      db.from('payments').insert({
-        user_id: order.user_id,
-        email: order.receipt_email || profile?.email,
-        phone_number: profile?.phone_number || '',
-        razorpay_order_id: order.razorpay_order_id,
-        razorpay_payment_id: paymentId,
-        payment_type: order.payment_type,
-        plan: order.plan || 'NONE',
-        amount: order.base_amount,
-        status: 'SUCCESS',
-      }),
+    const ledgerRow = {
+      user_id: order.user_id,
+      email: order.receipt_email || profile?.email,
+      phone_number: profile?.phone_number || '',
+      razorpay_order_id: order.razorpay_order_id,
+      razorpay_payment_id: paymentId,
+      payment_type: order.payment_type,
+      plan: order.plan || 'NONE',
+      amount: order.base_amount,
+      status: 'SUCCESS',
+    };
+    const { error: ledgerErr } = await insertWithWholeRupeeFallback(ledgerRow, 'amount', (r) =>
+      db.from('payments').insert(r).select('razorpay_payment_id').maybeSingle(),
     );
+    if (ledgerErr) throw new Error(ledgerErr.message);
   },
 
   async alertAdmin(subject, body) {
