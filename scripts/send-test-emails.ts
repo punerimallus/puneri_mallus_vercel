@@ -8,7 +8,7 @@
 // Needs RESEND_API_KEY in .env.local (or the shell). Nothing is sent to real customers
 // or to the real admin inbox: admin alerts are redirected to the same test address.
 
-const TO = process.argv[2] || 'rohitanish86@gmail.com';
+const TO = process.argv[2] || 'vineetpuliyath19@gmail.com';
 
 if (!process.env.RESEND_API_KEY) {
   console.error('RESEND_API_KEY is not set. Put it in .env.local and run with --env-file=.env.local');
