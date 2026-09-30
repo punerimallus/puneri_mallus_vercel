@@ -1,161 +1,54 @@
-import { NextResponse } from 'next/server';
-import crypto from 'crypto';
-import { sendPremiumMembershipEmail, sendMartSubscriptionEmail, sendFootballReceiptEmail } from "@/lib/mail"; 
-import { createClient } from '@supabase/supabase-js';
+import { NextResponse, after } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { isValidCheckoutSignature } from '@/lib/payments/signature';
+import { fulfilAndDeliver } from '@/lib/payments/server';
 
+// Called by the browser's Razorpay handler for membership and Mallu Mart payments.
+// The browser only tells us WHICH order was paid; what it was for and whether it
+// really was paid come from payment_orders and Razorpay. The webhook does the same
+// work, so if this request never arrives (tab closed) the user still gets access.
 export async function POST(req: Request) {
   try {
-    // 1. INITIALIZE SECURE SUPABASE CLIENT (To verify who sent the request)
     const cookieStore = await cookies();
     const supabaseAuth = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       { cookies: { get(name: string) { return cookieStore.get(name)?.value; } } }
     );
-
-    // 2. GET THE TRUE IDENTITY OF THE USER
     const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
     if (userError || !user) {
       return NextResponse.json({ error: "Unauthorized: Invalid Session" }, { status: 401 });
     }
 
-    // 3. EXTRACT PAYMENT DETAILS
-    const { 
-      razorpay_order_id, 
-      razorpay_payment_id, 
-      razorpay_signature,
-      paymentType, 
-      plan,
-      amount, 
-      invoiceEmail, 
-      teamData // Football Team Data sent from the frontend
-    } = await req.json();
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = await req.json();
 
-    const trueUserId = user.id;
-
-    // 4. VERIFY RAZORPAY CRYPTOGRAPHIC SIGNATURE
-    const body = razorpay_order_id + "|" + razorpay_payment_id;
-    const expectedSignature = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET!)
-      .update(body.toString())
-      .digest("hex");
-    
-    if (expectedSignature !== razorpay_signature) {
+    if (!isValidCheckoutSignature(razorpay_order_id, razorpay_payment_id, razorpay_signature, process.env.RAZORPAY_KEY_SECRET!)) {
       return NextResponse.json({ message: "Invalid signature", success: false }, { status: 400 });
     }
 
-    // --- PAYMENT IS AUTHENTIC: BEGIN SECURE DATABASE OPERATIONS ---
+    const result = await fulfilAndDeliver(razorpay_order_id, razorpay_payment_id, 'CLIENT', { defer: after });
+    const mine = result.order?.user_id === user.id;
 
-    // 5. INITIALIZE SUPABASE SERVICE ROLE (Bypasses RLS for secure admin writes)
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY! 
-    );
-
-    // Fetch the user's latest data from Profiles to ensure we have the newly captured email/phone
-    const { data: profile } = await supabaseAdmin
-      .from('profiles')
-      .select('email, phone_number, full_name')
-      .eq('id', trueUserId)
-      .single();
-
-    const trueUserEmail = profile?.email || user.email;
-    const trueUserPhone = profile?.phone_number || '';
-    
-    // Determine the actual email to use for the receipt
-    const finalReceiptEmail = invoiceEmail || trueUserEmail;
-
-    // 6. RECORD THE TRANSACTION IN THE PAYMENTS TABLE
-    await supabaseAdmin.from('payments').insert({
-      user_id: trueUserId,
-      email: finalReceiptEmail, 
-      phone_number: trueUserPhone,
-      razorpay_order_id: razorpay_order_id,
-      razorpay_payment_id: razorpay_payment_id,
-      payment_type: paymentType, 
-      plan: plan || 'NONE',
-      amount: amount || 0, 
-      status: 'SUCCESS'
-    });
-
-    // 7. DYNAMIC UPDATE LOGIC: Unlock Features Based on Payment Type
-    if (paymentType === "LIFETIME") {
-      // Step A: Upgrade Base Profile AND Unlock Mart (The Master Key)
-      await supabaseAdmin.from('profiles')
-        .update({ 
-          is_member: true,
-          mart_unlocked: true
-        })
-        .eq('id', trueUserId);
-        
-      // Step B: Activate their pending Membership Record
-      await supabaseAdmin.from('memberships')
-        .update({ status: 'ACTIVE', payment_id: razorpay_payment_id })
-        .eq('user_id', trueUserId);
-        
-      // Step C: Send Welcome Email
-      if (finalReceiptEmail) {
-        await sendPremiumMembershipEmail(finalReceiptEmail, razorpay_order_id, razorpay_payment_id);
-      }
-    } 
-    else if (paymentType === "MART") {
-      // Logic for Mallu Mart Subscription Plans
-      const now = new Date();
-      let expiresAt = null;
-      
-      if (plan === "MONTHLY") expiresAt = new Date(now.setMonth(now.getMonth() + 1));
-      else if (plan === "YEARLY") expiresAt = new Date(now.setFullYear(now.getFullYear() + 1));
-
-      await supabaseAdmin.from('mart_subscriptions').upsert({
-        user_id: trueUserId,
-        plan: plan,
-        status: 'ACTIVE',
-        expires_at: expiresAt ? expiresAt.toISOString() : null,
-        last_payment_id: razorpay_payment_id
-      }, { onConflict: 'user_id' });
-
-      await supabaseAdmin.from('profiles')
-        .update({ mart_unlocked: true }) 
-        .eq('id', trueUserId);
-
-      if (finalReceiptEmail) {
-        await sendMartSubscriptionEmail(finalReceiptEmail, plan, razorpay_order_id, razorpay_payment_id);
-      }
+    switch (result.outcome) {
+      case 'FULFILLED':
+      case 'ALREADY_FULFILLED':
+        return NextResponse.json({ success: true, message: "Payment verified securely and databases synced.", orderId: razorpay_order_id });
+      case 'IN_PROGRESS':
+        return NextResponse.json({ success: false, pending: true, orderId: razorpay_order_id }, { status: 202 });
+      case 'NEEDS_ATTENTION':
+        return NextResponse.json(
+          { success: false, needsAttention: true, orderId: razorpay_order_id, error: mine ? result.reason : undefined },
+          { status: 409 },
+        );
+      case 'UNKNOWN_ORDER':
+        return NextResponse.json({ success: false, error: "Order not found" }, { status: 404 });
+      default:
+        return NextResponse.json({ success: false, error: "Payment not captured yet" }, { status: 402 });
     }
-    // FOOTBALL TEAM REGISTRATION LOGIC
-    else if (paymentType === "FOOTBALL") {
-      // Step A: Insert Team Data into football_teams table
-      await supabaseAdmin.from('football_teams').insert({
-        rep_name: teamData.repName,
-        contact: teamData.contact,
-        alt_contact: teamData.altContact,
-        email: teamData.email,
-        age_category: teamData.ageCategory,
-        locality: teamData.locality,
-        team_type: teamData.teamType,
-        team_name: teamData.teamName.toUpperCase(),
-        captain_name: teamData.capName,
-        captain_contact: teamData.capContact,
-        payment_id: razorpay_payment_id,
-        amount_paid: amount,
-        status: 'CONFIRMED'
-      });
-
-      // Step B: Send Football Receipt Email directly to the team rep's email
-      if (teamData.email) {
-        await sendFootballReceiptEmail(teamData.email, teamData.teamName, razorpay_order_id, razorpay_payment_id);
-      }
-    }
-
-    return NextResponse.json({ 
-      message: "Payment verified securely and databases synced.", 
-      success: true 
-    });
-
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("VERIFICATION_CRITICAL_ERROR:", error);
-    return NextResponse.json({ error: "Verification failed internally" }, { status: 500 });
+    // The order is left in a retryable state; the webhook / status poll will finish it.
+    return NextResponse.json({ success: false, pending: true, error: "Verification failed internally" }, { status: 500 });
   }
 }

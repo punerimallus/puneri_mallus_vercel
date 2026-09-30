@@ -6,6 +6,7 @@ import { useAlert } from '@/context/AlertContext';
 import { createBrowserClient } from '@supabase/ssr';
 import TribeCalendar from '@/components/ui/TribeCalendar';
 import { useRouter } from 'next/navigation'; // 🔥 NEW: Added router for success redirection
+import { waitForOrder, orderRef } from '@/lib/payments/client';
 
 interface MembershipCardProps {
   price: number;
@@ -131,18 +132,39 @@ export default function MembershipCard({ price, benefits, userId, userEmail }: M
     }
   };
 
+  // Called after the Razorpay handler fails or the modal closes without one. The
+  // server checks Razorpay itself, so a paid order is activated either way.
+  const settleOrder = async (orderId: string, { fromDismiss = false } = {}) => {
+    if (!fromDismiss) showAlert("Payment received. Activating your membership...", "success");
+    const result = await waitForOrder(orderId, { stopIfUnpaid: fromDismiss, timeoutMs: fromDismiss ? 12_000 : 45_000 });
+    if (result.status === 'FULFILLED') {
+      showAlert("Welcome to the Inner Circle!", "success");
+      window.location.href = '/membership/success';
+      return;
+    }
+    setUpgrading(false);
+    if (result.status === 'NEEDS_ATTENTION') {
+      showAlert(`We received your payment but could not activate it automatically. Our team has been alerted. Ref: ${orderRef(orderId)}`, "error");
+    } else if (result.status === 'CREATED' || result.status === 'FAILED') {
+      if (!fromDismiss) showAlert(`Payment not confirmed. If money was debited it will be auto-refunded or activated shortly. Ref: ${orderRef(orderId)}`, "error");
+    } else if (!fromDismiss || result.status !== 'UNKNOWN') {
+      showAlert(`Payment received. Your membership will activate shortly and a receipt will be emailed. Ref: ${orderRef(orderId)}`, "success");
+    }
+  };
+
   const triggerRazorpay = async () => {
     setUpgrading(true);
     try {
       const orderRes = await fetch('/api/razorpay/order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ paymentType: 'LIFETIME', amount: price })
+        body: JSON.stringify({ paymentType: 'LIFETIME', email })
       });
 
       const orderData = await orderRes.json();
       if (!orderRes.ok) throw new Error(orderData.error);
 
+      let handled = false;
       const options = {
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
         amount: orderData.amount,
@@ -153,7 +175,8 @@ export default function MembershipCard({ price, benefits, userId, userEmail }: M
         method: { netbanking: true, card: true, upi: true, wallet: true, emi: false, paylater: false },
         config: { display: { sequence: ['block.banks', 'block.cards'], preferences: { show_default_blocks: true } } },
         handler: async function (response: any) {
-          setUpgrading(true); 
+          handled = true;
+          setUpgrading(true);
           try {
             const verifyRes = await fetch('/api/razorpay/verify', {
               method: 'POST',
@@ -162,10 +185,6 @@ export default function MembershipCard({ price, benefits, userId, userEmail }: M
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
-                userId: userId,
-                paymentType: 'LIFETIME', 
-                plan: 'LIFETIME',
-                amount: price
               })
             });
 
@@ -174,21 +193,27 @@ export default function MembershipCard({ price, benefits, userId, userEmail }: M
               showAlert("Welcome to the Inner Circle!", "success");
               // 🔥 NEW: Route directly to the elegant success page
               window.location.href = '/membership/success';
-            } else {
-              setUpgrading(false);
-              showAlert("Verification failed. Please contact support.", "error");
+              return;
             }
-          } catch (err) {
-            setUpgrading(false);
-            showAlert("Error verifying payment.", "error");
+          } catch {
+            // Fall through to polling: the payment may well have gone through.
           }
+          await settleOrder(orderData.id);
         },
         prefill: { email: email },
         theme: { color: "#FF0000" },
-        modal: { ondismiss: () => setUpgrading(false) } 
+        modal: {
+          ondismiss: () => {
+            setUpgrading(false);
+            if (!handled) settleOrder(orderData.id, { fromDismiss: true });
+          }
+        }
       };
 
       const rzp = new (window as any).Razorpay(options);
+      rzp.on('payment.failed', (resp: any) => {
+        showAlert(resp?.error?.description || "Payment failed. You can retry.", "error");
+      });
       rzp.open();
     } catch (err: any) {
       showAlert(err.message || "Checkout failed", "error");

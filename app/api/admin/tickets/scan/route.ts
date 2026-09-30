@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { checkAdminAccess } from '@/lib/admin';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,6 +9,9 @@ const supabaseAdmin = createClient(
 
 export async function POST(req: Request) {
   try {
+    const { isAdmin } = await checkAdminAccess();
+    if (!isAdmin) return NextResponse.json({ error: "Only admins can scan tickets." }, { status: 403 });
+
     const { bookingId, ticketNumber } = await req.json();
 
     if (!bookingId || !ticketNumber) {
@@ -17,7 +21,7 @@ export async function POST(req: Request) {
     // 1. Fetch the booking record
     const { data: booking, error } = await supabaseAdmin
       .from('ticket_bookings')
-      .select('tickets_data')
+      .select('tickets_data, status')
       .eq('id', bookingId)
       .single();
 
@@ -25,15 +29,22 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Booking not found. Invalid ticket." }, { status: 404 });
     }
 
+    if (booking.status === 'REFUNDED') {
+      return NextResponse.json({ error: "REFUNDED! This booking was refunded and is no longer valid." }, { status: 410 });
+    }
+
     // 2. Find the specific ticket inside the JSON array
     let ticketFound = false;
     let alreadyScanned = false;
+    let refunded = false;
 
     const updatedTicketsData = booking.tickets_data.map((ticket: any) => {
       if (ticket.ticketNumber === ticketNumber) {
         ticketFound = true;
         if (ticket.status === 'CHECKED_IN') {
           alreadyScanned = true;
+        } else if (ticket.status === 'REFUNDED') {
+          refunded = true;
         } else {
           // Update status to checked in
           ticket.status = 'CHECKED_IN';
@@ -44,6 +55,10 @@ export async function POST(req: Request) {
 
     if (!ticketFound) {
       return NextResponse.json({ error: "Ticket number does not belong to this booking." }, { status: 404 });
+    }
+
+    if (refunded) {
+      return NextResponse.json({ error: "REFUNDED! This pass was refunded and is no longer valid." }, { status: 410 });
     }
 
     if (alreadyScanned) {

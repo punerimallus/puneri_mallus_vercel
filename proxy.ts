@@ -63,8 +63,10 @@ export async function proxy(request: NextRequest) {
       { path: '/api/settings/gallery', methods: ['GET'] },
       { path: '/api/settings/social', methods: ['GET'] },
       
-      // 💸 Razorpay (Uncomment if you add a webhook later)
-      // { path: '/api/razorpay/webhook', methods: ['POST'] }
+      // 💸 Razorpay server-to-server calls (no user session). Both routes verify their own
+      // credentials: the webhook checks X-Razorpay-Signature, reconcile checks CRON_SECRET or admin.
+      { path: '/api/razorpay/webhook', methods: ['POST'] },
+      { path: '/api/razorpay/reconcile', methods: ['GET'] },
     ].some(rule => 
       // Allow exact matches OR sub-paths (like /api/events/123), as long as the method matches!
       (request.nextUrl.pathname === rule.path || request.nextUrl.pathname.startsWith(`${rule.path}/`)) 

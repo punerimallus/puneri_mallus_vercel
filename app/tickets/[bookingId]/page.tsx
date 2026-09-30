@@ -7,6 +7,32 @@ export default function TicketSuccessPage({ params }: { params: Promise<{ bookin
   const { bookingId } = use(params);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
+  const [resendState, setResendState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [resendMessage, setResendMessage] = useState('');
+
+  const resendPasses = async () => {
+    setResendState('sending');
+    try {
+      const res = await fetch('/api/tickets/resend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId }),
+      });
+      if (res.ok) {
+        setResendState('sent');
+        setResendMessage(`Passes re-sent to ${data?.booking?.email}. Check your spam folder too.`);
+      } else if (res.status === 429) {
+        setResendState('error');
+        setResendMessage('Just sent. Please wait a minute before trying again.');
+      } else {
+        setResendState('error');
+        setResendMessage('Could not resend right now. Please contact support with your booking ID.');
+      }
+    } catch {
+      setResendState('error');
+      setResendMessage('Network error. Please try again.');
+    }
+  };
 
   useEffect(() => {
     async function fetchBooking() {
@@ -125,6 +151,24 @@ export default function TicketSuccessPage({ params }: { params: Promise<{ bookin
               Show this QR code at the entry gate. <br/> A valid Government ID is required.
             </p>
           </div>
+        </div>
+
+        {/* Resend passes: for when the email never arrived or went to spam */}
+        <div className="mt-8 text-center space-y-3">
+          {booking.status === 'REFUNDED' ? (
+            <p className="text-[10px] font-black uppercase tracking-widest text-brandRed">This booking was refunded. These passes are no longer valid.</p>
+          ) : (
+            <button
+              onClick={resendPasses}
+              disabled={resendState === 'sending'}
+              className="bg-white/5 border border-white/10 text-white px-8 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-white hover:text-black transition-all flex items-center justify-center gap-2 mx-auto disabled:opacity-50"
+            >
+              {resendState === 'sending' ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />} Email my passes again
+            </button>
+          )}
+          {resendMessage && (
+            <p className={`text-[10px] font-bold uppercase tracking-widest ${resendState === 'sent' ? 'text-green-500' : 'text-zinc-400'}`}>{resendMessage}</p>
+          )}
         </div>
 
         {/* Back to Home Action */}

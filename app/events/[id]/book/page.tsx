@@ -4,6 +4,7 @@ import { Mail, ArrowRight, Minus, Plus, Loader2, Ticket, Calendar, Clock, MapPin
 import { useAlert } from '@/context/AlertContext';
 import { createBrowserClient } from '@supabase/ssr';
 import { useRouter } from 'next/navigation';
+import { waitForOrder, orderRef } from '@/lib/payments/client';
 
 export default function EventBookingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: eventId } = use(params);
@@ -101,17 +102,41 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
     setCart({ ...cart, [id]: newQty });
   };
 
+  // Decide what to show once the server knows the order's fate. Called after the
+  // handler (success or failure) and when the modal is closed without one, because
+  // a UPI/app payment can complete even though the checkout tab never reports it.
+  const settleOrder = async (orderId: string, { fromDismiss = false } = {}) => {
+    if (!fromDismiss) showAlert("Payment received. Confirming your passes...", "success");
+    const result = await waitForOrder(orderId, { stopIfUnpaid: fromDismiss, timeoutMs: fromDismiss ? 12_000 : 45_000 });
+
+    if (result.status === 'FULFILLED' && result.bookingId) {
+      showAlert("Passes Secured Successfully!", "success");
+      router.push(`/tickets/${result.bookingId}`);
+      return;
+    }
+    setProcessing(false);
+    if (result.status === 'NEEDS_ATTENTION') {
+      showAlert(`We received your payment but could not issue passes (${result.reason || 'please contact support'}). Our team has been alerted and will refund or fix it. Ref: ${orderRef(orderId)}`, "error");
+    } else if (result.status === 'CREATED' || result.status === 'FAILED') {
+      if (!fromDismiss) showAlert(`Payment not confirmed. If money was debited it will be auto-refunded or your passes emailed. Ref: ${orderRef(orderId)}`, "error");
+    } else if (!fromDismiss || result.status !== 'UNKNOWN') {
+      showAlert(`Payment received. Your passes will be emailed to ${email} shortly. Ref: ${orderRef(orderId)}`, "success");
+    }
+  };
+
   const processPayment = async () => {
+    if (processing) return;
     setProcessing(true);
     try {
       const orderRes = await fetch('/api/razorpay/order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ paymentType: 'EVENT_TICKET', cart, eventId, pointsToRedeem }) 
+        body: JSON.stringify({ paymentType: 'EVENT_TICKET', cart, eventId, pointsToRedeem, email })
       });
       const orderData = await orderRes.json();
       if (!orderRes.ok) throw new Error(orderData.error);
 
+      let handled = false;
       const options = {
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
         amount: orderData.amount,
@@ -122,7 +147,9 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
         theme: { color: "#FF0000" },
         prefill: { email },
         handler: async function (response: any) {
+          handled = true;
           try {
+            // Only the payment proof is sent. What was bought is already stored on the server.
             const verifyRes = await fetch('/api/tickets/verify', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -130,25 +157,33 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
-                cart, email, eventId, totalAmount: totalPrice,
-                eventData,
-                pointsToRedeem // Pass to backend for ledger deduction
               })
             });
 
             const verifyData = await verifyRes.json();
-            if (verifyData.success) {
+            if (verifyData.success && verifyData.bookingId) {
               showAlert("Passes Secured Successfully!", "success");
               router.push(`/tickets/${verifyData.bookingId}`);
-            } else throw new Error("Verification failed.");
-          } catch (err) {
-            showAlert("Verification Failed", "error");
+              return;
+            }
+          } catch {
+            // Fall through to polling: the payment may well have gone through.
           }
+          await settleOrder(orderData.id);
         },
-        modal: { ondismiss: () => setProcessing(false) }
+        modal: {
+          ondismiss: () => {
+            setProcessing(false);
+            // Quietly check in the background in case the payment completed in a UPI app.
+            if (!handled) settleOrder(orderData.id, { fromDismiss: true });
+          }
+        }
       };
 
       const rzp = new (window as any).Razorpay(options);
+      rzp.on('payment.failed', (resp: any) => {
+        showAlert(resp?.error?.description || "Payment failed. You can retry.", "error");
+      });
       rzp.open();
     } catch (err: any) {
       showAlert(err.message || "Failed to initiate gateway", "error");

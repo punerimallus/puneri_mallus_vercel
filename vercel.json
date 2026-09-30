@@ -1,0 +1,5 @@
+{
+  "crons": [
+    { "path": "/api/razorpay/reconcile", "schedule": "30 3 * * *" }
+  ]
+}

@@ -306,8 +306,7 @@ export async function sendMartVerificationSuccessEmail(userEmail: string, busine
 }
 
 export async function sendMartSubscriptionEmail(to: string, plan: string, orderId: string, paymentId: string) {
-  try {
-    await resend.emails.send({
+  const { error: sendError } = await resend.emails.send({
       from: FROM,
       to: to,
       subject: `Mallu Mart ${plan} access unlocked`,
@@ -338,14 +337,12 @@ export async function sendMartSubscriptionEmail(to: string, plan: string, orderI
         </div>
       `,
     });
-  } catch (error) {
-    console.error("MAIL_MART_SUBSCRIPTION_ERROR:", error);
-  }
+  // Throw so callers can record the failure and retry; a silent miss means a paid user never gets their email.
+  if (sendError) throw new Error(`MAIL_MART_SUBSCRIPTION_ERROR: ${sendError.message}`);
 }
 
 export async function sendPremiumMembershipEmail(to: string, orderId: string, paymentId: string) {
-  try {
-    await resend.emails.send({
+  const { error: sendError } = await resend.emails.send({
       from: FROM,
       to: to,
       subject: `Welcome to Premium membership`,
@@ -380,9 +377,8 @@ export async function sendPremiumMembershipEmail(to: string, orderId: string, pa
         </div>
       `,
     });
-  } catch (error) {
-    console.error("MAIL_PREMIUM_SUBSCRIPTION_ERROR:", error);
-  }
+  // Throw so callers can record the failure and retry; a silent miss means a paid user never gets their email.
+  if (sendError) throw new Error(`MAIL_PREMIUM_SUBSCRIPTION_ERROR: ${sendError.message}`);
 }
 
 export async function sendAdminAccessEmail(to: string, tempPassword: string) {
@@ -518,7 +514,7 @@ export const sendFootballReceiptEmail = async (to: string, teamName: string, ord
   });
 };
 
-export async function sendEventTicketEmail(to: string, bookingId: string, tickets: any[], totalAmount: number, pdfBase64: string, eventData: any) {
+export async function sendEventTicketEmail(to: string, bookingId: string, tickets: { categoryName: string; ticketNumber: string }[], totalAmount: number, pdfBase64: string, eventData: { title?: string; location?: string } | null) {
   const ticketNumbers = tickets.map(t => t.ticketNumber).join(', ');
 
   const calTitle = encodeURIComponent(eventData?.title || 'Puneri Mallus Event');
@@ -526,8 +522,7 @@ export async function sendEventTicketEmail(to: string, bookingId: string, ticket
   const calDetails = encodeURIComponent('Your event passes are attached in your email!');
   const googleCalendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${calTitle}&location=${calLocation}&details=${calDetails}`;
 
-  try {
-    return await resend.emails.send({
+  const { error: sendError } = await resend.emails.send({
       from: FROM,
       to: to,
       subject: `Your passes are confirmed — ${eventData?.title || 'Puneri Mallus'}`,
@@ -577,7 +572,16 @@ export async function sendEventTicketEmail(to: string, bookingId: string, ticket
         }
       ]
     });
-  } catch (error) {
-    console.error("MAIL_TICKET_ERROR:", error);
-  }
+  // Throw so callers can record the failure and retry; a silent miss means a paid user never gets their email.
+  if (sendError) throw new Error(`MAIL_TICKET_ERROR: ${sendError.message}`);
+}
+
+export async function sendAdminPaymentAlert(subject: string, body: string) {
+  const { error: sendError } = await resend.emails.send({
+    from: FROM,
+    to: process.env.PAYMENT_ALERT_EMAIL || process.env.EMAIL_USER || "punerimallus1@gmail.com",
+    subject,
+    text: body,
+  });
+  if (sendError) throw new Error(`MAIL_ADMIN_PAYMENT_ALERT_ERROR: ${sendError.message}`);
 }

@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { 
   Ticket, Loader2, ArrowLeft, Users, 
-  PauseCircle, PlayCircle, IndianRupee, ShieldCheck, Search
+  PauseCircle, PlayCircle, IndianRupee, ShieldCheck, Search, Mail
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAlert } from '@/context/AlertContext';
@@ -53,6 +53,29 @@ export default function BoxOfficeDashboard() {
       }
     } catch (err) {
       showAlert("Status override failed", "error");
+    }
+  };
+
+  // Resend passes. Leave the prompt as-is to use the booking email, or type a corrected one.
+  const resendPasses = async (booking: any) => {
+    const input = window.prompt("Send passes to which email?", booking.email || "");
+    if (input === null) return;
+    const email = input.trim();
+    try {
+      const res = await fetch('/api/tickets/resend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId: booking.id, email: email && email !== booking.email ? email : undefined })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        showAlert(`Passes sent to ${email || booking.email}`, "success");
+        if (selectedEventId) fetchDashboard(selectedEventId);
+      } else {
+        showAlert(data.error || `Resend failed (${data.status || res.status})`, "error");
+      }
+    } catch {
+      showAlert("Resend failed", "error");
     }
   };
 
@@ -165,6 +188,7 @@ export default function BoxOfficeDashboard() {
                       <th className="p-6">Tickets Acquired</th>
                       <th className="p-6">Amount Paid</th>
                       <th className="p-6">Transaction Ref</th>
+                      <th className="p-6">Delivery</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5 text-sm font-bold">
@@ -186,10 +210,20 @@ export default function BoxOfficeDashboard() {
                           <span className="font-mono text-[10px] text-zinc-500 block">{booking.razorpay_payment_id}</span>
                           <span className="text-[9px] text-zinc-600 block mt-1">{new Date(booking.created_at).toLocaleDateString('en-IN')}</span>
                         </td>
+                        <td className="p-6">
+                          <span className={`text-[9px] uppercase tracking-widest block mb-2 ${booking.status === 'REFUNDED' ? 'text-zinc-500' : booking.email_status === 'FAILED' ? 'text-brandRed' : booking.email_status === 'SENT' ? 'text-green-500' : 'text-zinc-500'}`}>
+                            {booking.status === 'REFUNDED' ? 'Refunded' : booking.email_status === 'FAILED' ? 'Email failed' : booking.email_status === 'SENT' ? 'Emailed' : 'Unknown'}
+                          </span>
+                          {booking.status !== 'REFUNDED' && (
+                            <button onClick={() => resendPasses(booking)} className="flex items-center gap-1 text-[9px] uppercase tracking-widest text-zinc-300 border border-white/10 rounded-lg px-3 py-1.5 hover:bg-white hover:text-black transition-all">
+                              <Mail size={10} /> Resend
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     ))}
                     {filteredBookings.length === 0 && (
-                      <tr><td colSpan={4} className="p-10 text-center text-zinc-500 italic">No bookings found matching query.</td></tr>
+                      <tr><td colSpan={5} className="p-10 text-center text-zinc-500 italic">No bookings found matching query.</td></tr>
                     )}
                   </tbody>
                 </table>
