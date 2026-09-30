@@ -2,7 +2,7 @@
 // Route handlers import from here; the logic itself lives in fulfil.ts / delivery.ts.
 
 import Razorpay from 'razorpay';
-import { insertBookingWithAmountFallback } from './booking-amount';
+import { insertBookingWithAmountFallback, insertWithWholeRupeeFallback } from './booking-amount';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { ObjectId } from 'mongodb';
 import clientPromise from '@/lib/mongodb';
@@ -243,19 +243,21 @@ export const fulfilmentDeps: FulfilmentDeps = {
     const profile = (await must(
       db.from('profiles').select('email, phone_number').eq('id', order.user_id).maybeSingle(),
     )) as { email: string | null; phone_number: string | null } | null;
-    await must(
-      db.from('payments').insert({
-        user_id: order.user_id,
-        email: order.receipt_email || profile?.email,
-        phone_number: profile?.phone_number || '',
-        razorpay_order_id: order.razorpay_order_id,
-        razorpay_payment_id: paymentId,
-        payment_type: order.payment_type,
-        plan: order.plan || 'NONE',
-        amount: order.base_amount,
-        status: 'SUCCESS',
-      }),
+    const ledgerRow = {
+      user_id: order.user_id,
+      email: order.receipt_email || profile?.email,
+      phone_number: profile?.phone_number || '',
+      razorpay_order_id: order.razorpay_order_id,
+      razorpay_payment_id: paymentId,
+      payment_type: order.payment_type,
+      plan: order.plan || 'NONE',
+      amount: order.base_amount,
+      status: 'SUCCESS',
+    };
+    const { error: ledgerErr } = await insertWithWholeRupeeFallback(ledgerRow, 'amount', (r) =>
+      db.from('payments').insert(r).select('razorpay_payment_id').maybeSingle(),
     );
+    if (ledgerErr) throw new Error(ledgerErr.message);
   },
 
   async alertAdmin(subject, body) {

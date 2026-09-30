@@ -17,6 +17,30 @@ describe('fulfilOrder: event tickets', () => {
     expect(w.loyalty.user_1).toBe(110); // +10 non-member points
   });
 
+  it('an amount with paise (member discount) is fulfilled even though the booking column is an integer', async () => {
+    // Production incident: 1.60 -> 'invalid input syntax for type integer: "1.6"', order paid but never fulfilled.
+    const w = makeWorld(
+      [makeOrder({ base_amount: 424.15, amount_paise: 43430, cart: [{ categoryId: 'cat_ga', name: 'General', prefix: 'GA', qty: 1, unitPrice: 424.15 }] })],
+      [payment({ amount: 43430 })],
+    );
+    const res = await fulfilOrder('order_1', { paymentId: 'pay_1', source: 'WEBHOOK' }, w.deps);
+
+    expect(res.outcome).toBe('FULFILLED');
+    expect(w.bookings.get(res.bookingId!)!.amount_paid).toBe(424); // whole rupees in the integer column
+    expect(w.orders.get('order_1')!.base_amount).toBe(424.15);     // exact amount kept on the order
+    expect(w.orders.get('order_1')!.status).toBe('FULFILLED');
+  });
+
+  it('the exact paise case from production (1.60) is fulfilled by the webhook, not left as PAID', async () => {
+    const w = makeWorld(
+      [makeOrder({ base_amount: 1.6, amount_paise: 164, cart: [{ categoryId: 'cat_ga', name: 'General', prefix: 'GA', qty: 1, unitPrice: 1.6 }] })],
+      [payment({ amount: 164 })],
+    );
+    const res = await fulfilOrder('order_1', { paymentId: 'pay_1', source: 'WEBHOOK' }, w.deps);
+    expect(res.outcome).toBe('FULFILLED');
+    expect(w.bookings.size).toBe(1);
+  });
+
   it('tab closed after paying: the webhook alone delivers the passes', async () => {
     const w = makeWorld();
     const res = await fulfilOrder('order_1', { paymentId: 'pay_1', source: 'WEBHOOK' }, w.deps);

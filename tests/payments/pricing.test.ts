@@ -24,6 +24,20 @@ describe('quoteEventCart', () => {
     expect(q.lines).toHaveLength(2);
   });
 
+  it('member discounts routinely produce paise, so every amount column must cope with fractions', () => {
+    const q = quoteEventCart({ ...base, cart: { ga: 1 }, isMember: true, memberDiscountPercent: 15 });
+    expect(q.total).toBeCloseTo(255, 5);
+    const odd = quoteEventCart({
+      ...base,
+      categories: [{ id: 'x', name: 'X', prefix: 'X', price: 499, capacity: null, sold: 0, active: true }],
+      cart: { x: 1 },
+      isMember: true,
+      memberDiscountPercent: 15,
+    });
+    expect(odd.total).toBeCloseTo(424.15, 5);
+    expect(Number.isInteger(odd.total)).toBe(false);
+  });
+
   it('applies the member discount only to members', () => {
     expect(quoteEventCart({ ...base, cart: { ga: 1 }, isMember: true, memberDiscountPercent: 10 }).total).toBe(270);
     expect(quoteEventCart({ ...base, cart: { ga: 1 }, isMember: false, memberDiscountPercent: 10 }).total).toBe(300);
