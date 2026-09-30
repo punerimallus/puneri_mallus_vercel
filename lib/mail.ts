@@ -16,7 +16,7 @@ const resend = {
   },
 };
 
-const FROM = 'Puneri Mallus Tribe <hello@punerimallus.com>';
+export const FROM = 'Puneri Mallus Tribe <hello@punerimallus.com>';
 
 // ---------------------------------------------------------------------------
 // Shared template. Every email uses the same layout as the ticket confirmation:
@@ -24,7 +24,7 @@ const FROM = 'Puneri Mallus Tribe <hello@punerimallus.com>';
 // no emoji or image icons, and user-supplied text HTML-escaped.
 // ---------------------------------------------------------------------------
 
-const esc = (v: unknown): string =>
+export const esc = (v: unknown): string =>
   String(v ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -32,22 +32,22 @@ const esc = (v: unknown): string =>
     .replace(/"/g, '&quot;');
 
 // Always an absolute https link on our own domain, never a bare host or "undefined/...".
-function siteUrl(path = ''): string {
+export function siteUrl(path = ''): string {
   const raw = (process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://punerimallus.com').trim().replace(/\/+$/, '');
   const base = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
   return `${base}${path}`;
 }
 
-const para = (html: string) =>
+export const para = (html: string) =>
   `<p style="margin: 0 0 14px; color: #4b5563; font-size: 14px; line-height: 1.6;">${html}</p>`;
 
-const panel = (html: string) =>
+export const panel = (html: string) =>
   `<div style="margin: 20px; background-color: #f9fafb; border-radius: 14px; padding: 22px; border: 1px solid #e5e7eb;">${html}</div>`;
 
-const detail = (label: string, valueHtml: string, mono = false) =>
+export const detail = (label: string, valueHtml: string, mono = false) =>
   `<p style="margin: 0 0 10px; font-size: 13px; color: #4b5563;"><strong>${label}:</strong> <span${mono ? ' style="font-family: monospace;"' : ''}>${valueHtml}</span></p>`;
 
-function emailLayout(opts: {
+export function emailLayout(opts: {
   heading: string;
   subtitle?: string;
   body?: string;
@@ -96,13 +96,15 @@ export interface MailOptions {
   subject: string;
   text?: string;
   html?: string;
+  headers?: Record<string, string>;
+  replyTo?: string;
   attachments?: {
     filename: string;
     content: string | Buffer;
   }[];
 }
 
-export const sendMail = async ({ to, subject, text, html, attachments }: MailOptions) => {
+export const sendMail = async ({ to, subject, text, html, attachments, headers, replyTo }: MailOptions) => {
   try {
     return await resend.emails.send({
       from: FROM,
@@ -111,6 +113,8 @@ export const sendMail = async ({ to, subject, text, html, attachments }: MailOpt
       text: text || "You have a new message from Puneri Mallus.",
       html: html || text,
       attachments: attachments,
+      ...(headers ? { headers } : {}),
+      ...(replyTo ? { replyTo } : {}),
     });
   } catch (error) {
     console.error("GENERIC_MAIL_SEND_ERROR:", error);
@@ -469,6 +473,32 @@ export const sendFootballReceiptEmail = async (to: string, teamName: string, ord
     }),
   });
 };
+
+export interface BatchMessage {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+  headers?: Record<string, string>;
+  replyTo?: string;
+}
+
+/** Sends up to 100 separate emails in one Resend call. Each message keeps its own single recipient. */
+export async function sendBatch(messages: BatchMessage[]): Promise<{ ids: string[]; error: string | null }> {
+  const { data, error } = await getResend().batch.send(
+    messages.map((m) => ({
+      from: FROM,
+      to: m.to,
+      subject: m.subject,
+      html: m.html,
+      text: m.text,
+      ...(m.headers ? { headers: m.headers } : {}),
+      ...(m.replyTo ? { replyTo: m.replyTo } : {}),
+    })),
+  );
+  if (error) return { ids: [], error: error.message };
+  return { ids: (data?.data || []).map((d) => d.id), error: null };
+}
 
 export async function sendEventTicketEmail(to: string, bookingId: string, tickets: { categoryName: string; ticketNumber: string }[], totalAmount: number, pdfBase64: string, eventData: { title?: string; location?: string } | null) {
   const ticketNumbers = tickets.map(t => t.ticketNumber).join(', ');

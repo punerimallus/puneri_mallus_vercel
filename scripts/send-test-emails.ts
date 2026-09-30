@@ -2,22 +2,19 @@
 // which ones land in spam. Uses the real functions from lib/mail.ts, so what you
 // receive is exactly what customers receive.
 //
-//   npx tsx --env-file=.env.local scripts/send-test-emails.ts            # to the default address
-//   npx tsx --env-file=.env.local scripts/send-test-emails.ts me@x.com   # to another address
+//   npx tsx --env-file=.env.local scripts/send-test-emails.ts                 # to the default address
+//   npx tsx --env-file=.env.local scripts/send-test-emails.ts a@x.com b@y.com # to one or more addresses
 //
 // Needs RESEND_API_KEY in .env.local (or the shell). Nothing is sent to real customers
 // or to the real admin inbox: admin alerts are redirected to the same test address.
 
-const TO = process.argv[2] || 'vineetpuliyath19@gmail.com';
+const RECIPIENTS = process.argv.slice(2).filter((a) => a.includes('@'));
+if (RECIPIENTS.length === 0) RECIPIENTS.push('vineetpuliyath19@gmail.com');
 
 if (!process.env.RESEND_API_KEY) {
   console.error('RESEND_API_KEY is not set. Put it in .env.local and run with --env-file=.env.local');
   process.exit(1);
 }
-
-// Admin alerts are normally addressed to these; point them at the test inbox.
-process.env.EMAIL_USER = TO;
-process.env.PAYMENT_ALERT_EMAIL = TO;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -29,9 +26,15 @@ const SWALLOWS_ERRORS = new Set([
   'Admin: verification review',
 ]);
 
-async function main() {
+async function sendAllTo(TO: string) {
+  // Admin alerts are normally addressed to these; point them at the test inbox.
+  process.env.EMAIL_USER = TO;
+  process.env.PAYMENT_ALERT_EMAIL = TO;
+
   const mail = await import('../lib/mail');
   const { generateTicketPdf, fetchLogoBase64 } = await import('../lib/payments/ticket-pdf');
+  const { buildCampaignEmail } = await import('../lib/bulk-mail/build');
+  const { CAMPAIGN_TEMPLATES } = await import('../lib/bulk-mail/templates');
 
   const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL || 'https://punerimallus.com').replace(/\/+$/, '');
   const bookingId = '7f3c2a10-5b9e-4c1d-9a6e-2d8f0b1c4e77';
@@ -69,6 +72,11 @@ async function main() {
     ['Admin: verification review', () => mail.sendAdminVerificationAlert('Sample Business')],
     ['Admin: access granted', () => mail.sendAdminAccessEmail(TO, 'Temp-Pass-123')],
     ['Football registration', () => mail.sendFootballReceiptEmail(TO, 'Sample FC', 'order_TEST123', 'pay_TEST123')],
+    ['Bulk: announcement (Email Studio)', async () => {
+      const tpl = CAMPAIGN_TEMPLATES.find((t) => t.id === 'announcement')!.content;
+      const built = buildCampaignEmail(tpl, { email: TO, name: 'Friend' }, `${baseUrl}/api/email/unsubscribe?t=sample`);
+      return mail.sendMail({ to: TO, subject: built.subject, html: built.html, text: built.text, headers: built.headers, replyTo: 'hello@punerimallus.com' });
+    }],
     ['Admin: payment needs attention', () => mail.sendAdminPaymentAlert('Payment needs attention (test)', 'This is a test alert. No action needed.')],
   ];
 
@@ -88,6 +96,12 @@ async function main() {
 
   console.log(`\nDone: ${jobs.length - failed} sent, ${failed} failed.`);
   console.log('Check the inbox AND the Spam/Promotions tabs, then note which subjects landed where.');
+  return failed;
+}
+
+async function main() {
+  let failed = 0;
+  for (const to of RECIPIENTS) failed += await sendAllTo(to);
   process.exit(failed ? 1 : 0);
 }
 
