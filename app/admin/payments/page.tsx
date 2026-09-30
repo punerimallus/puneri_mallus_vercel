@@ -5,7 +5,7 @@ import {
   ShieldCheck, Zap, Info, Save, Loader2, 
   IndianRupee, ToggleLeft, ToggleRight, Store, 
   Crown, ListChecks, Calendar, CalendarDays, Infinity,
-  Receipt, ArrowUpRight, Search, Filter
+  Receipt, ArrowUpRight, Search, Filter, AlertTriangle, RefreshCw
 } from 'lucide-react';
 import { useAlert } from '@/context/AlertContext';
 
@@ -31,6 +31,35 @@ export default function AdminPaymentSettings() {
 
   // Ledger State
   const [payments, setPayments] = useState<any[]>([]);
+
+  // Payment health: orders that are stuck, need a refund, or whose email failed
+  const [problemOrders, setProblemOrders] = useState<any[]>([]);
+  const [reconciling, setReconciling] = useState(false);
+
+  const loadProblemOrders = async () => {
+    try {
+      const res = await fetch('/api/admin/payments?view=orders');
+      const data = await res.json();
+      if (Array.isArray(data)) setProblemOrders(data);
+    } catch {
+      // The rest of the page still works without this panel.
+    }
+  };
+
+  const runReconcile = async () => {
+    setReconciling(true);
+    try {
+      const res = await fetch('/api/razorpay/reconcile', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      showAlert(`Checked ${data.checked} orders: ${data.fulfilled.length} recovered, ${data.needsAttention.length} need attention, ${data.emailsSent}/${data.emailsRetried} emails re-sent`, "success");
+      loadProblemOrders();
+    } catch (err: any) {
+      showAlert(err.message || "Reconcile failed", "error");
+    } finally {
+      setReconciling(false);
+    }
+  };
   
   // Search and Filter States
   const [searchTerm, setSearchTerm] = useState("");
@@ -60,6 +89,7 @@ export default function AdminPaymentSettings() {
       }
     }
     fetchAdminData();
+    loadProblemOrders();
   }, []);
 
   const handleSave = async () => {
@@ -247,6 +277,51 @@ export default function AdminPaymentSettings() {
           >
             {saving ? <Loader2 className="animate-spin" size={24} /> : <><Save size={24} /> Deploy Changes</>}
           </button>
+        </div>
+
+        {/* PAYMENT HEALTH */}
+        <div className="space-y-6">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div className="space-y-1">
+              <h2 className="text-3xl font-black uppercase italic tracking-tighter flex items-center gap-3">
+                <AlertTriangle className="text-yellow-500" size={28} /> Payment Health
+              </h2>
+              <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Paid orders not yet delivered, refunds to action, and failed emails. Runs automatically every day.</p>
+            </div>
+            <button onClick={runReconcile} disabled={reconciling} className="flex items-center gap-2 px-6 py-3 bg-white text-black rounded-xl text-xs font-black uppercase tracking-widest disabled:opacity-50">
+              {reconciling ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Run Reconcile Now
+            </button>
+          </div>
+          <div className="bg-zinc-950 border border-white/5 rounded-[30px] overflow-x-auto">
+            <table className="w-full text-left min-w-[800px]">
+              <thead>
+                <tr className="text-[9px] uppercase tracking-[0.2em] text-zinc-500 font-black border-b border-white/10">
+                  <th className="p-5">Order</th>
+                  <th className="p-5">Type</th>
+                  <th className="p-5">Buyer</th>
+                  <th className="p-5">Amount</th>
+                  <th className="p-5">State</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5 text-xs font-bold">
+                {problemOrders.length === 0 ? (
+                  <tr><td colSpan={5} className="p-8 text-center text-zinc-500 italic">All paid orders delivered.</td></tr>
+                ) : problemOrders.map((o) => (
+                  <tr key={o.razorpay_order_id}>
+                    <td className="p-5 font-mono text-[10px] text-zinc-400">{o.razorpay_order_id}<span className="block text-zinc-600">{o.razorpay_payment_id || '-'}</span></td>
+                    <td className="p-5 uppercase">{o.payment_type}{o.plan ? ` / ${o.plan}` : ''}</td>
+                    <td className="p-5 text-zinc-300">{o.receipt_email || '-'}</td>
+                    <td className="p-5">₹{((o.amount_paise || 0) / 100).toFixed(2)}</td>
+                    <td className="p-5">
+                      <span className={`uppercase ${o.status === 'NEEDS_ATTENTION' ? 'text-brandRed' : 'text-yellow-500'}`}>{o.status === 'FULFILLED' ? `Email ${o.email_status}` : o.status}</span>
+                      <span className="block text-[10px] text-zinc-500 font-normal">{o.status_reason || o.email_error || ''}</span>
+                      <span className="block text-[9px] text-zinc-600">{formatDate(o.created_at)}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         {/* FINANCIAL LEDGER */}

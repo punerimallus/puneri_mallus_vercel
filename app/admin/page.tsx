@@ -7,7 +7,8 @@ import {
   MessageSquare,
   Megaphone, UserCircle2,
   PlaySquare,
-  Ticket
+  Ticket,
+  Mail
 } from 'lucide-react';
 import Link from 'next/link';
 import AddAdminCard from '@/components/admin/AddAdminCard';
@@ -95,6 +96,14 @@ export default function AdminPortal() {
       link: "/admin/boxoffice",
       status: "Live",
       color: "from-green-400/20"
+    },
+    {
+      title: "Email Studio",
+      desc: "Write and send emails to any list in the Puneri Mallus look, with unsubscribe handled for you.",
+      icon: <Mail className="text-brandRed" size={32} />,
+      link: "/admin/emails",
+      status: "New",
+      color: "from-brandRed/30"
     },
     {
       title: "Support Tickets",

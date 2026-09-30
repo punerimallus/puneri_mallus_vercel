@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import clientPromise from '@/lib/mongodb';
+import { checkAdminAccess } from '@/lib/admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,6 +12,9 @@ const supabaseAdmin = createClient(
 
 export async function GET(req: Request) {
   try {
+    const { isAdmin } = await checkAdminAccess();
+    if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
     const { searchParams } = new URL(req.url);
     const eventId = searchParams.get('eventId');
 
@@ -73,6 +77,9 @@ export async function GET(req: Request) {
 
 export async function PATCH(req: Request) {
   try {
+    const { isAdmin } = await checkAdminAccess();
+    if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
     const { categoryId, active } = await req.json();
     
     const { error } = await supabaseAdmin

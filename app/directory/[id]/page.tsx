@@ -17,6 +17,7 @@ import MartVerificationModal from '@/components/MartVerificationModal';
 import TribeAlert from '@/components/TribeAlert';
 import TribeConfirm from '@/components/TribeConfirm';
 import MartInvoiceGate from '@/components/MartInvoiceGate';
+import { waitForOrder, orderRef } from '@/lib/payments/client';
 
 interface UserProfile {
   martUnlocked?: boolean;
@@ -178,7 +179,32 @@ export default function ProfessionalDetailsPage() {
     triggerRazorpay(verifiedInvoiceEmail || currentUser.email);
   };
 
+  const showMartAlert = (message: string, type: 'success' | 'error') =>
+    setAlertConfig({ isVisible: true, message, type });
+
+  // Called after the Razorpay handler fails or the modal closes without one. The
+  // server checks Razorpay itself, so a paid order is unlocked either way.
+  const settleMartOrder = async (orderId: string, { fromDismiss = false } = {}) => {
+    if (!fromDismiss) showMartAlert("Payment received. Unlocking directory...", 'success');
+    const result = await waitForOrder(orderId, { stopIfUnpaid: fromDismiss, timeoutMs: fromDismiss ? 12_000 : 45_000 });
+    if (result.status === 'FULFILLED') {
+      setIsUnlocked(true);
+      showMartAlert("Access Granted! Unlocking directory...", 'success');
+      setTimeout(() => { window.location.href = window.location.pathname + "?unlocked=true"; }, 2000);
+      return;
+    }
+    setPaymentLoading(false);
+    if (result.status === 'NEEDS_ATTENTION') {
+      showMartAlert(`Payment received but access could not be unlocked automatically. Our team has been alerted. Ref: ${orderRef(orderId)}`, 'error');
+    } else if (result.status === 'CREATED' || result.status === 'FAILED') {
+      if (!fromDismiss) showMartAlert(`Payment not confirmed. If money was debited it will be auto-refunded or unlocked shortly. Ref: ${orderRef(orderId)}`, 'error');
+    } else if (!fromDismiss || result.status !== 'UNKNOWN') {
+      showMartAlert(`Payment received. Access will unlock shortly. Ref: ${orderRef(orderId)}`, 'success');
+    }
+  };
+
   const triggerRazorpay = async (finalEmail: string) => {
+    if (paymentLoading) return;
     setPaymentLoading(true); 
 
     try {
@@ -188,12 +214,19 @@ export default function ProfessionalDetailsPage() {
         body: JSON.stringify({ 
           businessId: id, 
           paymentType: 'MART',
-          plan: selectedPlan.toUpperCase()
+          plan: selectedPlan.toUpperCase(),
+          invoiceEmail: finalEmail
         })
       });
 
       const orderData = await orderRes.json();
+      if (!orderRes.ok) {
+        showMartAlert(orderData.error || "Gateway Error", 'error');
+        setPaymentLoading(false);
+        return;
+      }
 
+      let handled = false;
       const options = {
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID, 
         amount: orderData.amount,
@@ -204,43 +237,48 @@ export default function ProfessionalDetailsPage() {
         method: { netbanking: true, card: true, upi: true, wallet: true, emi: false, paylater: false },
         config: { display: { sequence: ['block.banks', 'block.cards'], preferences: { show_default_blocks: true } } },
         handler: async function (response: any) {
+          handled = true;
           setPaymentLoading(true); 
-          
-          const verifyRes = await fetch('/api/razorpay/verify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-              userId: currentUser.id,
-              paymentType: 'MART', 
-              plan: selectedPlan.toUpperCase(),
-              amount: martPlans[selectedPlan].price,
-              invoiceEmail: finalEmail
-            })
-          });
+          try {
+            const verifyRes = await fetch('/api/razorpay/verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+              })
+            });
 
-          const verifyData = await verifyRes.json();
-          
-          if (verifyData.success) {
-            setIsUnlocked(true); 
-            setAlertConfig({ isVisible: true, message: "Access Granted! Unlocking directory...", type: 'success' });
-            setTimeout(() => { window.location.href = window.location.pathname + "?unlocked=true"; }, 2000);
-          } else {
-            setAlertConfig({ isVisible: true, message: "Verification Failed", type: 'error' });
-            setPaymentLoading(false);
+            const verifyData = await verifyRes.json();
+            if (verifyData.success) {
+              setIsUnlocked(true); 
+              showMartAlert("Access Granted! Unlocking directory...", 'success');
+              setTimeout(() => { window.location.href = window.location.pathname + "?unlocked=true"; }, 2000);
+              return;
+            }
+          } catch {
+            // Fall through to polling: the payment may well have gone through.
           }
+          await settleMartOrder(orderData.id);
         },
         prefill: { 
           email: finalEmail, 
           contact: currentUser?.phone || "" 
         },
         theme: { color: "#FF0000" },
-        modal: { ondismiss: () => setPaymentLoading(false) } 
+        modal: {
+          ondismiss: () => {
+            setPaymentLoading(false);
+            if (!handled) settleMartOrder(orderData.id, { fromDismiss: true });
+          }
+        } 
       };
 
       const rzp = new (window as any).Razorpay(options);
+      rzp.on('payment.failed', (resp: any) => {
+        showMartAlert(resp?.error?.description || "Payment failed. You can retry.", 'error');
+      });
       rzp.open();
 
     } catch (err) {

@@ -1,172 +1,156 @@
 import { NextResponse } from 'next/server';
-import Razorpay from 'razorpay';
-import { createClient } from '@supabase/supabase-js';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import clientPromise from '@/lib/mongodb';
-import { ObjectId } from 'mongodb';
+import { razorpay, supabaseAdmin, getEventSnapshot } from '@/lib/payments/server';
+import {
+  grossUpToPaise,
+  martPlanPrice,
+  membershipPrice,
+  quoteEventCart,
+  TicketCategory,
+} from '@/lib/payments/pricing';
+import { CartLine, EventSnapshot, PaymentInputError, PaymentType } from '@/lib/payments/types';
 
-const razorpay = new Razorpay({
-  key_id: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID!,
-  key_secret: process.env.RAZORPAY_KEY_SECRET!,
-});
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function cleanEmail(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const v = value.trim().toLowerCase();
+  return EMAIL_RE.test(v) ? v : null;
+}
 
 export async function POST(req: Request) {
   try {
-    const { paymentType, plan, cart, eventId, pointsToRedeem = 0 } = await req.json();
+    const body = await req.json();
+    const { paymentType, plan, cart, eventId, pointsToRedeem = 0 } = body;
 
-    const supabaseAdmin = createClient(
+    const cookieStore = await cookies();
+    const supabaseAuth = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY! 
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { cookies: { get(name: string) { return cookieStore.get(name)?.value; } } }
     );
+    const { data: { user } } = await supabaseAuth.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Please log in to continue.' }, { status: 401 });
 
-    const { data: settings, error } = await supabaseAdmin
-      .from('app_settings')
-      .select('*')
-      .limit(1)
-      .single();
+    const db = supabaseAdmin();
+    const { data: profile } = await db
+      .from('profiles')
+      .select('email, is_member, loyalty_points, mart_unlocked')
+      .eq('id', user.id)
+      .maybeSingle();
 
+    const { data: settings, error } = await db.from('app_settings').select('*').limit(1).single();
     if (error) {
       console.error("Failed to fetch settings from DB. Falling back to default pricing.", error.message);
     }
 
-    let targetPrice = 99; 
-    
-    if (paymentType === "LIFETIME") {
-      targetPrice = settings?.membershipPrice || settings?.membership_price || 999;
-    } 
-    else if (paymentType === "MART") {
-      if (plan === "MONTHLY") targetPrice = settings?.martMonthlyPrice || settings?.mart_monthly_price || 99;
-      else if (plan === "YEARLY") targetPrice = settings?.martYearlyPrice || settings?.mart_yearly_price || 899;
-      else if (plan === "LIFETIME") targetPrice = settings?.martLifetimePrice || settings?.mart_lifetime_price || 2499;
-    }
-    else if (paymentType === "FOOTBALL") {
-      targetPrice = settings?.footballFee || settings?.football_fee || 1500;
-    }
-    // 🔥 SECURE EVENT TICKETING LOGIC
-    else if (paymentType === "EVENT_TICKET") {
-      if (!cart || !eventId) return NextResponse.json({ error: "Missing ticket data" }, { status: 400 });
-      
-      const { data: categories } = await supabaseAdmin
-        .from('event_ticket_categories')
-        .select('*')
-        .eq('event_id', eventId);
+    let type: PaymentType;
+    let basePrice: number;
+    let martPlan: string | null = null;
+    let lines: CartLine[] | null = null;
+    let eventSnapshot: EventSnapshot | null = null;
+    let pointsApplied = 0;
+    let receiptEmail = cleanEmail(body.email) || cleanEmail(body.invoiceEmail) || cleanEmail(profile?.email) || cleanEmail(user.email);
 
-      if (!categories) return NextResponse.json({ error: "Categories not found" }, { status: 404 });
-
-      let backendCalculatedTotal = 0;
-      let currentCartQuantity = 0; // 🔥 Track incoming quantity
-      
-      for (const [catId, qty] of Object.entries(cart)) {
-        const cat = categories.find(c => c.id === catId);
-        if (!cat) throw new Error("Invalid category selected");
-        
-        if (cat.sold + (qty as number) > cat.capacity) {
-          throw new Error(`Oops! "${cat.name}" is sold out. Someone just bought the last ones.`);
-        }
-        backendCalculatedTotal += cat.price * (qty as number);
-        currentCartQuantity += (qty as number);
+    if (paymentType === 'LIFETIME') {
+      if (profile?.is_member) throw new PaymentInputError('You are already a lifetime member.', 409);
+      type = 'LIFETIME';
+      basePrice = membershipPrice(settings);
+    } else if (paymentType === 'MART') {
+      if (profile?.is_member) throw new PaymentInputError('Your lifetime membership already includes Mallu Mart.', 409);
+      const { data: sub } = await db
+        .from('mart_subscriptions')
+        .select('plan, status')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (sub?.plan === 'LIFETIME' && sub?.status === 'ACTIVE') {
+        throw new PaymentInputError('You already have lifetime Mallu Mart access.', 409);
       }
+      const quote = martPlanPrice(settings, plan);
+      type = 'MART';
+      martPlan = quote.plan;
+      basePrice = quote.price;
+    } else if (paymentType === 'EVENT_TICKET') {
+      if (!cart || !eventId || typeof eventId !== 'string') throw new PaymentInputError('Missing ticket data');
+      type = 'EVENT_TICKET';
 
-      // 🔥 CONSOLIDATED VERIFICATION & IDENTITY LOGIC
-      const cookieStore = await cookies();
-      const supabaseAuth = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        { cookies: { get(name: string) { return cookieStore.get(name)?.value; } } }
-      );
+      eventSnapshot = await getEventSnapshot(eventId);
+      if (!eventSnapshot) throw new PaymentInputError('Event not found', 404);
 
-      const { data: { user } } = await supabaseAuth.auth.getUser();
+      const { data: categories } = await db.from('event_ticket_categories').select('*').eq('event_id', eventId);
+      if (!categories || categories.length === 0) throw new PaymentInputError('Categories not found', 404);
 
-      if (user) {
-        // ==========================================
-        // 🔥 GLOBAL CAP ENFORCEMENT (Max 7 per ROOT user)
-        // ==========================================
-        const { data: existingBookings } = await supabaseAdmin
-          .from('ticket_bookings')
-          .select('tickets_data')
-          .eq('event_id', eventId)
-          .eq('user_id', user.id); // Query by root identity, NOT email
+      // Global cap is per ROOT user, not per email.
+      const { data: existingBookings } = await db
+        .from('ticket_bookings')
+        .select('tickets_data, status')
+        .eq('event_id', eventId)
+        .eq('user_id', user.id);
+      const previouslyBought = (existingBookings || [])
+        .filter((b) => b.status !== 'REFUNDED')
+        .reduce((n, b) => n + (b.tickets_data?.length || 0), 0);
 
-        let previouslyBought = 0;
-        if (existingBookings) {
-          existingBookings.forEach(b => {
-            previouslyBought += (b.tickets_data?.length || 0);
-          });
-        }
-
-        if (previouslyBought + currentCartQuantity > 7) {
-          throw new Error(`Limit Exceeded: Your main account has already secured ${previouslyBought} passes. You can only buy a maximum of 7 tickets total across all emails.`);
-        }
-
-        // ==========================================
-        // Profile Discounts & Loyalty Logic
-        // ==========================================
-        const { data: profile } = await supabaseAdmin
-          .from('profiles')
-          .select('is_member, loyalty_points')
-          .eq('id', user.id)
-          .single();
-
-        // STEP 1: Apply Tribe Member Percentage Discount FIRST
-        if (profile?.is_member) {
-          const client = await clientPromise;
-          const db = client.db("punerimallus");
-          const eventData = await db.collection("events").findOne({ _id: new ObjectId(eventId) });
-
-          const discountPercent = eventData?.memberDiscount || 0;
-          if (discountPercent > 0) {
-            const discountAmount = (backendCalculatedTotal * discountPercent) / 100;
-            backendCalculatedTotal -= discountAmount;
-          }
-        }
-
-        // STEP 2: Apply Loyalty Points Flat Deduction SECOND
-        if (pointsToRedeem > 0) {
-          const MIN_REDEEM_THRESHOLD = 50;
-          if (pointsToRedeem < MIN_REDEEM_THRESHOLD) {
-            throw new Error(`A minimum of ${MIN_REDEEM_THRESHOLD} points is required to unlock redemption.`);
-          }
-
-          if (profile && profile.loyalty_points >= pointsToRedeem) {
-            const verifiedDiscount = Math.min(pointsToRedeem, backendCalculatedTotal);
-            backendCalculatedTotal -= verifiedDiscount;
-          } else {
-            throw new Error("Insufficient loyalty balance for redemption.");
-          }
-        }
-      } else if (pointsToRedeem > 0) {
-         throw new Error("Unauthorized redemption attempt.");
-      }
-
-      if (backendCalculatedTotal <= 0) throw new Error("Invalid amount");
-
-      targetPrice = backendCalculatedTotal; 
+      const quote = quoteEventCart({
+        cart,
+        categories: categories as TicketCategory[],
+        isLoggedIn: true,
+        isMember: !!profile?.is_member,
+        memberDiscountPercent: eventSnapshot.memberDiscount || 0,
+        pointsToRedeem,
+        loyaltyBalance: profile?.loyalty_points || 0,
+        previouslyBought,
+      });
+      lines = quote.lines;
+      pointsApplied = quote.pointsApplied;
+      basePrice = quote.total;
+      receiptEmail = cleanEmail(body.email) || receiptEmail;
+      if (!receiptEmail) throw new PaymentInputError('A valid email is required to deliver your passes.');
+    } else {
+      // FOOTBALL registration no longer takes payment; anything else is not a product we sell.
+      throw new PaymentInputError('Unsupported payment type');
     }
 
-    const RAZORPAY_FEE_PERCENTAGE = 0.0236;
-    const finalAmountWithTaxes = targetPrice / (1 - RAZORPAY_FEE_PERCENTAGE);
-    const amountInPaise = Math.round(finalAmountWithTaxes * 100);
+    const amountInPaise = grossUpToPaise(basePrice);
+    if (amountInPaise < 100) throw new PaymentInputError('Amount too low (Min ₹1)');
 
-    if (amountInPaise < 100) {
-      return NextResponse.json({ error: "Amount too low (Min ₹1)" }, { status: 400 });
-    }
-
-    const options = {
+    const order = await razorpay().orders.create({
       amount: amountInPaise,
-      currency: "INR",
-      receipt: `rcpt_${paymentType}_${Date.now()}`,
-      notes: { paymentType: paymentType, plan: plan || "NONE" }
-    };
+      currency: 'INR',
+      receipt: `rcpt_${type}_${Date.now()}`.slice(0, 40),
+      // Notes travel with every webhook, which helps when tracing a payment in the Razorpay dashboard.
+      notes: { paymentType: type, plan: martPlan || plan || 'NONE', userId: user.id, eventId: eventId || '' },
+    });
 
-    const order = await razorpay.orders.create(options);
-    return NextResponse.json(order);
-    
-  } catch (error: any) {
+    // The server's own record of what this order is for. Fulfilment reads this, never the browser.
+    const { error: insertErr } = await db.from('payment_orders').insert({
+      razorpay_order_id: order.id,
+      user_id: user.id,
+      payment_type: type,
+      plan: type === 'LIFETIME' ? 'LIFETIME' : martPlan,
+      event_id: type === 'EVENT_TICKET' ? eventId : null,
+      cart: lines,
+      event_snapshot: eventSnapshot,
+      points_to_redeem: pointsApplied,
+      is_member_at_order: !!profile?.is_member,
+      receipt_email: receiptEmail,
+      base_amount: basePrice,
+      amount_paise: amountInPaise,
+      currency: 'INR',
+      status: 'CREATED',
+    });
+    if (insertErr) {
+      // Without this row we could not fulfil the payment, so don't let the user pay.
+      console.error('PAYMENT_ORDER_RECORD_ERROR:', insertErr);
+      return NextResponse.json({ error: 'Could not start checkout. Please try again.' }, { status: 500 });
+    }
+
+    return NextResponse.json({ ...order, pointsApplied, baseAmount: basePrice });
+  } catch (error: unknown) {
+    if (error instanceof PaymentInputError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error("RAZORPAY_ORDER_ERROR:", error);
-    return NextResponse.json(
-      { error: error.message || "Failed to create order" }, 
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to create order' }, { status: 500 });
   }
 }
