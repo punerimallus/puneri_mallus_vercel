@@ -355,38 +355,44 @@ export async function sendMartSubscriptionEmail(to: string, plan: string, orderI
 }
 
 export async function sendPremiumMembershipEmail(to: string, orderId: string, paymentId: string) {
+  const base = (process.env.NEXT_PUBLIC_BASE_URL || 'https://punerimallus.com').replace(/\/+$/, '');
+  const profileUrl = `${/^https?:\/\//.test(base) ? base : `https://${base}`}/profile`;
+
   const { error: sendError } = await resend.emails.send({
       from: FROM,
       to: to,
-      subject: `Welcome to Premium membership`,
-      text: `Welcome to the premium tier of the Puneri Mallus Tribe. Plan: Lifetime Premium. Order ID: ${orderId}. Payment ID: ${paymentId}. Your permanent Premium Badge is now active.`,
+      subject: `Your Puneri Mallus membership is confirmed`,
+      text: `Your membership is confirmed. Plan: Lifetime Premium. Order ID: ${orderId}. Payment ID: ${paymentId}. Your Premium badge is now active on your profile: ${profileUrl}`,
       html: `
-        <div style="font-family: 'Segoe UI', sans-serif; max-width: 480px; margin: auto; background: #ffffff; color: #111827; padding: 36px; border-radius: 20px; border: 1px solid #e5e7eb;">
-          <div style="text-align: center; margin-bottom: 12px;">
-             <h1 style="font-size: 36px; margin: 0;">👑</h1>
+        <div style="font-family: 'Segoe UI', Helvetica, Arial, sans-serif; background-color: #f4f5f9; padding: 40px 20px; color: #111827;">
+          <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06);">
+            <div style="text-align: center; padding: 36px 20px 16px;">
+              <h1 style="color: #111827; font-size: 26px; font-weight: 700; margin: 0;">Puneri Mallus</h1>
+              <h2 style="color: #111827; font-size: 18px; font-weight: 600; margin: 14px 0 5px;">Your membership is confirmed</h2>
+              <p style="color: #6b7280; font-size: 13px; margin: 0;">Thank you for joining the Puneri Mallus Tribe.</p>
+            </div>
+            <div style="margin: 20px; background-color: #f9fafb; border-radius: 14px; padding: 22px; border: 1px solid #e5e7eb;">
+              <h3 style="margin: 0 0 14px; font-size: 15px; color: #111827; font-weight: 600;">Payment details</h3>
+              <p style="margin: 0 0 10px 0; font-size: 13px; color: #4b5563;"><strong>Plan:</strong> Lifetime Premium</p>
+              <p style="margin: 0 0 10px 0; font-size: 13px; color: #4b5563;"><strong>Order ID:</strong> <span style="font-family: monospace;">${orderId}</span></p>
+              <p style="margin: 0; font-size: 13px; color: #4b5563;"><strong>Payment ID:</strong> <span style="font-family: monospace;">${paymentId}</span></p>
+            </div>
+            <div style="margin: 20px;">
+              <h4 style="color: #111827; font-size: 12px; letter-spacing: 0.5px; border-bottom: 1px solid #f0f0f0; padding-bottom: 6px;">Your benefits</h4>
+              <ul style="color: #4b5563; font-size: 13px; line-height: 1.8; padding-left: 20px;">
+                <li>Permanent Premium badge on your profile</li>
+                <li>Free, unlimited access to all directory listings</li>
+                <li>Event invitations and discounts</li>
+                <li>A voice in community polls</li>
+              </ul>
+            </div>
+            <div style="text-align: center; margin: 28px 20px;">
+              <a href="${profileUrl}" target="_blank" style="display: inline-block; background-color: #111827; color: #fff; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 13px;">View your profile</a>
+            </div>
+            <div style="text-align: center; padding: 16px; background-color: #f9fafb;">
+              <p style="margin: 0; color: #4b5563; font-size: 12px;">If your account doesn't reflect these changes, reply to this email and we'll help.</p>
+            </div>
           </div>
-          <h2 style="color: #111827; text-align: center; margin-top: 0;">Welcome to Premium</h2>
-          <p style="text-align: center; color: #6b7280; font-size: 14px; margin-bottom: 28px;">Your transaction was successful. Welcome to the premium tier of the Puneri Mallus Tribe.</p>
-          <div style="background: #f9fafb; padding: 18px; border-radius: 12px; border: 1px solid #e5e7eb; margin-bottom: 28px;">
-            <p style="margin: 0 0 10px 0; font-size: 13px; color: #4b5563;"><strong>Plan:</strong> Lifetime Premium</p>
-            <p style="margin: 0 0 10px 0; font-size: 13px; color: #4b5563;"><strong>Order ID:</strong> <span style="font-family: monospace;">${orderId}</span></p>
-            <p style="margin: 0; font-size: 13px; color: #4b5563;"><strong>Payment ID:</strong> <span style="font-family: monospace;">${paymentId}</span></p>
-          </div>
-          <div style="margin-bottom: 28px;">
-            <h4 style="color: #111827; font-size: 12px; letter-spacing: 0.5px; border-bottom: 1px solid #f0f0f0; padding-bottom: 6px;">Your benefits</h4>
-            <ul style="color: #4b5563; font-size: 13px; line-height: 1.8; padding-left: 20px;">
-              <li><strong>Permanent Premium Badge</strong> on your profile</li>
-              <li>Free, unlimited access to all directory listings</li>
-              <li>Event invitations and discounts</li>
-              <li>A voice in community polls</li>
-            </ul>
-          </div>
-          <div style="text-align: center;">
-            <a href="${process.env.NEXT_PUBLIC_BASE_URL || 'punerimallus.com'}/profile" style="display: inline-block; background: #dc2626; color: #fff; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 13px;">View your profile</a>
-          </div>
-          <p style="margin-top: 32px; font-size: 11px; color: #9ca3af; text-align: center;">
-            If your account doesn't reflect these changes, reply to this email and we'll help.
-          </p>
         </div>
       `,
     });
