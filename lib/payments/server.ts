@@ -412,3 +412,84 @@ export async function resendBooking(bookingId: string, opts: { overrideEmail?: s
     return { status: 'FAILED' as const, error: e instanceof Error ? e.message : String(e) };
   }
 }
+
+export interface BookingView {
+  id: string;
+  email: string | null;
+  status: string;
+  createdAt: string | null;
+  eventId: string;
+  tickets: { categoryName: string; ticketNumber: string; unitPrice: number; status: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED' }[];
+  event: EventSnapshot | null;
+  pointsApplied: number;
+  /** Rupees actually charged including the gateway fee, when known (otherwise derived from the passes). */
+  totalPaidPaise: number | null;
+  payment: { orderId: string | null; paymentId: string | null; paidAt: string | null };
+}
+
+/** Everything the ticket page and the PDF download need for one booking, in one shape. */
+export async function loadBookingView(bookingId: string): Promise<(BookingView & { userId: string | null }) | null> {
+  const db = supabaseAdmin();
+  const booking = (await must(db.from('ticket_bookings').select('*').eq('id', bookingId).maybeSingle())) as {
+    id: string;
+    user_id: string | null;
+    email: string | null;
+    event_id: string;
+    status?: string;
+    created_at?: string | null;
+    tickets_data: { categoryName: string; ticketNumber: string; status?: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED' }[] | null;
+  } | null;
+  if (!booking) return null;
+
+  const order = (await must(
+    db.from('payment_orders').select('*').eq('booking_id', bookingId).limit(1).maybeSingle(),
+  )) as PaymentOrder | null;
+
+  let prices = new Map<string, number>();
+  if (order?.cart?.length) prices = new Map(order.cart.map((l) => [l.name, l.unitPrice]));
+  else {
+    const categories = ((await must(db.from('event_ticket_categories').select('name, price').eq('event_id', booking.event_id))) ||
+      []) as { name: string; price: number }[];
+    prices = new Map(categories.map((c) => [c.name, c.price]));
+  }
+
+  return {
+    id: booking.id,
+    userId: booking.user_id,
+    email: booking.email,
+    status: booking.status || 'CONFIRMED',
+    createdAt: booking.created_at ?? null,
+    eventId: booking.event_id,
+    tickets: (booking.tickets_data || []).map((t) => ({
+      categoryName: t.categoryName,
+      ticketNumber: t.ticketNumber,
+      unitPrice: prices.get(t.categoryName) ?? 0,
+      status: t.status || 'ISSUED',
+    })),
+    event: order?.event_snapshot ?? (await getEventSnapshot(booking.event_id)),
+    pointsApplied: order?.points_to_redeem ?? 0,
+    totalPaidPaise: order?.amount_paise ?? null,
+    payment: {
+      orderId: order?.razorpay_order_id ?? null,
+      paymentId: order?.razorpay_payment_id ?? null,
+      paidAt: (order?.fulfilled_at as string | null | undefined) ?? booking.created_at ?? null,
+    },
+  };
+}
+
+/** Builds the ticket PDF for a booking, exactly as it is emailed. Returns null if the booking doesn't exist. */
+export async function renderBookingPdf(bookingId: string): Promise<{ base64: string; filename: string } | null> {
+  const view = await loadBookingView(bookingId);
+  if (!view) return null;
+  const base64 = await generateTicketPdf({
+    bookingId: view.id,
+    purchaserEmail: view.email || '',
+    event: view.event,
+    tickets: view.tickets.map((t) => ({ categoryName: t.categoryName, ticketNumber: t.ticketNumber, unitPrice: t.unitPrice, status: t.status })),
+    pointsApplied: view.pointsApplied,
+    logoBase64: await fetchLogoBase64(baseUrl()),
+    baseUrl: baseUrl(),
+    payment: { ...view.payment, totalPaidPaise: view.totalPaidPaise },
+  });
+  return { base64, filename: `puneri-mallus-tickets-${view.id.split('-')[0]}.pdf` };
+}
