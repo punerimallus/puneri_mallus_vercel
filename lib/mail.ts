@@ -500,6 +500,9 @@ export async function sendBatch(messages: BatchMessage[]): Promise<{ ids: string
   return { ids: (data?.data || []).map((d) => d.id), error: null };
 }
 
+// "766" for whole rupees, "766.40" when there are paise.
+const inr = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 });
+
 export async function sendEventTicketEmail(to: string, bookingId: string, tickets: { categoryName: string; ticketNumber: string }[], totalAmount: number, pdfBase64: string, eventData: { title?: string; location?: string } | null) {
   const ticketNumbers = tickets.map(t => t.ticketNumber).join(', ');
 
@@ -512,7 +515,7 @@ export async function sendEventTicketEmail(to: string, bookingId: string, ticket
       from: FROM,
       to: to,
       subject: `Your passes are confirmed — ${eventData?.title || 'Puneri Mallus'}`,
-      text: `Your passes are ready! Booking ID: ${bookingId.split('-')[0].toUpperCase()}. Total paid: ₹${totalAmount.toLocaleString('en-IN')}. Please open the attached PDF to view and scan your passes.`,
+      text: `Your passes are ready! Booking ID: ${bookingId.split('-')[0].toUpperCase()}. Total paid: ₹${inr(totalAmount)}. Please open the attached PDF to view and scan your passes.`,
       html: `
         <div style="font-family: 'Segoe UI', Helvetica, Arial, sans-serif; background-color: #f4f5f9; padding: 40px 20px; color: #111827;">
           <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06);">
@@ -542,7 +545,7 @@ export async function sendEventTicketEmail(to: string, bookingId: string, ticket
             <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 16px; border-top: 1px solid #f0f0f0; padding-top: 16px;">
               <tr>
                 <td align="left" style="color: #6b7280; font-size: 13px; font-weight: 600; padding-left: 20px;">Total paid</td>
-                <td align="right" style="color: #111827; font-size: 17px; font-weight: 700; padding-right: 20px;">₹${totalAmount.toLocaleString('en-IN')}</td>
+                <td align="right" style="color: #111827; font-size: 17px; font-weight: 700; padding-right: 20px;">₹${inr(totalAmount)}</td>
               </tr>
             </table>
             <div style="text-align: center; padding: 16px; background-color: #f9fafb; margin-top: 16px;">

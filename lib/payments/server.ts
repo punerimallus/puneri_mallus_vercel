@@ -275,6 +275,7 @@ async function buildAndSendTickets(
   event: EventSnapshot | null,
   pointsApplied: number,
   totalAmount: number,
+  payment?: { orderId?: string | null; paymentId?: string | null; totalPaidPaise?: number | null; paidAt?: Date | string | null },
 ) {
   const logo = await fetchLogoBase64(baseUrl());
   const pdf = await generateTicketPdf({
@@ -285,8 +286,11 @@ async function buildAndSendTickets(
     pointsApplied,
     logoBase64: logo,
     baseUrl: baseUrl(),
+    payment,
   });
-  await sendEventTicketEmail(to, bookingId, tickets, totalAmount, pdf, event);
+  // The email states what was actually charged (including the gateway fee) when we know it.
+  const paid = payment?.totalPaidPaise ? payment.totalPaidPaise / 100 : totalAmount;
+  await sendEventTicketEmail(to, bookingId, tickets, paid, pdf, event);
 }
 
 export const deliveryDeps: DeliveryDeps = {
@@ -299,7 +303,12 @@ export const deliveryDeps: DeliveryDeps = {
     )) as { id: string; tickets_data: { categoryName: string; ticketNumber: string }[] };
     const priceByName = new Map((order.cart || []).map((l) => [l.name, l.unitPrice]));
     const tickets = (booking.tickets_data || []).map((t) => ({ ...t, unitPrice: priceByName.get(t.categoryName) ?? 0 }));
-    await buildAndSendTickets(booking.id, to, tickets, order.event_snapshot, order.points_to_redeem, order.base_amount);
+    await buildAndSendTickets(booking.id, to, tickets, order.event_snapshot, order.points_to_redeem, order.base_amount, {
+      orderId: order.razorpay_order_id,
+      paymentId: order.razorpay_payment_id,
+      totalPaidPaise: order.amount_paise,
+      paidAt: order.fulfilled_at,
+    });
   },
 
   async sendMembershipEmail(to, orderId, paymentId) {
