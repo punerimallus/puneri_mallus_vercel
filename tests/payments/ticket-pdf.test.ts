@@ -106,3 +106,13 @@ describe('ticket PDF', () => {
     expect(Buffer.from(b64, 'base64').subarray(0, 5).toString()).toBe('%PDF-');
   });
 });
+
+describe('fetchLogoBase64', () => {
+  it('falls back to the embedded logo when the site cannot be reached or returns an error', async () => {
+    const { fetchLogoBase64 } = await import('@/lib/payments/ticket-pdf');
+    vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error('offline'));
+    expect(await fetchLogoBase64('https://x.test')).toMatch(/^data:image\/png;base64,.{1000,}/);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('nope', { status: 404 }));
+    expect(await fetchLogoBase64('https://x.test')).toMatch(/^data:image\/png;base64,.{1000,}/);
+  });
+});

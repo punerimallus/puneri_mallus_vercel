@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf';
+import { LOGO_DATA_URI } from './logo-data';
 import QRCode from 'qrcode';
 import { buildReceipt, buildScanUrl, formatEventDate, formatEventTime, formatIst, formatRupees, pdfSafe } from './format';
 
@@ -17,12 +18,12 @@ export interface TicketPdfInput {
 export async function fetchLogoBase64(baseUrl: string): Promise<string | null> {
   try {
     const logoRes = await fetch(`${baseUrl}/logo_main.png`);
-    if (!logoRes.ok) return null;
+    if (!logoRes.ok) return LOGO_DATA_URI;
     const logoBuffer = await logoRes.arrayBuffer();
     return `data:image/png;base64,${Buffer.from(logoBuffer).toString('base64')}`;
   } catch {
-    console.error('Failed to fetch Puneri Mallus logo');
-    return null;
+    console.error('Failed to fetch Puneri Mallus logo, using the embedded copy');
+    return LOGO_DATA_URI;
   }
 }
 
@@ -207,7 +208,7 @@ export async function buildTicketPdf(input: TicketPdfInput): Promise<jsPDF> {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.5);
     doc.setCharSpace(0.4);
-    const badgeW = spacedWidth(doc, status.text, 0.4) + 8;
+    const badgeW = spacedWidth(doc, status.text, 0.4) + 11;
     doc.setFillColor(...status.color);
     doc.roundedRect(lx, y + 52, badgeW, 6.5, 3.25, 3.25, 'F');
     doc.setTextColor(255, 255, 255);
