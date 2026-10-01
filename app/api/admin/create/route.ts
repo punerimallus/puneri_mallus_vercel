@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { sendAdminAccessEmail } from '@/lib/mail';
+import { requireAdmin } from '@/lib/admin';
 
 // 🔥 CRITICAL: We use the SERVICE_ROLE_KEY here to bypass RLS and create users 
 // without logging out the current admin who is making the request.
@@ -18,6 +19,8 @@ const generateTempPassword = () => {
 };
 
 export async function POST(req: Request) {
+  const denied = await requireAdmin();
+  if (denied) return denied;
   try {
     const { email } = await req.json();
 

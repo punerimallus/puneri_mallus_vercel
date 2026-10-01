@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 import { createClient } from '@supabase/supabase-js';
+import { requireAdmin } from '@/lib/admin';
 
 // IMPORTANT: Use Service Role Key for administrative deletions
 const supabase = createClient(
@@ -10,6 +11,8 @@ const supabase = createClient(
 );
 
 export async function DELETE(request: Request) {
+  const denied = await requireAdmin();
+  if (denied) return denied;
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');

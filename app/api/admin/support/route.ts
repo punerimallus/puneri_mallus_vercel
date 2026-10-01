@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
 import { dbConnect } from '@/lib/mongodb';
 import SupportTicket from '@/models/SupportTicket';
+import { requireAdmin } from '@/lib/admin';
 
 export async function GET() {
+  const denied = await requireAdmin();
+  if (denied) return denied;
   try {
     await dbConnect();
     // Fetch tickets sorted by newest first
@@ -15,6 +18,8 @@ export async function GET() {
 
 // Logic to delete or update status
 export async function PATCH(req: Request) {
+  const denied = await requireAdmin();
+  if (denied) return denied;
     try {
       await dbConnect();
       const { id, status } = await req.json();

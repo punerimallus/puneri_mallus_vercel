@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 import { createClient } from '@supabase/supabase-js';
+import { requireAdmin } from '@/lib/admin';
 
 // Use Service Role Key for backend admin operations (bypasses RLS)
 const supabaseAdmin = createClient(
@@ -10,6 +11,8 @@ const supabaseAdmin = createClient(
 );
 
 export async function DELETE(req: Request) {
+  const denied = await requireAdmin();
+  if (denied) return denied;
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');

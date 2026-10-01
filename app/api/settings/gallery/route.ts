@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongodb';
 import { createClient } from '@supabase/supabase-js';
+import { requireAdmin } from '@/lib/admin';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,6 +28,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const denied = await requireAdmin();
+  if (denied) return denied;
   try {
     // 🔥 NEW: Extract display settings from the request
     const { events, displayMode, featuredEventId } = await request.json();

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 import { createClient } from '@supabase/supabase-js';
+import { requireAdmin } from '@/lib/admin';
 
 const DB_NAME = "punerimallus";
 const COLLECTION = "popups";
@@ -29,6 +30,8 @@ export async function GET(req: Request) {
     const db = client.db(DB_NAME);
 
     if (mode === 'all') {
+      const denied = await requireAdmin();
+      if (denied) return denied;
       const allAds = await db.collection(COLLECTION).find({}).sort({ createdAt: -1 }).toArray();
       return NextResponse.json(allAds);
     }
@@ -41,6 +44,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const denied = await requireAdmin();
+  if (denied) return denied;
   try {
     const body = await req.json();
     const client = await clientPromise;
@@ -65,6 +70,8 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
+  const denied = await requireAdmin();
+  if (denied) return denied;
   try {
     const body = await req.json();
     const { id, isActive, delay, duration, title, subtitle, link, imageUrl } = body;
@@ -110,6 +117,8 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
+  const denied = await requireAdmin();
+  if (denied) return denied;
   try {
     const { id } = await req.json();
     const client = await clientPromise;
