@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 import { createClient } from '@supabase/supabase-js';
+import { requireAdmin } from '@/lib/admin';
 
 // 🔥 ADD THIS LINE to stop Next.js from trying to statically compile the DB query
 export const dynamic = 'force-dynamic';
@@ -20,6 +21,8 @@ const getFileName = (url: string) => {
 };
 
 export async function POST(request: Request) {
+  const denied = await requireAdmin();
+  if (denied) return denied;
   try {
     const client = await clientPromise;
     const db = client.db("punerimallus");

@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
+import { requireAdmin } from '@/lib/admin';
 
 export async function POST(req: Request) {
+  const denied = await requireAdmin();
+  if (denied) return denied;
   try {
     const updates = await req.json(); // Array of { _id, order }
     

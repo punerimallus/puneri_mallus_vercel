@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongodb';
+import { requireAdmin } from '@/lib/admin';
 
 export async function GET() {
   try {
@@ -20,6 +21,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const denied = await requireAdmin();
+  if (denied) return denied;
   try {
     const { members } = await req.json();
     

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 import { createClient } from '@supabase/supabase-js';
+import { requireAdmin } from '@/lib/admin';
 
 // Use Service Role Key for backend storage operations (Deletions)
 const supabaseAdmin = createClient(
@@ -10,6 +11,8 @@ const supabaseAdmin = createClient(
 );
 
 export async function POST(req: Request) {
+  const denied = await requireAdmin();
+  if (denied) return denied;
   try {
     const client = await clientPromise;
     const db = client.db("punerimallus");
