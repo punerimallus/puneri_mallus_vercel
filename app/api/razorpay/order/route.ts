@@ -10,6 +10,7 @@ import {
   TicketCategory,
 } from '@/lib/payments/pricing';
 import { CartLine, EventSnapshot, PaymentInputError, PaymentType } from '@/lib/payments/types';
+import { salesStatus } from '@/lib/events/sales';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -77,6 +78,9 @@ export async function POST(req: Request) {
 
       eventSnapshot = await getEventSnapshot(eventId);
       if (!eventSnapshot) throw new PaymentInputError('Event not found', 404);
+      if (salesStatus(eventSnapshot.date, eventSnapshot.time) === 'CLOSED') {
+        throw new PaymentInputError('Ticket sales for this event have closed.', 409);
+      }
 
       const { data: categories } = await db.from('event_ticket_categories').select('*').eq('event_id', eventId);
       if (!categories || categories.length === 0) throw new PaymentInputError('Categories not found', 404);

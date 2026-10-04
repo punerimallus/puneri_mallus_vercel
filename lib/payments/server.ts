@@ -16,6 +16,7 @@ import { BookingInsert, FulfilmentDeps, fulfilOrder } from './fulfil';
 import { DeliveryDeps, DeliveryOptions, deliverOrderEmail } from './delivery';
 import { nextMartExpiry } from './pricing';
 import { groupSizeOf } from './groups';
+import { progressOf } from './scan';
 import { fetchLogoBase64, generateTicketPdf } from './ticket-pdf';
 import { EventSnapshot, FulfilmentSource, GatewayPayment, PaymentOrder, SoldOutError } from './types';
 
@@ -420,7 +421,7 @@ export interface BookingView {
   status: string;
   createdAt: string | null;
   eventId: string;
-  tickets: { categoryName: string; ticketNumber: string; unitPrice: number; status: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED'; groupSize: number }[];
+  tickets: { categoryName: string; ticketNumber: string; unitPrice: number; status: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED'; groupSize: number; admitted: number }[];
   event: EventSnapshot | null;
   pointsApplied: number;
   /** Rupees actually charged including the gateway fee, when known (otherwise derived from the passes). */
@@ -438,7 +439,7 @@ export async function loadBookingView(bookingId: string): Promise<(BookingView &
     event_id: string;
     status?: string;
     created_at?: string | null;
-    tickets_data: { categoryName: string; ticketNumber: string; status?: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED'; groupSize?: number }[] | null;
+    tickets_data: { categoryName: string; ticketNumber: string; status?: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED'; groupSize?: number; admitted?: number }[] | null;
   } | null;
   if (!booking) return null;
 
@@ -467,6 +468,7 @@ export async function loadBookingView(bookingId: string): Promise<(BookingView &
       unitPrice: prices.get(t.categoryName) ?? 0,
       status: t.status || 'ISSUED',
       groupSize: groupSizeOf(t.groupSize),
+      admitted: progressOf({ status: t.status || 'ISSUED', groupSize: t.groupSize, admitted: t.admitted }).admitted,
     })),
     event: order?.event_snapshot ?? (await getEventSnapshot(booking.event_id)),
     pointsApplied: order?.points_to_redeem ?? 0,
@@ -487,7 +489,7 @@ export async function renderBookingPdf(bookingId: string): Promise<{ base64: str
     bookingId: view.id,
     purchaserEmail: view.email || '',
     event: view.event,
-    tickets: view.tickets.map((t) => ({ categoryName: t.categoryName, ticketNumber: t.ticketNumber, unitPrice: t.unitPrice, status: t.status, groupSize: t.groupSize })),
+    tickets: view.tickets.map((t) => ({ categoryName: t.categoryName, ticketNumber: t.ticketNumber, unitPrice: t.unitPrice, status: t.status, groupSize: t.groupSize, admitted: t.admitted })),
     pointsApplied: view.pointsApplied,
     logoBase64: await fetchLogoBase64(baseUrl()),
     baseUrl: baseUrl(),

@@ -6,7 +6,7 @@ import QRCode from 'qrcode';
 import { admitsLabel, isGroup } from '@/lib/payments/groups';
 import { buildReceipt, buildScanUrl, formatEventDate, formatEventTime, formatIst, formatRupees } from '@/lib/payments/format';
 
-type Pass = { categoryName: string; ticketNumber: string; unitPrice: number; status: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED'; groupSize: number };
+type Pass = { categoryName: string; ticketNumber: string; unitPrice: number; status: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED'; groupSize: number; admitted: number };
 type View = {
   id: string; email: string | null; status: string; createdAt: string | null;
   tickets: Pass[];
@@ -108,7 +108,10 @@ export default function TicketSuccessPage({ params }: { params: Promise<{ bookin
   const total = view.tickets.length;
   const pass = view.tickets[active];
   const receipt = buildReceipt(view.tickets, view.pointsApplied, view.totalPaidPaise);
-  const st = STATUS_STYLE[refunded ? 'REFUNDED' : pass.status];
+  const partial = isGroup(pass.groupSize) && pass.status === 'ISSUED' && pass.admitted > 0;
+  const st = partial
+    ? { label: `${pass.admitted} of ${pass.groupSize} admitted`, cls: STATUS_STYLE.CHECKED_IN.cls }
+    : STATUS_STYLE[refunded ? 'REFUNDED' : pass.status];
 
   return (
     <div className="min-h-screen bg-[#030303] pt-32 pb-20 px-4 sm:px-6 selection:bg-brandRed/30 flex items-center justify-center relative overflow-hidden">

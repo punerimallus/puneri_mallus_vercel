@@ -7,6 +7,9 @@ import { useRouter } from 'next/navigation';
 import { waitForOrder, orderRef } from '@/lib/payments/client';
 import MyTickets from '@/components/MyTickets';
 import { groupSizeOf, isGroup, pricePerPerson } from '@/lib/payments/groups';
+import { salesStatus } from '@/lib/events/sales';
+import { grossUpToPaise } from '@/lib/payments/pricing';
+import { formatRupees } from '@/lib/payments/format';
 
 export default function EventBookingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: eventId } = use(params);
@@ -85,11 +88,16 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
   }, 0);
 
   // 🔥 Calculate actual redemption automatically based on toggle
-  const maxRedeemable = Math.min(loyaltyBalance, baseDiscountedPrice);
+  const maxRedeemable = Math.min(loyaltyBalance, Math.floor(baseDiscountedPrice)); // whole rupees, exactly as the server applies them
   const pointsToRedeem = applyPoints && loyaltyBalance >= MIN_REDEEM_THRESHOLD ? maxRedeemable : 0;
   const totalPrice = baseDiscountedPrice - pointsToRedeem;
+  const salesClosed = salesStatus(eventData?.date, eventData?.time) === 'CLOSED';
+  // Same formula the server charges with, so the amount shown is the amount debited, to the paisa.
+  const chargePaise = grossUpToPaise(totalPrice);
+  const feeAmount = chargePaise / 100 - totalPrice;
   
   const updateCart = (id: string, delta: number, remaining: number) => {
+    if (salesClosed && delta > 0) { showAlert('Ticket sales for this event have closed.', 'error'); return; }
     const currentQty = cart[id] || 0;
     const newQty = currentQty + delta;
     if (newQty < 0) return;
@@ -272,6 +280,12 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
           </div>
 
           <div className="flex-1 p-8 overflow-y-auto pb-48 custom-scrollbar">
+            {salesClosed && (
+              <div className="max-w-md mx-auto mb-6 p-4 rounded-2xl border border-red-500/30 bg-red-500/10 text-center">
+                <p className="text-xs font-black uppercase tracking-widest text-red-400">Ticket sales have closed</p>
+                <p className="text-[11px] text-zinc-400 mt-1">This event has already started.</p>
+              </div>
+            )}
             {/* Recent tickets, so a returning customer can find their passes without leaving */}
             <div className="max-w-md mx-auto mb-8">
               <MyTickets limit={3} highlightEventId={eventId} heading="Your recent tickets" />
@@ -410,12 +424,17 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
                 </div>
               )}
 
-              <button onClick={processPayment} disabled={processing} className="w-full bg-brandRed text-white py-5 rounded-2xl font-black uppercase tracking-widest flex justify-between items-center px-6 disabled:opacity-50 text-xs shadow-[0_0_40px_rgba(255,0,0,0.3)] hover:shadow-[0_0_60px_rgba(255,0,0,0.5)] transition-all active:scale-[0.98]">
+              <div className="mb-4 space-y-1.5 text-[11px] font-bold tracking-widest text-zinc-400">
+                <div className="flex justify-between"><span>Tickets</span><span className="text-white">{formatRupees(baseDiscountedPrice).replace('Rs. ', '₹')}</span></div>
+                {pointsToRedeem > 0 && <div className="flex justify-between text-amber-400"><span>Tribe points</span><span>- {formatRupees(pointsToRedeem).replace('Rs. ', '₹')}</span></div>}
+                <div className="flex justify-between"><span>Payment gateway fee</span><span className="text-white">{formatRupees(feeAmount).replace('Rs. ', '₹')}</span></div>
+              </div>
+              <button onClick={processPayment} disabled={processing || salesClosed} className="w-full bg-brandRed text-white py-5 rounded-2xl font-black uppercase tracking-widest flex justify-between items-center px-6 disabled:opacity-50 text-xs shadow-[0_0_40px_rgba(255,0,0,0.3)] hover:shadow-[0_0_60px_rgba(255,0,0,0.5)] transition-all active:scale-[0.98]">
                 {processing ? <Loader2 className="animate-spin mx-auto" /> : (
                   <>
                     <div className="flex flex-col items-start text-left">
                       <span className="text-[10px] text-white/80 tracking-widest">{totalTickets} Ticket{totalTickets > 1 ? 's' : ''}</span>
-                      <span className="text-sm">₹{Math.round(totalPrice / (1 - 0.0236)).toLocaleString('en-IN')} <span className="text-[9px] lowercase font-normal opacity-80">(inc. fee)</span></span>
+                      <span className="text-sm">{formatRupees(chargePaise / 100).replace('Rs. ', '₹')} <span className="text-[9px] lowercase font-normal opacity-80">(inc. fee)</span></span>
                     </div>
                     <span className="flex items-center gap-2 text-sm bg-black/20 px-4 py-2 rounded-xl backdrop-blur-sm border border-white/10">Proceed to Pay <ArrowRight size={16} /></span>
                   </>

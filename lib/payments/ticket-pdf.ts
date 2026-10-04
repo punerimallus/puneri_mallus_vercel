@@ -8,7 +8,7 @@ export interface TicketPdfInput {
   bookingId: string;
   purchaserEmail: string;
   event: { title?: string; date?: string; time?: string; location?: string } | null;
-  tickets: { categoryName: string; ticketNumber: string; unitPrice: number; status?: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED'; groupSize?: number }[];
+  tickets: { categoryName: string; ticketNumber: string; unitPrice: number; status?: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED'; groupSize?: number; admitted?: number }[];
   pointsApplied: number;
   logoBase64: string | null;
   baseUrl: string;
@@ -205,7 +205,12 @@ export async function buildTicketPdf(input: TicketPdfInput): Promise<jsPDF> {
     const holder = wrap(doc, pdfSafe(purchaserEmail), 62, 2);
     doc.text(holder, lx + 36, y + 41.5, { lineHeightFactor: 1.2 });
 
-    const status = ticket.status === 'CHECKED_IN' ? { text: 'ALREADY CHECKED IN', color: AMBER } : { text: 'VALID FOR ENTRY', color: GREEN };
+    const partial = isGroup(ticket.groupSize) && ticket.status !== 'CHECKED_IN' && (ticket.admitted || 0) > 0;
+    const status = ticket.status === 'CHECKED_IN'
+      ? { text: 'ALREADY CHECKED IN', color: AMBER }
+      : partial
+        ? { text: `${ticket.admitted} OF ${groupSizeOf(ticket.groupSize)} ADMITTED`, color: AMBER }
+        : { text: 'VALID FOR ENTRY', color: GREEN };
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.5);
     doc.setCharSpace(0.4);
