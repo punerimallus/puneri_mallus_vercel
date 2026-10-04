@@ -7,6 +7,7 @@ import { createBrowserClient } from '@supabase/ssr';
 import TribeCalendar from '@/components/ui/TribeCalendar';
 import { useRouter } from 'next/navigation'; // 🔥 NEW: Added router for success redirection
 import { waitForOrder, orderRef } from '@/lib/payments/client';
+import { onEnter } from '@/lib/ui/enter';
 
 interface MembershipCardProps {
   price: number;
@@ -312,7 +313,7 @@ export default function MembershipCard({ price, benefits, userId, userEmail }: M
                 {/* 1. EMAIL */}
                 <div className="relative group">
                   <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-brandRed transition-colors" size={16} />
-                  <input type="email" placeholder="Email Address" required className="w-full bg-black/50 border border-white/10 p-4 pl-12 rounded-2xl font-medium text-base md:text-[13px] focus:border-brandRed outline-none text-white placeholder:text-zinc-500 transition-colors" value={email} onChange={(e) => setEmail(e.target.value)} />
+                  <input type="email" placeholder="Email Address" required className="w-full bg-black/50 border border-white/10 p-4 pl-12 rounded-2xl font-medium text-base md:text-[13px] focus:border-brandRed outline-none text-white placeholder:text-zinc-500 transition-colors" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={onEnter(handleDataSaveAndProceed, !!isFormValid && !upgrading)} />
                 </div>
 
                 {/* 2. BIRTH DATE */}
@@ -331,7 +332,7 @@ export default function MembershipCard({ price, benefits, userId, userEmail }: M
                 {/* 3. PROFESSION */}
                 <div className="relative group">
                   <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-brandRed transition-colors" size={16} />
-                  <input type="text" placeholder="Profession" required className="w-full bg-black/50 border border-white/10 p-4 pl-12 rounded-2xl font-medium text-base md:text-[13px] focus:border-brandRed outline-none text-white placeholder:text-zinc-500 transition-colors uppercase" value={profession} onChange={(e) => setProfession(e.target.value)} />
+                  <input type="text" placeholder="Profession" required className="w-full bg-black/50 border border-white/10 p-4 pl-12 rounded-2xl font-medium text-base md:text-[13px] focus:border-brandRed outline-none text-white placeholder:text-zinc-500 transition-colors uppercase" value={profession} onChange={(e) => setProfession(e.target.value)} onKeyDown={onEnter(handleDataSaveAndProceed, !!isFormValid && !upgrading)} />
                 </div>
 
                 {/* 4. LOCATION */}

@@ -1,8 +1,11 @@
 import { CartLine, MartPlan, PaymentInputError } from './types';
+import { groupSizeOf } from './groups';
 
 // Razorpay's 2% fee + 18% GST on it, passed on to the buyer.
 export const GATEWAY_FEE_RATE = 0.0236;
 export const MAX_TICKETS_PER_ACCOUNT = 7;
+// Group tickets (one QR for several people) are limited separately: this many per account, per event.
+export const MAX_GROUP_TICKETS_PER_ACCOUNT = 2;
 export const MIN_REDEEM_POINTS = 50;
 
 export function grossUpToPaise(baseRupees: number): number {
@@ -22,6 +25,7 @@ export interface TicketCategory {
   capacity: number | null;
   sold: number | null;
   active?: boolean | null;
+  group_size?: number | null;
 }
 
 export interface EventCartInput {
@@ -32,7 +36,10 @@ export interface EventCartInput {
   memberDiscountPercent: number;
   pointsToRedeem: unknown;
   loyaltyBalance: number;
+  /** Single-entry tickets this account already holds for the event. */
   previouslyBought: number;
+  /** Group tickets this account already holds for the event. */
+  previouslyBoughtGroups?: number;
 }
 
 export interface EventCartQuote {
@@ -54,6 +61,8 @@ export function quoteEventCart(input: EventCartInput): EventCartQuote {
 
   const lines: CartLine[] = [];
   let totalQty = 0;
+  let singleQty = 0;
+  let groupQty = 0;
   let subtotal = 0;
   const discount = input.isMember ? Math.max(0, Math.min(100, input.memberDiscountPercent || 0)) : 0;
 
@@ -70,16 +79,25 @@ export function quoteEventCart(input: EventCartInput): EventCartQuote {
     }
 
     const unitPrice = cat.price - (cat.price * discount) / 100;
-    lines.push({ categoryId, name: cat.name, prefix: cat.prefix, qty, unitPrice });
+    const groupSize = groupSizeOf(cat.group_size);
+    lines.push({ categoryId, name: cat.name, prefix: cat.prefix, qty, unitPrice, ...(groupSize > 1 ? { groupSize } : {}) });
     subtotal += unitPrice * qty;
     totalQty += qty;
+    if (groupSize > 1) groupQty += qty;
+    else singleQty += qty;
   }
 
   if (totalQty === 0) throw new PaymentInputError('Select at least one pass');
 
-  if (input.isLoggedIn && input.previouslyBought + totalQty > MAX_TICKETS_PER_ACCOUNT) {
+  if (input.isLoggedIn && input.previouslyBought + singleQty > MAX_TICKETS_PER_ACCOUNT) {
     throw new PaymentInputError(
       `Limit Exceeded: Your main account has already secured ${input.previouslyBought} passes. You can only buy a maximum of ${MAX_TICKETS_PER_ACCOUNT} tickets total across all emails.`,
+    );
+  }
+  const groupsBefore = input.previouslyBoughtGroups || 0;
+  if (input.isLoggedIn && groupsBefore + groupQty > MAX_GROUP_TICKETS_PER_ACCOUNT) {
+    throw new PaymentInputError(
+      `Limit Exceeded: you can book at most ${MAX_GROUP_TICKETS_PER_ACCOUNT} group tickets per account for this event${groupsBefore ? ` (you already have ${groupsBefore})` : ''}.`,
     );
   }
 

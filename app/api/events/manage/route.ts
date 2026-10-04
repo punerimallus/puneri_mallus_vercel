@@ -3,6 +3,7 @@ import clientPromise from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 import { createClient } from '@supabase/supabase-js';
 import { requireAdmin } from '@/lib/admin';
+import { ctaLabel } from '@/lib/events/cta';
 
 // 🔥 ADD THIS LINE to stop Next.js from trying to statically compile the DB query
 export const dynamic = 'force-dynamic';
@@ -40,6 +41,7 @@ export async function POST(request: Request) {
       memberDiscount: Number(eventData.memberDiscount) || 0,
       memberPoints: Number(eventData.memberPoints) || 0,
       nonMemberPoints: Number(eventData.nonMemberPoints) || 0,
+      buttonLabel: ctaLabel(eventData.buttonLabel),
       updated_at: new Date()
     };
 

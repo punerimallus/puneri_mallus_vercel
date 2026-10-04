@@ -500,19 +500,23 @@ export async function sendBatch(messages: BatchMessage[]): Promise<{ ids: string
   return { ids: (data?.data || []).map((d) => d.id), error: null };
 }
 
-export async function sendEventTicketEmail(to: string, bookingId: string, tickets: { categoryName: string; ticketNumber: string }[], totalAmount: number, pdfBase64: string, eventData: { title?: string; location?: string } | null) {
+// "766" for whole rupees, "766.40" when there are paise.
+const inr = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 });
+
+export async function sendEventTicketEmail(to: string, bookingId: string, tickets: { categoryName: string; ticketNumber: string; groupSize?: number }[], totalAmount: number, pdfBase64: string, eventData: { title?: string; location?: string } | null) {
   const ticketNumbers = tickets.map(t => t.ticketNumber).join(', ');
 
   const calTitle = encodeURIComponent(eventData?.title || 'Puneri Mallus Event');
   const calLocation = encodeURIComponent(eventData?.location || 'Pune');
   const calDetails = encodeURIComponent('Your event passes are attached in your email!');
+  const profileUrl = siteUrl('/profile#my-tickets');
   const googleCalendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${calTitle}&location=${calLocation}&details=${calDetails}`;
 
   const { error: sendError } = await resend.emails.send({
       from: FROM,
       to: to,
       subject: `Your passes are confirmed — ${eventData?.title || 'Puneri Mallus'}`,
-      text: `Your passes are ready! Booking ID: ${bookingId.split('-')[0].toUpperCase()}. Total paid: ₹${totalAmount.toLocaleString('en-IN')}. Please open the attached PDF to view and scan your passes.`,
+      text: `Your passes are ready! Booking ID: ${bookingId.split('-')[0].toUpperCase()}. Total paid: ₹${inr(totalAmount)}. Please open the attached PDF to view and scan your passes. You can also see your tickets anytime in your profile: ${profileUrl}`,
       html: `
         <div style="font-family: 'Segoe UI', Helvetica, Arial, sans-serif; background-color: #f4f5f9; padding: 40px 20px; color: #111827;">
           <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06);">
@@ -526,7 +530,7 @@ export async function sendEventTicketEmail(to: string, bookingId: string, ticket
               ${tickets.map(t => `
                 <div style="margin-bottom: 12px;">
                   <p style="margin: 0; color: #6b7280; font-size: 11px; letter-spacing: 0.5px;">Category</p>
-                  <p style="margin: 2px 0 0; color: #dc2626; font-size: 15px; font-weight: 600;">${t.categoryName}</p>
+                  <p style="margin: 2px 0 0; color: #dc2626; font-size: 15px; font-weight: 600;">${t.categoryName}${(t.groupSize || 1) > 1 ? ` <span style="color: #6b7280; font-weight: 500; font-size: 13px;">&middot; admits ${t.groupSize} people on one pass</span>` : ''}</p>
                 </div>
               `).join('')}
               <div style="margin-top: 20px; padding-top: 16px; border-top: 1px dashed #e5e7eb;">
@@ -542,11 +546,12 @@ export async function sendEventTicketEmail(to: string, bookingId: string, ticket
             <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 16px; border-top: 1px solid #f0f0f0; padding-top: 16px;">
               <tr>
                 <td align="left" style="color: #6b7280; font-size: 13px; font-weight: 600; padding-left: 20px;">Total paid</td>
-                <td align="right" style="color: #111827; font-size: 17px; font-weight: 700; padding-right: 20px;">₹${totalAmount.toLocaleString('en-IN')}</td>
+                <td align="right" style="color: #111827; font-size: 17px; font-weight: 700; padding-right: 20px;">₹${inr(totalAmount)}</td>
               </tr>
             </table>
             <div style="text-align: center; padding: 16px; background-color: #f9fafb; margin-top: 16px;">
               <p style="margin: 0; color: #4b5563; font-size: 12px;">Open the attached PDF to view your passes</p>
+              <p style="margin: 8px 0 0; color: #4b5563; font-size: 12px;">You can also see your tickets anytime in your <a href="${profileUrl}" style="color: #dc2626; text-decoration: none; font-weight: 600;">profile</a>.</p>
             </div>
           </div>
         </div>

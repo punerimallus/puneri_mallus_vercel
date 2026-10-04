@@ -15,6 +15,8 @@ import {
 import { BookingInsert, FulfilmentDeps, fulfilOrder } from './fulfil';
 import { DeliveryDeps, DeliveryOptions, deliverOrderEmail } from './delivery';
 import { nextMartExpiry } from './pricing';
+import { groupSizeOf } from './groups';
+import { progressOf } from './scan';
 import { fetchLogoBase64, generateTicketPdf } from './ticket-pdf';
 import { EventSnapshot, FulfilmentSource, GatewayPayment, PaymentOrder, SoldOutError } from './types';
 
@@ -271,10 +273,11 @@ export const fulfilmentDeps: FulfilmentDeps = {
 async function buildAndSendTickets(
   bookingId: string,
   to: string,
-  tickets: { categoryName: string; ticketNumber: string; unitPrice: number }[],
+  tickets: { categoryName: string; ticketNumber: string; unitPrice: number; groupSize?: number }[],
   event: EventSnapshot | null,
   pointsApplied: number,
   totalAmount: number,
+  payment?: { orderId?: string | null; paymentId?: string | null; totalPaidPaise?: number | null; paidAt?: Date | string | null },
 ) {
   const logo = await fetchLogoBase64(baseUrl());
   const pdf = await generateTicketPdf({
@@ -285,8 +288,11 @@ async function buildAndSendTickets(
     pointsApplied,
     logoBase64: logo,
     baseUrl: baseUrl(),
+    payment,
   });
-  await sendEventTicketEmail(to, bookingId, tickets, totalAmount, pdf, event);
+  // The email states what was actually charged (including the gateway fee) when we know it.
+  const paid = payment?.totalPaidPaise ? payment.totalPaidPaise / 100 : totalAmount;
+  await sendEventTicketEmail(to, bookingId, tickets, paid, pdf, event);
 }
 
 export const deliveryDeps: DeliveryDeps = {
@@ -296,10 +302,15 @@ export const deliveryDeps: DeliveryDeps = {
   async sendTicketEmail(order, to) {
     const booking = (await must(
       supabaseAdmin().from('ticket_bookings').select('id, tickets_data').eq('id', order.booking_id).single(),
-    )) as { id: string; tickets_data: { categoryName: string; ticketNumber: string }[] };
+    )) as { id: string; tickets_data: { categoryName: string; ticketNumber: string; groupSize?: number }[] };
     const priceByName = new Map((order.cart || []).map((l) => [l.name, l.unitPrice]));
     const tickets = (booking.tickets_data || []).map((t) => ({ ...t, unitPrice: priceByName.get(t.categoryName) ?? 0 }));
-    await buildAndSendTickets(booking.id, to, tickets, order.event_snapshot, order.points_to_redeem, order.base_amount);
+    await buildAndSendTickets(booking.id, to, tickets, order.event_snapshot, order.points_to_redeem, order.base_amount, {
+      orderId: order.razorpay_order_id,
+      paymentId: order.razorpay_payment_id,
+      totalPaidPaise: order.amount_paise,
+      paidAt: order.fulfilled_at,
+    });
   },
 
   async sendMembershipEmail(to, orderId, paymentId) {
@@ -377,7 +388,7 @@ export async function resendBooking(bookingId: string, opts: { overrideEmail?: s
     status?: string;
     last_emailed_at?: string | null;
     email_attempts?: number;
-    tickets_data: { categoryName: string; ticketNumber: string }[];
+    tickets_data: { categoryName: string; ticketNumber: string; groupSize?: number }[];
   } | null;
   if (!booking) return { status: 'NOT_READY' as const };
   if (booking.status === 'REFUNDED') return { status: 'NOT_READY' as const, error: 'Booking was refunded' };
@@ -402,4 +413,142 @@ export async function resendBooking(bookingId: string, opts: { overrideEmail?: s
     await deliveryDeps.markBookingEmail(booking.id, 'FAILED', attempts, at).catch(() => undefined);
     return { status: 'FAILED' as const, error: e instanceof Error ? e.message : String(e) };
   }
+}
+
+export interface BookingView {
+  id: string;
+  email: string | null;
+  status: string;
+  createdAt: string | null;
+  eventId: string;
+  tickets: { categoryName: string; ticketNumber: string; unitPrice: number; status: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED'; groupSize: number; admitted: number }[];
+  event: EventSnapshot | null;
+  pointsApplied: number;
+  /** Rupees actually charged including the gateway fee, when known (otherwise derived from the passes). */
+  totalPaidPaise: number | null;
+  payment: { orderId: string | null; paymentId: string | null; paidAt: string | null };
+}
+
+/** Everything the ticket page and the PDF download need for one booking, in one shape. */
+export async function loadBookingView(bookingId: string): Promise<(BookingView & { userId: string | null }) | null> {
+  const db = supabaseAdmin();
+  const booking = (await must(db.from('ticket_bookings').select('*').eq('id', bookingId).maybeSingle())) as {
+    id: string;
+    user_id: string | null;
+    email: string | null;
+    event_id: string;
+    status?: string;
+    created_at?: string | null;
+    tickets_data: { categoryName: string; ticketNumber: string; status?: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED'; groupSize?: number; admitted?: number }[] | null;
+  } | null;
+  if (!booking) return null;
+
+  const order = (await must(
+    db.from('payment_orders').select('*').eq('booking_id', bookingId).limit(1).maybeSingle(),
+  )) as PaymentOrder | null;
+
+  let prices = new Map<string, number>();
+  if (order?.cart?.length) prices = new Map(order.cart.map((l) => [l.name, l.unitPrice]));
+  else {
+    const categories = ((await must(db.from('event_ticket_categories').select('name, price').eq('event_id', booking.event_id))) ||
+      []) as { name: string; price: number }[];
+    prices = new Map(categories.map((c) => [c.name, c.price]));
+  }
+
+  return {
+    id: booking.id,
+    userId: booking.user_id,
+    email: booking.email,
+    status: booking.status || 'CONFIRMED',
+    createdAt: booking.created_at ?? null,
+    eventId: booking.event_id,
+    tickets: (booking.tickets_data || []).map((t) => ({
+      categoryName: t.categoryName,
+      ticketNumber: t.ticketNumber,
+      unitPrice: prices.get(t.categoryName) ?? 0,
+      status: t.status || 'ISSUED',
+      groupSize: groupSizeOf(t.groupSize),
+      admitted: progressOf({ status: t.status || 'ISSUED', groupSize: t.groupSize, admitted: t.admitted }).admitted,
+    })),
+    event: order?.event_snapshot ?? (await getEventSnapshot(booking.event_id)),
+    pointsApplied: order?.points_to_redeem ?? 0,
+    totalPaidPaise: order?.amount_paise ?? null,
+    payment: {
+      orderId: order?.razorpay_order_id ?? null,
+      paymentId: order?.razorpay_payment_id ?? null,
+      paidAt: (order?.fulfilled_at as string | null | undefined) ?? booking.created_at ?? null,
+    },
+  };
+}
+
+/** Builds the ticket PDF for a booking, exactly as it is emailed. Returns null if the booking doesn't exist. */
+export async function renderBookingPdf(bookingId: string): Promise<{ base64: string; filename: string } | null> {
+  const view = await loadBookingView(bookingId);
+  if (!view) return null;
+  const base64 = await generateTicketPdf({
+    bookingId: view.id,
+    purchaserEmail: view.email || '',
+    event: view.event,
+    tickets: view.tickets.map((t) => ({ categoryName: t.categoryName, ticketNumber: t.ticketNumber, unitPrice: t.unitPrice, status: t.status, groupSize: t.groupSize, admitted: t.admitted })),
+    pointsApplied: view.pointsApplied,
+    logoBase64: await fetchLogoBase64(baseUrl()),
+    baseUrl: baseUrl(),
+    payment: { ...view.payment, totalPaidPaise: view.totalPaidPaise },
+  });
+  return { base64, filename: `puneri-mallus-tickets-${view.id.split('-')[0]}.pdf` };
+}
+
+export interface BookingSummary {
+  id: string;
+  eventId: string;
+  eventTitle: string;
+  eventDate: string | null;
+  eventTime: string | null;
+  eventLocation: string | null;
+  status: string;
+  passes: number;
+  /** Rupees charged including the gateway fee when known. */
+  totalPaid: number;
+  createdAt: string | null;
+}
+
+/** A customer's own bookings, newest first, for the "My Tickets" lists. Only confirmed or refunded bookings appear. */
+export async function listUserBookings(userId: string, limit = 50): Promise<BookingSummary[]> {
+  const db = supabaseAdmin();
+  const bookings = ((await must(
+    db.from('ticket_bookings').select('id, event_id, status, created_at, amount_paid, tickets_data').eq('user_id', userId).order('created_at', { ascending: false }).limit(limit),
+  )) || []) as { id: string; event_id: string; status: string | null; created_at: string | null; amount_paid: number | null; tickets_data: unknown[] | null }[];
+  if (!bookings.length) return [];
+
+  const orders = ((await must(
+    db.from('payment_orders').select('booking_id, amount_paise, event_snapshot').in('booking_id', bookings.map((b) => b.id)),
+  )) || []) as { booking_id: string; amount_paise: number | null; event_snapshot: EventSnapshot | null }[];
+  const orderByBooking = new Map(orders.map((o) => [o.booking_id, o]));
+
+  // Older bookings have no saved snapshot; read their events once each.
+  const snapshots = new Map<string, EventSnapshot | null>();
+  for (const b of bookings) {
+    const fromOrder = orderByBooking.get(b.id)?.event_snapshot;
+    if (fromOrder) snapshots.set(b.event_id, fromOrder);
+  }
+  for (const eventId of new Set(bookings.map((b) => b.event_id))) {
+    if (!snapshots.has(eventId)) snapshots.set(eventId, await getEventSnapshot(eventId).catch(() => null));
+  }
+
+  return bookings.map((b) => {
+    const order = orderByBooking.get(b.id);
+    const ev = snapshots.get(b.event_id);
+    return {
+      id: b.id,
+      eventId: b.event_id,
+      eventTitle: ev?.title || 'Event',
+      eventDate: ev?.date ?? null,
+      eventTime: ev?.time ?? null,
+      eventLocation: ev?.location ?? null,
+      status: b.status || 'CONFIRMED',
+      passes: Array.isArray(b.tickets_data) ? b.tickets_data.length : 0,
+      totalPaid: order?.amount_paise ? order.amount_paise / 100 : Number(b.amount_paid) || 0,
+      createdAt: b.created_at,
+    };
+  });
 }

@@ -22,6 +22,8 @@ export interface CartLine {
   prefix: string;
   qty: number;
   unitPrice: number; // rupees, after member discount, before gateway fee
+  /** People admitted by one ticket of this category. Absent on older orders, which means 1. */
+  groupSize?: number;
 }
 
 export interface EventSnapshot {
@@ -38,6 +40,8 @@ export interface IssuedTicket {
   categoryName: string;
   ticketNumber: string;
   status: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED';
+  /** Only stored for group tickets (more than one person). Absent means 1. */
+  groupSize?: number;
 }
 
 export interface Allocation {

@@ -5,6 +5,11 @@ import { useAlert } from '@/context/AlertContext';
 import { createBrowserClient } from '@supabase/ssr';
 import { useRouter } from 'next/navigation';
 import { waitForOrder, orderRef } from '@/lib/payments/client';
+import MyTickets from '@/components/MyTickets';
+import { groupSizeOf, isGroup, pricePerPerson } from '@/lib/payments/groups';
+import { salesStatus } from '@/lib/events/sales';
+import { grossUpToPaise, MAX_GROUP_TICKETS_PER_ACCOUNT, MAX_TICKETS_PER_ACCOUNT } from '@/lib/payments/pricing';
+import { formatRupees } from '@/lib/payments/format';
 
 export default function EventBookingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: eventId } = use(params);
@@ -83,11 +88,21 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
   }, 0);
 
   // 🔥 Calculate actual redemption automatically based on toggle
-  const maxRedeemable = Math.min(loyaltyBalance, baseDiscountedPrice);
+  const maxRedeemable = Math.min(loyaltyBalance, Math.floor(baseDiscountedPrice)); // whole rupees, exactly as the server applies them
   const pointsToRedeem = applyPoints && loyaltyBalance >= MIN_REDEEM_THRESHOLD ? maxRedeemable : 0;
   const totalPrice = baseDiscountedPrice - pointsToRedeem;
+  const salesClosed = salesStatus(eventData?.date, eventData?.time) === 'CLOSED';
+  // Same formula the server charges with, so the amount shown is the amount debited, to the paisa.
+  const chargePaise = grossUpToPaise(totalPrice);
+  const feeAmount = chargePaise / 100 - totalPrice;
   
+  // Group tickets and single tickets have their own per-account limits (the server enforces them too).
+  const groupTicketsInCart = categories.reduce((n, c) => n + (isGroup(c.group_size) ? cart[c.id] || 0 : 0), 0);
+  const singleTicketsInCart = totalTickets - groupTicketsInCart;
+  const hasGroupCategory = categories.some((c) => isGroup(c.group_size));
+
   const updateCart = (id: string, delta: number, remaining: number) => {
+    if (salesClosed && delta > 0) { showAlert('Ticket sales for this event have closed.', 'error'); return; }
     const currentQty = cart[id] || 0;
     const newQty = currentQty + delta;
     if (newQty < 0) return;
@@ -95,9 +110,17 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
       showAlert(`Only ${remaining} passes left in this category!`, "error");
       return;
     }
-    if (delta > 0 && totalTickets >= 7) {
-      showAlert("Maximum 7 passes per account", "error");
-      return;
+    if (delta > 0) {
+      const cat = categories.find((c) => c.id === id);
+      if (isGroup(cat?.group_size)) {
+        if (groupTicketsInCart >= MAX_GROUP_TICKETS_PER_ACCOUNT) {
+          showAlert(`Maximum ${MAX_GROUP_TICKETS_PER_ACCOUNT} group tickets per account`, "error");
+          return;
+        }
+      } else if (singleTicketsInCart >= MAX_TICKETS_PER_ACCOUNT) {
+        showAlert(`Maximum ${MAX_TICKETS_PER_ACCOUNT} passes per account`, "error");
+        return;
+      }
     }
     setCart({ ...cart, [id]: newQty });
   };
@@ -270,8 +293,21 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
           </div>
 
           <div className="flex-1 p-8 overflow-y-auto pb-48 custom-scrollbar">
+            {salesClosed && (
+              <div className="max-w-md mx-auto mb-6 p-4 rounded-2xl border border-red-500/30 bg-red-500/10 text-center">
+                <p className="text-xs font-black uppercase tracking-widest text-red-400">Ticket sales have closed</p>
+                <p className="text-[11px] text-zinc-400 mt-1">This event has already started.</p>
+              </div>
+            )}
+            {/* Recent tickets, so a returning customer can find their passes without leaving */}
+            <div className="max-w-md mx-auto mb-8">
+              <MyTickets limit={3} highlightEventId={eventId} heading="Your recent tickets" />
+            </div>
             {step === 1 ? (
-              <div className="space-y-10 mt-8 max-w-md mx-auto">
+              <form
+                className="space-y-10 mt-8 max-w-md mx-auto"
+                onSubmit={(e) => { e.preventDefault(); if (email.includes('@')) setStep(2); }}
+              >
                 <div className="text-center space-y-3">
                   <h2 className="text-xl font-black uppercase tracking-widest text-white">Digital Delivery</h2>
                   <p className="text-xs text-zinc-500 font-semibold leading-relaxed px-4">Your digital PDF passes and payment receipt will be securely dispatched to this address.</p>
@@ -287,19 +323,19 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
                 </div>
                 
                 <button 
-                  disabled={!email.includes('@')} onClick={() => setStep(2)}
+                  type="submit" disabled={!email.includes('@')}
                   className={`w-full py-5 font-black uppercase tracking-[0.2em] rounded-2xl flex justify-center items-center gap-3 transition-all duration-300 text-xs ${email.includes('@') ? 'bg-brandRed text-white shadow-[0_0_30px_rgba(255,0,0,0.3)] hover:shadow-[0_0_50px_rgba(255,0,0,0.5)] active:scale-95' : 'bg-white/5 text-zinc-600 border border-white/5 cursor-not-allowed'}`}
                 >
                   Choose Your Category <ArrowRight size={16} />
                 </button>
-              </div>
+              </form>
             ) : (
               <div className="space-y-4">
                 <div className="flex justify-between items-end mb-6 border-b border-white/5 pb-4">
                   <h2 className="text-lg font-black uppercase tracking-widest text-zinc-200 flex items-center gap-2">
                     <Sparkles size={16} className="text-brandRed" /> Select Passes
                   </h2>
-                  <p className="text-[10px] text-brandRed font-black uppercase tracking-widest bg-brandRed/10 border border-brandRed/20 px-3 py-1.5 rounded-full shadow-inner">Max 7 per account</p>
+                  <p className="text-[10px] text-brandRed font-black uppercase tracking-widest bg-brandRed/10 border border-brandRed/20 px-3 py-1.5 rounded-full shadow-inner">Max {MAX_TICKETS_PER_ACCOUNT} per account{hasGroupCategory ? ` · ${MAX_GROUP_TICKETS_PER_ACCOUNT} group tickets` : ''}</p>
                 </div>
 
                 <div className="space-y-3">
@@ -319,6 +355,11 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
                         <div>
                           <div className="flex items-center gap-2">
                             <h3 className="text-sm font-black text-white uppercase tracking-widest">{cat.name}</h3>
+                            {isGroup(cat.group_size) && (
+                               <span className="text-[8px] bg-white/10 border border-white/20 text-white px-2 py-0.5 rounded-full font-black uppercase tracking-widest">
+                                 Group of {groupSizeOf(cat.group_size)}
+                               </span>
+                            )}
                             {hasActiveDiscount && (
                                <span className="text-[8px] bg-brandRed text-white px-2 py-0.5 rounded-full font-black uppercase tracking-widest flex items-center gap-1 shadow-[0_0_10px_rgba(255,0,0,0.4)]">
                                  <Star size={8} className="fill-white" /> Tribe Rate
@@ -334,6 +375,7 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
                             ) : (
                                <p className="text-xs font-bold text-brandRed tracking-widest">₹{displayPrice.toLocaleString('en-IN')}</p>
                             )}
+                            {isGroup(cat.group_size) && <p className="text-[10px] font-bold text-zinc-400 tracking-widest">admits {groupSizeOf(cat.group_size)} &middot; ₹{pricePerPerson(displayPrice, cat.group_size).toLocaleString('en-IN')} each</p>}
                             {isFastFilling && <span className="text-[9px] font-black uppercase text-orange-500 bg-orange-500/10 px-2 py-0.5 rounded-full animate-pulse border border-orange-500/20 shadow-[0_0_10px_rgba(249,115,22,0.2)]">Fast Filling</span>}
                             {isSoldOut && <span className="text-[9px] font-black uppercase text-zinc-500 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded-full">Sold Out</span>}
                           </div>
@@ -395,12 +437,17 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
                 </div>
               )}
 
-              <button onClick={processPayment} disabled={processing} className="w-full bg-brandRed text-white py-5 rounded-2xl font-black uppercase tracking-widest flex justify-between items-center px-6 disabled:opacity-50 text-xs shadow-[0_0_40px_rgba(255,0,0,0.3)] hover:shadow-[0_0_60px_rgba(255,0,0,0.5)] transition-all active:scale-[0.98]">
+              <div className="mb-4 space-y-1.5 text-[11px] font-bold tracking-widest text-zinc-400">
+                <div className="flex justify-between"><span>Tickets</span><span className="text-white">{formatRupees(baseDiscountedPrice).replace('Rs. ', '₹')}</span></div>
+                {pointsToRedeem > 0 && <div className="flex justify-between text-amber-400"><span>Tribe points</span><span>- {formatRupees(pointsToRedeem).replace('Rs. ', '₹')}</span></div>}
+                <div className="flex justify-between"><span>Payment gateway fee</span><span className="text-white">{formatRupees(feeAmount).replace('Rs. ', '₹')}</span></div>
+              </div>
+              <button onClick={processPayment} disabled={processing || salesClosed} className="w-full bg-brandRed text-white py-5 rounded-2xl font-black uppercase tracking-widest flex justify-between items-center px-6 disabled:opacity-50 text-xs shadow-[0_0_40px_rgba(255,0,0,0.3)] hover:shadow-[0_0_60px_rgba(255,0,0,0.5)] transition-all active:scale-[0.98]">
                 {processing ? <Loader2 className="animate-spin mx-auto" /> : (
                   <>
                     <div className="flex flex-col items-start text-left">
                       <span className="text-[10px] text-white/80 tracking-widest">{totalTickets} Ticket{totalTickets > 1 ? 's' : ''}</span>
-                      <span className="text-sm">₹{Math.round(totalPrice / (1 - 0.0236)).toLocaleString('en-IN')} <span className="text-[9px] lowercase font-normal opacity-80">(inc. fee)</span></span>
+                      <span className="text-sm">{formatRupees(chargePaise / 100).replace('Rs. ', '₹')} <span className="text-[9px] lowercase font-normal opacity-80">(inc. fee)</span></span>
                     </div>
                     <span className="flex items-center gap-2 text-sm bg-black/20 px-4 py-2 rounded-xl backdrop-blur-sm border border-white/10">Proceed to Pay <ArrowRight size={16} /></span>
                   </>

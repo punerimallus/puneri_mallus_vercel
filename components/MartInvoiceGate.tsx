@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mail, Receipt, ArrowRight, Loader2, X } from 'lucide-react';
 import { createBrowserClient } from '@supabase/ssr';
+import { onEnter } from '@/lib/ui/enter';
 
 interface MartInvoiceGateProps {
   userId: string;
@@ -89,6 +90,7 @@ export default function MartInvoiceGate({ userId, userPhone, onSuccess, onCancel
                 placeholder="Enter your best email..." 
                 value={email}
                 onChange={(e) => { setEmail(e.target.value); setError(''); }}
+                onKeyDown={onEnter(handleSave, !loading && !!email)}
                 className="w-full bg-black/50 border border-white/10 p-4 pl-12 rounded-2xl font-medium text-base focus:border-brandRed outline-none text-white transition-all"
               />
             </div>

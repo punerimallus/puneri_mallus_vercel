@@ -10,6 +10,8 @@ import {
   TicketCategory,
 } from '@/lib/payments/pricing';
 import { CartLine, EventSnapshot, PaymentInputError, PaymentType } from '@/lib/payments/types';
+import { salesStatus } from '@/lib/events/sales';
+import { groupSizeOf } from '@/lib/payments/groups';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -77,6 +79,9 @@ export async function POST(req: Request) {
 
       eventSnapshot = await getEventSnapshot(eventId);
       if (!eventSnapshot) throw new PaymentInputError('Event not found', 404);
+      if (salesStatus(eventSnapshot.date, eventSnapshot.time) === 'CLOSED') {
+        throw new PaymentInputError('Ticket sales for this event have closed.', 409);
+      }
 
       const { data: categories } = await db.from('event_ticket_categories').select('*').eq('event_id', eventId);
       if (!categories || categories.length === 0) throw new PaymentInputError('Categories not found', 404);
@@ -87,9 +92,13 @@ export async function POST(req: Request) {
         .select('tickets_data, status')
         .eq('event_id', eventId)
         .eq('user_id', user.id);
-      const previouslyBought = (existingBookings || [])
+      // Single tickets and group tickets have separate per-account limits.
+      const heldTickets = (existingBookings || [])
         .filter((b) => b.status !== 'REFUNDED')
-        .reduce((n, b) => n + (b.tickets_data?.length || 0), 0);
+        .flatMap((b) => (b.tickets_data || []) as { groupSize?: number; status?: string }[])
+        .filter((t) => t.status !== 'REFUNDED');
+      const previouslyBoughtGroups = heldTickets.filter((t) => groupSizeOf(t.groupSize) > 1).length;
+      const previouslyBought = heldTickets.length - previouslyBoughtGroups;
 
       const quote = quoteEventCart({
         cart,
@@ -100,6 +109,7 @@ export async function POST(req: Request) {
         pointsToRedeem,
         loyaltyBalance: profile?.loyalty_points || 0,
         previouslyBought,
+        previouslyBoughtGroups,
       });
       lines = quote.lines;
       pointsApplied = quote.pointsApplied;

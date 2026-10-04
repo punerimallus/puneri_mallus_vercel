@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { CTA_MAX_LENGTH, CTA_PRESETS, DEFAULT_CTA, ctaLabel } from '@/lib/events/cta';
 import { 
   Trash2, Star, Edit3, X, RefreshCcw, Plus, 
   Clock, MapPin, Link as LinkIcon, Loader2, Camera, Globe, Search, Calendar,
@@ -24,6 +25,7 @@ interface TribeEvent {
   location: string;
   mapUrl?: string;
   ticketUrl?: string;
+  buttonLabel?: string;
   category: string;
   categoryLogo?: string; 
   image: string;
@@ -63,7 +65,7 @@ export default function AdminEventsPage() {
 
   const [form, setForm] = useState({ 
     title: '', date: '', time: '', location: '', mapUrl: '', 
-    ticketUrl: '', category: 'CULTURAL', image: '', featured: false, description: '',categoryLogo: '',
+    ticketUrl: '', buttonLabel: 'Register Now', category: 'CULTURAL', image: '', featured: false, description: '',categoryLogo: '',
     memberDiscount: 0, memberPoints: 0, nonMemberPoints: 0 // 🔥 NEW
   });
 
@@ -163,6 +165,7 @@ export default function AdminEventsPage() {
       mapUrl: formatUrl(form.mapUrl),
       // 🔥 NEW: Check for INTERNAL flag before formatting URL
       ticketUrl: form.ticketUrl === 'INTERNAL' ? 'INTERNAL' : formatUrl(form.ticketUrl),
+      buttonLabel: ctaLabel(form.buttonLabel),
       memberDiscount: Number(form.memberDiscount) || 0,
       memberPoints: Number(form.memberPoints) || 0,
       nonMemberPoints: Number(form.nonMemberPoints) || 0,
@@ -229,14 +232,14 @@ export default function AdminEventsPage() {
     setIsEditingId(event._id);
     const { _id, ...cleanData } = event;
     // @ts-ignore
-    setForm(cleanData);
+    setForm({ ...cleanData, buttonLabel: ctaLabel(cleanData.buttonLabel) });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const resetForm = () => {
     setForm({ 
       title: '', date: '', time: '', location: '', mapUrl: '', 
-      ticketUrl: '', category: 'CULTURAL', image: '', featured: false, description: '',categoryLogo: '',
+      ticketUrl: '', buttonLabel: 'Register Now', category: 'CULTURAL', image: '', featured: false, description: '',categoryLogo: '',
       memberDiscount: 0, memberPoints: 0, nonMemberPoints: 0 // 🔥 NEW
     });
     setIsEditingId(null);
@@ -468,6 +471,30 @@ export default function AdminEventsPage() {
                     />
                   </div>
                 )}
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-600 ml-2">Button Text</label>
+                <div className="flex flex-wrap gap-2">
+                  {CTA_PRESETS.map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setForm({ ...form, buttonLabel: preset })}
+                      className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${ctaLabel(form.buttonLabel) === preset ? 'bg-brandRed border-brandRed text-white' : 'bg-black border-white/10 text-zinc-500 hover:border-white/30'}`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  maxLength={CTA_MAX_LENGTH}
+                  placeholder="Or type your own, e.g. Reserve My Seat"
+                  className="w-full bg-black border border-white/10 p-5 rounded-2xl font-bold focus:border-brandRed outline-none text-white uppercase tracking-widest"
+                  value={form.buttonLabel || ''}
+                  onChange={e => setForm({ ...form, buttonLabel: e.target.value })}
+                />
+                <p className="text-[10px] text-zinc-600 ml-2">Shown on the event card on the Events page. Leave blank for "{DEFAULT_CTA}".</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
