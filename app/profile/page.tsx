@@ -10,10 +10,12 @@ import {
 import TribeCalendar from '@/components/ui/TribeCalendar';
 import { AnimatePresence, motion } from 'framer-motion';
 import Image from 'next/image';
+import MyTickets from '@/components/MyTickets';
 
 // 🔥 FIREBASE IMPORTS FOR OTP
 import { auth } from '@/lib/firebase';
 import { RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult } from "firebase/auth";
+import { onEnter } from '@/lib/ui/enter';
 
 const DEV_MODE_PHONE = false; 
 
@@ -370,7 +372,7 @@ export default function ProfilePage() {
             <input 
               type="password" placeholder="CURRENT PASSWORD"
               className="w-full bg-black border border-white/10 p-5 rounded-2xl text-sm font-bold focus:border-red-500 outline-none transition-all mb-4 text-center placeholder:text-zinc-700"
-              value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
+              value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} onKeyDown={onEnter(handleDeleteAccount, !!confirmPassword && !isPurging)}
             />
             <div className="space-y-3">
               <button onClick={handleDeleteAccount} disabled={!confirmPassword || isPurging} className="w-full py-5 bg-red-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-red-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
@@ -419,13 +421,18 @@ export default function ProfilePage() {
           </div>
         )}
 
+        <div id="my-tickets" className="scroll-mt-32 mb-12 bg-white/[0.03] backdrop-blur-3xl p-6 sm:p-10 rounded-[50px] border border-white/10 shadow-2xl" style={{ transform: 'translateZ(0)' }}>
+          <h2 className="text-2xl font-black italic uppercase tracking-tighter mb-6 flex items-center gap-3"><span className="w-8 h-[2px] bg-brandRed" /> My Tickets</h2>
+          <MyTickets heading="Your bookings" />
+        </div>
+
         <div className="bg-white/[0.03] backdrop-blur-3xl p-10 rounded-[50px] border border-white/10 shadow-2xl" style={{ transform: 'translateZ(0)' }}>
           <h2 className="text-2xl font-black italic uppercase tracking-tighter mb-8 flex items-center justify-between">
             <span className="flex items-center gap-3"><span className="w-8 h-[2px] bg-brandRed" /> Profile Data</span>
             {!isMember && <span className="text-[9px] font-bold tracking-widest text-zinc-500 bg-black/40 px-3 py-1 rounded-full border border-white/10 flex items-center gap-2"><Lock size={10} /> Membership Required to unlock all</span>}
           </h2>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6" onKeyDown={onEnter(handleUpdateProfile, !updating && !(!isAdult && dob) && isPhoneVerified)}>
             
             {/* NAME (Always Unlocked) */}
             <div className="space-y-1.5">
@@ -449,6 +456,7 @@ export default function ProfilePage() {
                     if (showOtpField) setShowOtpField(false);
                     setTimer(0); setConfirmationResult(null);
                   }}
+                  onKeyDown={onEnter(sendPhoneOtp, !isPhoneVerified && isPhoneValid && timer === 0 && !otpLoading)}
                 />
                 {!isPhoneVerified && isPhoneValid && (
                   <button type="button" onClick={sendPhoneOtp} disabled={timer > 0 || otpLoading} className="absolute right-3 px-4 py-2 bg-brandRed text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-white hover:text-black transition-all disabled:opacity-50 flex items-center gap-2">
@@ -464,7 +472,7 @@ export default function ProfilePage() {
                 {showOtpField && !isPhoneVerified && (
                   <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="relative flex items-center mt-2 overflow-hidden">
                     <Smartphone className="absolute left-4 text-brandRed" size={14} />
-                    <input type="text" placeholder="ENTER 6-DIGIT OTP" maxLength={6} disabled={otpLoading} className="w-full bg-brandRed/10 border border-brandRed/30 p-5 pl-11 pr-24 rounded-xl font-black text-[12px] tracking-[0.3em] outline-none text-white placeholder:text-zinc-500" value={otp} onChange={(e) => setOtp(e.target.value)} />
+                    <input type="text" placeholder="ENTER 6-DIGIT OTP" maxLength={6} disabled={otpLoading} className="w-full bg-brandRed/10 border border-brandRed/30 p-5 pl-11 pr-24 rounded-xl font-black text-[12px] tracking-[0.3em] outline-none text-white placeholder:text-zinc-500" value={otp} onChange={(e) => setOtp(e.target.value)} onKeyDown={onEnter(verifyPhoneOtp, !otpLoading && otp.length >= 6)} />
                     <button type="button" onClick={verifyPhoneOtp} disabled={otpLoading || otp.length < 6} className="absolute right-2 px-4 py-2 bg-white text-black text-[10px] uppercase font-black tracking-widest rounded-lg transition-all hover:bg-zinc-200">
                       {otpLoading ? <Loader2 size={12} className="animate-spin" /> : "SUBMIT"}
                     </button>

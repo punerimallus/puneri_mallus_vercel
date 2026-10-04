@@ -5,6 +5,7 @@ import { useAlert } from '@/context/AlertContext';
 import { createBrowserClient } from '@supabase/ssr';
 import { useRouter } from 'next/navigation';
 import { waitForOrder, orderRef } from '@/lib/payments/client';
+import MyTickets from '@/components/MyTickets';
 
 export default function EventBookingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: eventId } = use(params);
@@ -270,8 +271,15 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
           </div>
 
           <div className="flex-1 p-8 overflow-y-auto pb-48 custom-scrollbar">
+            {/* Recent tickets, so a returning customer can find their passes without leaving */}
+            <div className="max-w-md mx-auto mb-8">
+              <MyTickets limit={3} highlightEventId={eventId} heading="Your recent tickets" />
+            </div>
             {step === 1 ? (
-              <div className="space-y-10 mt-8 max-w-md mx-auto">
+              <form
+                className="space-y-10 mt-8 max-w-md mx-auto"
+                onSubmit={(e) => { e.preventDefault(); if (email.includes('@')) setStep(2); }}
+              >
                 <div className="text-center space-y-3">
                   <h2 className="text-xl font-black uppercase tracking-widest text-white">Digital Delivery</h2>
                   <p className="text-xs text-zinc-500 font-semibold leading-relaxed px-4">Your digital PDF passes and payment receipt will be securely dispatched to this address.</p>
@@ -287,12 +295,12 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
                 </div>
                 
                 <button 
-                  disabled={!email.includes('@')} onClick={() => setStep(2)}
+                  type="submit" disabled={!email.includes('@')}
                   className={`w-full py-5 font-black uppercase tracking-[0.2em] rounded-2xl flex justify-center items-center gap-3 transition-all duration-300 text-xs ${email.includes('@') ? 'bg-brandRed text-white shadow-[0_0_30px_rgba(255,0,0,0.3)] hover:shadow-[0_0_50px_rgba(255,0,0,0.5)] active:scale-95' : 'bg-white/5 text-zinc-600 border border-white/5 cursor-not-allowed'}`}
                 >
                   Choose Your Category <ArrowRight size={16} />
                 </button>
-              </div>
+              </form>
             ) : (
               <div className="space-y-4">
                 <div className="flex justify-between items-end mb-6 border-b border-white/5 pb-4">

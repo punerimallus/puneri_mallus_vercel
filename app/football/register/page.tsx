@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'; // 🔥 NEW: For redirecting
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, Phone, Mail, MapPin, Users, ShieldCheck, ArrowRight, ArrowLeft, Loader2, Trophy, CheckSquare, CalendarDays } from 'lucide-react';
 import { useAlert } from '@/context/AlertContext';
+import { onEnter } from '@/lib/ui/enter';
 
 const TEAM_TYPES = ["Locality Team", "Friends Team", "Corporate Team", "Club Team", "Other"];
 const PUNE_AREAS = ["Akurdi", "Aundh", "Balewadi", "Baner", "Bavdhan", "Bhosari", "Bibwewadi", "Camp", "Chikhali", "Chinchwad", "Dapodi", "Deccan", "Dhanori", "Erandwane", "Fatima Nagar", "Ghorpadi", "Hadapsar", "Hinjewadi", "Kalyani Nagar", "Karve Nagar", "Kasarwadi","Kalewadi","Katraj", "Khadki", "Kondhwa", "Koregaon Park", "Kothrud", "Lohegaon", "Magarpatta", "Model Colony", "Moshi", "Mundhwa", "NIBM", "Nigdi", "Pashan", "Phugewadi", "Pimpri", "Pimple Gurav", "Pimple Nilakh", "Pimple Saudagar", "Pune City", "Punawale", "Rahatani", "Ravet", "Sadashiv Peth", "Sahakar Nagar", "Sangvi", "Shivajinagar", "Sinhagad Road", "Sus", "Swargate", "Talawade", "Tathawade", "Thergaon", "Undri", "Viman Nagar", "Vishrantwadi", "Wakad", "Wanowrie", "Warje", "Yerwada"].sort();
@@ -121,7 +122,7 @@ export default function FootballRegistration() {
           <AnimatePresence mode="wait">
             
             {step === 1 && (
-              <motion.div key="step1" variants={stepVariants} initial="hidden" animate="visible" exit="exit" className="space-y-6">
+              <motion.div key="step1" variants={stepVariants} initial="hidden" animate="visible" exit="exit" className="space-y-6" onKeyDown={onEnter(handleStep1Next, !!isStep1Valid && !checkingEmail)}>
                 <h3 className="text-xl font-black uppercase italic text-white border-b border-white/5 pb-4">Representative Details</h3>
                 
                 <div className="space-y-4">
@@ -167,7 +168,7 @@ export default function FootballRegistration() {
             )}
 
             {step === 2 && (
-              <motion.div key="step2" variants={stepVariants} initial="hidden" animate="visible" exit="exit" className="space-y-6">
+              <motion.div key="step2" variants={stepVariants} initial="hidden" animate="visible" exit="exit" className="space-y-6" onKeyDown={onEnter(() => setStep(3), !!isStep2Valid)}>
                 <div className="flex items-center gap-4 border-b border-white/5 pb-4">
                   <button onClick={() => setStep(1)} className="text-zinc-500 hover:text-white"><ArrowLeft size={18} /></button>
                   <h3 className="text-xl font-black uppercase italic text-white">Origin & Type</h3>
@@ -219,7 +220,7 @@ export default function FootballRegistration() {
             )}
 
             {step === 3 && (
-              <motion.div key="step3" variants={stepVariants} initial="hidden" animate="visible" exit="exit" className="space-y-6">
+              <motion.div key="step3" variants={stepVariants} initial="hidden" animate="visible" exit="exit" className="space-y-6" onKeyDown={onEnter(() => setStep(4), !!isStep3Valid)}>
                 <div className="flex items-center gap-4 border-b border-white/5 pb-4">
                   <button onClick={() => setStep(2)} className="text-zinc-500 hover:text-white"><ArrowLeft size={18} /></button>
                   <h3 className="text-xl font-black uppercase italic text-white">Squad Details</h3>

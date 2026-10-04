@@ -493,3 +493,58 @@ export async function renderBookingPdf(bookingId: string): Promise<{ base64: str
   });
   return { base64, filename: `puneri-mallus-tickets-${view.id.split('-')[0]}.pdf` };
 }
+
+export interface BookingSummary {
+  id: string;
+  eventId: string;
+  eventTitle: string;
+  eventDate: string | null;
+  eventTime: string | null;
+  eventLocation: string | null;
+  status: string;
+  passes: number;
+  /** Rupees charged including the gateway fee when known. */
+  totalPaid: number;
+  createdAt: string | null;
+}
+
+/** A customer's own bookings, newest first, for the "My Tickets" lists. Only confirmed or refunded bookings appear. */
+export async function listUserBookings(userId: string, limit = 50): Promise<BookingSummary[]> {
+  const db = supabaseAdmin();
+  const bookings = ((await must(
+    db.from('ticket_bookings').select('id, event_id, status, created_at, amount_paid, tickets_data').eq('user_id', userId).order('created_at', { ascending: false }).limit(limit),
+  )) || []) as { id: string; event_id: string; status: string | null; created_at: string | null; amount_paid: number | null; tickets_data: unknown[] | null }[];
+  if (!bookings.length) return [];
+
+  const orders = ((await must(
+    db.from('payment_orders').select('booking_id, amount_paise, event_snapshot').in('booking_id', bookings.map((b) => b.id)),
+  )) || []) as { booking_id: string; amount_paise: number | null; event_snapshot: EventSnapshot | null }[];
+  const orderByBooking = new Map(orders.map((o) => [o.booking_id, o]));
+
+  // Older bookings have no saved snapshot; read their events once each.
+  const snapshots = new Map<string, EventSnapshot | null>();
+  for (const b of bookings) {
+    const fromOrder = orderByBooking.get(b.id)?.event_snapshot;
+    if (fromOrder) snapshots.set(b.event_id, fromOrder);
+  }
+  for (const eventId of new Set(bookings.map((b) => b.event_id))) {
+    if (!snapshots.has(eventId)) snapshots.set(eventId, await getEventSnapshot(eventId).catch(() => null));
+  }
+
+  return bookings.map((b) => {
+    const order = orderByBooking.get(b.id);
+    const ev = snapshots.get(b.event_id);
+    return {
+      id: b.id,
+      eventId: b.event_id,
+      eventTitle: ev?.title || 'Event',
+      eventDate: ev?.date ?? null,
+      eventTime: ev?.time ?? null,
+      eventLocation: ev?.location ?? null,
+      status: b.status || 'CONFIRMED',
+      passes: Array.isArray(b.tickets_data) ? b.tickets_data.length : 0,
+      totalPaid: order?.amount_paise ? order.amount_paise / 100 : Number(b.amount_paid) || 0,
+      createdAt: b.created_at,
+    };
+  });
+}

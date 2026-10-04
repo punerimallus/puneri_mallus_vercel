@@ -509,13 +509,14 @@ export async function sendEventTicketEmail(to: string, bookingId: string, ticket
   const calTitle = encodeURIComponent(eventData?.title || 'Puneri Mallus Event');
   const calLocation = encodeURIComponent(eventData?.location || 'Pune');
   const calDetails = encodeURIComponent('Your event passes are attached in your email!');
+  const profileUrl = siteUrl('/profile#my-tickets');
   const googleCalendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${calTitle}&location=${calLocation}&details=${calDetails}`;
 
   const { error: sendError } = await resend.emails.send({
       from: FROM,
       to: to,
       subject: `Your passes are confirmed — ${eventData?.title || 'Puneri Mallus'}`,
-      text: `Your passes are ready! Booking ID: ${bookingId.split('-')[0].toUpperCase()}. Total paid: ₹${inr(totalAmount)}. Please open the attached PDF to view and scan your passes.`,
+      text: `Your passes are ready! Booking ID: ${bookingId.split('-')[0].toUpperCase()}. Total paid: ₹${inr(totalAmount)}. Please open the attached PDF to view and scan your passes. You can also see your tickets anytime in your profile: ${profileUrl}`,
       html: `
         <div style="font-family: 'Segoe UI', Helvetica, Arial, sans-serif; background-color: #f4f5f9; padding: 40px 20px; color: #111827;">
           <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06);">
@@ -550,6 +551,7 @@ export async function sendEventTicketEmail(to: string, bookingId: string, ticket
             </table>
             <div style="text-align: center; padding: 16px; background-color: #f9fafb; margin-top: 16px;">
               <p style="margin: 0; color: #4b5563; font-size: 12px;">Open the attached PDF to view your passes</p>
+              <p style="margin: 8px 0 0; color: #4b5563; font-size: 12px;">You can also see your tickets anytime in your <a href="${profileUrl}" style="color: #dc2626; text-decoration: none; font-weight: 600;">profile</a>.</p>
             </div>
           </div>
         </div>

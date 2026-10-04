@@ -6,6 +6,8 @@ import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion'
 import { 
   Loader2, Search, Zap, History, Clock, MapPin, X, Ticket
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { ctaLabel, eventTarget } from '@/lib/events/cta';
 
 const FILTERS = [
     { id: 'UPCOMING', label: 'Upcoming Event' },
@@ -25,6 +27,7 @@ const toBase64 = (str: string) =>
 export const blurPlaceholder = `data:image/svg+xml;base64,${toBase64(shimmer(700, 475))}`;
 
 export default function EventsPage() {
+  const router = useRouter();
   const [activeFilter, setActiveFilter] = useState('ALL');
   const [isAutoPlaying, setIsAutoPlaying] = useState(false);
   const [search, setSearch] = useState('');
@@ -186,12 +189,28 @@ export default function EventsPage() {
               const day = dateObj.getDate() || "??";
               const month = dateObj.toLocaleString('en-US', { month: 'short' }).toUpperCase() || "TBA";
 
+              const target = eventTarget(item);
+              // Clicking anywhere on the card (or pressing Enter on it) opens the event; past events just show details.
+              const openCard = () => {
+                if (item.isUpcoming && target) {
+                  if (target.external) window.open(target.href, '_blank', 'noopener,noreferrer');
+                  else router.push(target.href);
+                } else {
+                  setExpandedId(isExpanded ? null : item._id);
+                }
+              };
+
               return (
                 <motion.div layout key={item._id}
+                  role="link"
+                  tabIndex={0}
+                  aria-label={item.title || 'Event'}
+                  onClick={openCard}
+                  onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } }}
                   initial={{ opacity: 0 }} 
                   animate={{ opacity: 1 }} 
                   exit={{ opacity: 0 }}
-                  className="group relative border border-white/10 md:border-white/5 rounded-[40px] overflow-hidden transition-all duration-500 hover:border-brandRed/30 shadow-xl md:backdrop-blur-2xl h-fit bg-zinc-900 md:bg-white/[0.03]"
+                  className="group relative cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brandRed border border-white/10 md:border-white/5 rounded-[40px] overflow-hidden transition-all duration-500 hover:border-brandRed/30 shadow-xl md:backdrop-blur-2xl h-fit bg-zinc-900 md:bg-white/[0.03]"
                   style={{ transform: 'translateZ(0)' }}
                 >
                   <div className="relative w-full h-56 overflow-hidden">
@@ -282,18 +301,19 @@ export default function EventsPage() {
 
                     <div className="flex flex-col gap-3">
                         <div className="flex gap-2">
-                           {item.isUpcoming && (
-  <Link 
-    // 🔥 FIX: Made the check robust against whitespace or lowercase database saves
-    href={item.ticketUrl?.toUpperCase().includes('INTERNAL') ? `/events/${item._id}/book` : (item.ticketUrl || '#')}
-    target={item.ticketUrl?.toUpperCase().includes('INTERNAL') ? "_self" : "_blank"} 
+                           {item.isUpcoming && target && (
+  <Link
+    href={target.href}
+    target={target.external ? "_blank" : "_self"}
+    rel={target.external ? "noopener noreferrer" : undefined}
+    onClick={(e) => e.stopPropagation()}
     className="flex-[2] bg-brandRed text-white py-4 rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-white hover:text-black transition-all flex items-center justify-center gap-2 shadow-lg active:scale-95"
   >
-    <Ticket size={16} /> Register Now 
+    <Ticket size={16} /> {ctaLabel(item.buttonLabel)}
   </Link>
 )}
                            
-                           <button onClick={() => {setExpandedId(isExpanded ? null : item._id); }}
+                           <button onClick={(e) => { e.stopPropagation(); setExpandedId(isExpanded ? null : item._id); }}
                               className={`flex-1 py-4 rounded-2xl font-black uppercase text-[11px] tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg active:scale-95 ${item.isUpcoming ? 'bg-white text-black hover:bg-zinc-200' : 'bg-zinc-800 text-zinc-400 hover:text-white'}`}
                            >
                              {isExpanded ? <X size={14} /> : 'Details'}
