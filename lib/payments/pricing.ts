@@ -1,4 +1,5 @@
 import { CartLine, MartPlan, PaymentInputError } from './types';
+import { groupSizeOf } from './groups';
 
 // Razorpay's 2% fee + 18% GST on it, passed on to the buyer.
 export const GATEWAY_FEE_RATE = 0.0236;
@@ -22,6 +23,7 @@ export interface TicketCategory {
   capacity: number | null;
   sold: number | null;
   active?: boolean | null;
+  group_size?: number | null;
 }
 
 export interface EventCartInput {
@@ -70,7 +72,8 @@ export function quoteEventCart(input: EventCartInput): EventCartQuote {
     }
 
     const unitPrice = cat.price - (cat.price * discount) / 100;
-    lines.push({ categoryId, name: cat.name, prefix: cat.prefix, qty, unitPrice });
+    const groupSize = groupSizeOf(cat.group_size);
+    lines.push({ categoryId, name: cat.name, prefix: cat.prefix, qty, unitPrice, ...(groupSize > 1 ? { groupSize } : {}) });
     subtotal += unitPrice * qty;
     totalQty += qty;
   }

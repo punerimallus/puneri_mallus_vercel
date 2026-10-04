@@ -6,6 +6,7 @@ import { createBrowserClient } from '@supabase/ssr';
 import { useRouter } from 'next/navigation';
 import { waitForOrder, orderRef } from '@/lib/payments/client';
 import MyTickets from '@/components/MyTickets';
+import { groupSizeOf, isGroup, pricePerPerson } from '@/lib/payments/groups';
 
 export default function EventBookingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: eventId } = use(params);
@@ -327,6 +328,11 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
                         <div>
                           <div className="flex items-center gap-2">
                             <h3 className="text-sm font-black text-white uppercase tracking-widest">{cat.name}</h3>
+                            {isGroup(cat.group_size) && (
+                               <span className="text-[8px] bg-white/10 border border-white/20 text-white px-2 py-0.5 rounded-full font-black uppercase tracking-widest">
+                                 Group of {groupSizeOf(cat.group_size)}
+                               </span>
+                            )}
                             {hasActiveDiscount && (
                                <span className="text-[8px] bg-brandRed text-white px-2 py-0.5 rounded-full font-black uppercase tracking-widest flex items-center gap-1 shadow-[0_0_10px_rgba(255,0,0,0.4)]">
                                  <Star size={8} className="fill-white" /> Tribe Rate
@@ -342,6 +348,7 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
                             ) : (
                                <p className="text-xs font-bold text-brandRed tracking-widest">₹{displayPrice.toLocaleString('en-IN')}</p>
                             )}
+                            {isGroup(cat.group_size) && <p className="text-[10px] font-bold text-zinc-400 tracking-widest">admits {groupSizeOf(cat.group_size)} &middot; ₹{pricePerPerson(displayPrice, cat.group_size).toLocaleString('en-IN')} each</p>}
                             {isFastFilling && <span className="text-[9px] font-black uppercase text-orange-500 bg-orange-500/10 px-2 py-0.5 rounded-full animate-pulse border border-orange-500/20 shadow-[0_0_10px_rgba(249,115,22,0.2)]">Fast Filling</span>}
                             {isSoldOut && <span className="text-[9px] font-black uppercase text-zinc-500 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded-full">Sold Out</span>}
                           </div>

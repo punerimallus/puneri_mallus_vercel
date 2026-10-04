@@ -18,6 +18,7 @@ import {
   PaymentOrder,
   SoldOutError,
 } from './types';
+import { groupSizeOf } from './groups';
 
 export const STALE_PROCESSING_MS = 5 * 60 * 1000;
 export const MAX_EMAIL_ATTEMPTS = 5;
@@ -92,8 +93,9 @@ export function buildIssuedTickets(order: PaymentOrder, allocations: Allocation[
     const line = order.cart?.find((l) => l.categoryId === a.categoryId);
     const prefix = line?.prefix ?? '';
     const name = line?.name ?? 'General';
+    const groupSize = groupSizeOf(line?.groupSize);
     for (let n = a.endSold - a.qty + 1; n <= a.endSold; n++) {
-      tickets.push({ categoryName: name, ticketNumber: `${prefix}${String(n).padStart(3, '0')}`, status: 'ISSUED' });
+      tickets.push({ categoryName: name, ticketNumber: `${prefix}${String(n).padStart(3, '0')}`, status: 'ISSUED', ...(groupSize > 1 ? { groupSize } : {}) });
     }
   }
   return tickets;

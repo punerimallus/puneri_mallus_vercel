@@ -15,6 +15,7 @@ import {
 import { BookingInsert, FulfilmentDeps, fulfilOrder } from './fulfil';
 import { DeliveryDeps, DeliveryOptions, deliverOrderEmail } from './delivery';
 import { nextMartExpiry } from './pricing';
+import { groupSizeOf } from './groups';
 import { fetchLogoBase64, generateTicketPdf } from './ticket-pdf';
 import { EventSnapshot, FulfilmentSource, GatewayPayment, PaymentOrder, SoldOutError } from './types';
 
@@ -271,7 +272,7 @@ export const fulfilmentDeps: FulfilmentDeps = {
 async function buildAndSendTickets(
   bookingId: string,
   to: string,
-  tickets: { categoryName: string; ticketNumber: string; unitPrice: number }[],
+  tickets: { categoryName: string; ticketNumber: string; unitPrice: number; groupSize?: number }[],
   event: EventSnapshot | null,
   pointsApplied: number,
   totalAmount: number,
@@ -300,7 +301,7 @@ export const deliveryDeps: DeliveryDeps = {
   async sendTicketEmail(order, to) {
     const booking = (await must(
       supabaseAdmin().from('ticket_bookings').select('id, tickets_data').eq('id', order.booking_id).single(),
-    )) as { id: string; tickets_data: { categoryName: string; ticketNumber: string }[] };
+    )) as { id: string; tickets_data: { categoryName: string; ticketNumber: string; groupSize?: number }[] };
     const priceByName = new Map((order.cart || []).map((l) => [l.name, l.unitPrice]));
     const tickets = (booking.tickets_data || []).map((t) => ({ ...t, unitPrice: priceByName.get(t.categoryName) ?? 0 }));
     await buildAndSendTickets(booking.id, to, tickets, order.event_snapshot, order.points_to_redeem, order.base_amount, {
@@ -386,7 +387,7 @@ export async function resendBooking(bookingId: string, opts: { overrideEmail?: s
     status?: string;
     last_emailed_at?: string | null;
     email_attempts?: number;
-    tickets_data: { categoryName: string; ticketNumber: string }[];
+    tickets_data: { categoryName: string; ticketNumber: string; groupSize?: number }[];
   } | null;
   if (!booking) return { status: 'NOT_READY' as const };
   if (booking.status === 'REFUNDED') return { status: 'NOT_READY' as const, error: 'Booking was refunded' };
@@ -419,7 +420,7 @@ export interface BookingView {
   status: string;
   createdAt: string | null;
   eventId: string;
-  tickets: { categoryName: string; ticketNumber: string; unitPrice: number; status: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED' }[];
+  tickets: { categoryName: string; ticketNumber: string; unitPrice: number; status: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED'; groupSize: number }[];
   event: EventSnapshot | null;
   pointsApplied: number;
   /** Rupees actually charged including the gateway fee, when known (otherwise derived from the passes). */
@@ -437,7 +438,7 @@ export async function loadBookingView(bookingId: string): Promise<(BookingView &
     event_id: string;
     status?: string;
     created_at?: string | null;
-    tickets_data: { categoryName: string; ticketNumber: string; status?: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED' }[] | null;
+    tickets_data: { categoryName: string; ticketNumber: string; status?: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED'; groupSize?: number }[] | null;
   } | null;
   if (!booking) return null;
 
@@ -465,6 +466,7 @@ export async function loadBookingView(bookingId: string): Promise<(BookingView &
       ticketNumber: t.ticketNumber,
       unitPrice: prices.get(t.categoryName) ?? 0,
       status: t.status || 'ISSUED',
+      groupSize: groupSizeOf(t.groupSize),
     })),
     event: order?.event_snapshot ?? (await getEventSnapshot(booking.event_id)),
     pointsApplied: order?.points_to_redeem ?? 0,
@@ -485,7 +487,7 @@ export async function renderBookingPdf(bookingId: string): Promise<{ base64: str
     bookingId: view.id,
     purchaserEmail: view.email || '',
     event: view.event,
-    tickets: view.tickets.map((t) => ({ categoryName: t.categoryName, ticketNumber: t.ticketNumber, unitPrice: t.unitPrice, status: t.status })),
+    tickets: view.tickets.map((t) => ({ categoryName: t.categoryName, ticketNumber: t.ticketNumber, unitPrice: t.unitPrice, status: t.status, groupSize: t.groupSize })),
     pointsApplied: view.pointsApplied,
     logoBase64: await fetchLogoBase64(baseUrl()),
     baseUrl: baseUrl(),

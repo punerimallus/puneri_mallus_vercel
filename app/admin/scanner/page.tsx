@@ -115,6 +115,12 @@ function ScannerContent() {
                 <p className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest">Ticket Number</p>
                 <p className="text-lg font-black text-white">{tno}</p>
               </div>
+              {Number(ticketDetails?.groupSize) > 1 && (
+                <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 text-center">
+                  <p className="text-[10px] text-green-400 uppercase font-bold tracking-widest">Group pass: let in</p>
+                  <p className="text-4xl font-black text-white">{ticketDetails.groupSize} <span className="text-lg">PEOPLE</span></p>
+                </div>
+              )}
               <div>
                 <p className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest">Category</p>
                 <p className="text-lg font-black text-brandRed">{ticketDetails?.categoryName || 'GENERAL'}</p>

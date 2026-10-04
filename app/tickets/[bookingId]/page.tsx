@@ -3,9 +3,10 @@ import { useState, useEffect, use } from 'react';
 import { CheckCircle2, MapPin, Calendar, Clock, Mail, Smartphone, Loader2, ArrowRight, Download, ChevronLeft, ChevronRight, LogIn } from 'lucide-react';
 import Link from 'next/link';
 import QRCode from 'qrcode';
+import { admitsLabel, isGroup } from '@/lib/payments/groups';
 import { buildReceipt, buildScanUrl, formatEventDate, formatEventTime, formatIst, formatRupees } from '@/lib/payments/format';
 
-type Pass = { categoryName: string; ticketNumber: string; unitPrice: number; status: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED' };
+type Pass = { categoryName: string; ticketNumber: string; unitPrice: number; status: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED'; groupSize: number };
 type View = {
   id: string; email: string | null; status: string; createdAt: string | null;
   tickets: Pass[];
@@ -174,7 +175,9 @@ export default function TicketSuccessPage({ params }: { params: Promise<{ bookin
               </div>
             )}
 
-            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-brandRed bg-brandRed/10 border border-brandRed/30 rounded-full px-3 py-1 mb-4">{pass.categoryName}</span>
+            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-brandRed bg-brandRed/10 border border-brandRed/30 rounded-full px-3 py-1 mb-2">{pass.categoryName}</span>
+            {isGroup(pass.groupSize) && <p className="text-[11px] font-black uppercase tracking-widest text-white mb-4">Group pass &middot; admits {admitsLabel(pass.groupSize)}</p>}
+            {!isGroup(pass.groupSize) && <div className="mb-2" />}
 
             <div className={`bg-white p-3 rounded-2xl mb-4 shadow-xl ${refunded || pass.status === 'REFUNDED' ? 'opacity-30' : ''}`}>
               {qrs[active] ? <img src={qrs[active]} alt={`QR for ${pass.ticketNumber}`} className="w-44 h-44 rounded-lg" /> : <div className="w-44 h-44 flex items-center justify-center"><Loader2 className="animate-spin text-zinc-400" /></div>}
@@ -184,7 +187,7 @@ export default function TicketSuccessPage({ params }: { params: Promise<{ bookin
             <span className={`text-[9px] font-black uppercase tracking-widest border rounded-full px-3 py-1 mb-6 ${st.cls}`}>{st.label}</span>
 
             <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-600 text-center leading-relaxed">
-              One scan, one person. Show this QR code at the entry gate.<br /> A valid Government ID is required.
+              {isGroup(pass.groupSize) ? `One scan admits all ${pass.groupSize} people. Everyone in the group should arrive together.` : 'One scan, one person.'} Show this QR code at the entry gate.<br /> A valid Government ID is required.
             </p>
           </div>
         </div>

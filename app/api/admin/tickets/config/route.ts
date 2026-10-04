@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { groupSizeOf } from '@/lib/payments/groups';
 
 export async function POST(req: Request) {
   try {
@@ -40,7 +41,10 @@ export async function POST(req: Request) {
       price: cat.price,
       prefix: cat.prefix,
       capacity: cat.capacity,
-      active: true
+      active: true,
+      // Only written for group categories, or when the row already carries the field, so single-entry
+      // categories keep saving exactly as before.
+      ...(groupSizeOf(cat.group_size) > 1 || 'group_size' in cat ? { group_size: groupSizeOf(cat.group_size) } : {}),
     }));
 
     // 3. Save to Supabase

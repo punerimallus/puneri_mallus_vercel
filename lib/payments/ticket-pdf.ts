@@ -1,13 +1,14 @@
 import jsPDF from 'jspdf';
 import { LOGO_DATA_URI } from './logo-data';
 import QRCode from 'qrcode';
+import { admitsLabel, groupSizeOf, isGroup } from './groups';
 import { buildReceipt, buildScanUrl, formatEventDate, formatEventTime, formatIst, formatRupees, pdfSafe } from './format';
 
 export interface TicketPdfInput {
   bookingId: string;
   purchaserEmail: string;
   event: { title?: string; date?: string; time?: string; location?: string } | null;
-  tickets: { categoryName: string; ticketNumber: string; unitPrice: number; status?: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED' }[];
+  tickets: { categoryName: string; ticketNumber: string; unitPrice: number; status?: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED'; groupSize?: number }[];
   pointsApplied: number;
   logoBase64: string | null;
   baseUrl: string;
@@ -132,11 +133,11 @@ export async function buildTicketPdf(input: TicketPdfInput): Promise<jsPDF> {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9);
     doc.setCharSpace(0.6);
-    const chipW = spacedWidth(doc, category, 0.6) + 9;
+    const chipW = spacedWidth(doc, category, 0.6) + 10;
     doc.setFillColor(...RED);
     doc.roundedRect(M, 51, chipW, 7.5, 3.75, 3.75, 'F');
     doc.setTextColor(255, 255, 255);
-    doc.text(category, M + chipW / 2, 56.2, { align: 'center' });
+    doc.text(category, M + 4.5, 56.2); // left-aligned: centred text drifts with letter-spacing
     doc.setCharSpace(0);
 
     doc.setFont('helvetica', 'bold');
@@ -156,7 +157,7 @@ export async function buildTicketPdf(input: TicketPdfInput): Promise<jsPDF> {
     doc.setTextColor(...INK);
     doc.text(dateText, cols[0], y + 6.5);
     doc.text(timeText, cols[1], y + 6.5);
-    doc.text('1 Person', cols[2], y + 6.5);
+    doc.text(admitsLabel(ticket.groupSize), cols[2], y + 6.5);
     y += 16;
 
     label(doc, 'VENUE', M, y);
@@ -208,11 +209,11 @@ export async function buildTicketPdf(input: TicketPdfInput): Promise<jsPDF> {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.5);
     doc.setCharSpace(0.4);
-    const badgeW = spacedWidth(doc, status.text, 0.4) + 11;
+    const badgeW = spacedWidth(doc, status.text, 0.4) + 11.5;
     doc.setFillColor(...status.color);
     doc.roundedRect(lx, y + 52, badgeW, 6.5, 3.25, 3.25, 'F');
     doc.setTextColor(255, 255, 255);
-    doc.text(status.text, lx + badgeW / 2, y + 56.3, { align: 'center' });
+    doc.text(status.text, lx + 5.5, y + 56.3);
     doc.setCharSpace(0);
 
     // QR
@@ -232,7 +233,7 @@ export async function buildTicketPdf(input: TicketPdfInput): Promise<jsPDF> {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
     doc.setTextColor(...MUTED);
-    doc.text('One scan, one person', qrX + qrSize / 2, y + 62.5, { align: 'center' });
+    doc.text(isGroup(ticket.groupSize) ? `One scan admits all ${groupSizeOf(ticket.groupSize)}` : 'One scan, one person', qrX + qrSize / 2, y + 62.5, { align: 'center' });
 
     y += cardH + 11;
 
@@ -246,7 +247,10 @@ export async function buildTicketPdf(input: TicketPdfInput): Promise<jsPDF> {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8.5);
     doc.setTextColor(55, 65, 81);
-    RULES.forEach((rule, i) => doc.text(`${i + 1}.  ${rule}`, M + 6, y + 15 + i * 6));
+    const rules = isGroup(ticket.groupSize)
+      ? RULES.map((r, i) => (i === 1 ? `Group ticket: admits ${groupSizeOf(ticket.groupSize)} people together on one scan. Non-refundable, non-transferable.` : r))
+      : RULES;
+    rules.forEach((rule, i) => doc.text(`${i + 1}.  ${rule}`, M + 6, y + 15 + i * 6));
 
     footer(doc, ref, index + 1, totalPages);
   }

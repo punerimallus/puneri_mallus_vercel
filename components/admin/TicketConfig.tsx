@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { Loader2, Plus, Save, Trash2, Ticket } from 'lucide-react';
 import { useAlert } from '@/context/AlertContext';
 import { createBrowserClient } from '@supabase/ssr';
+import { MAX_GROUP_SIZE, groupSizeOf } from '@/lib/payments/groups';
 
 export default function TicketConfig({ eventId, eventTitle }: { eventId: string, eventTitle: string }) {
   const [categories, setCategories] = useState<any[]>([]);
@@ -26,7 +27,7 @@ export default function TicketConfig({ eventId, eventTitle }: { eventId: string,
   }, [eventId]);
 
   const addCategory = () => {
-    setCategories([...categories, { name: '', price: 0, prefix: '', capacity: 100, active: true }]);
+    setCategories([...categories, { name: '', price: 0, prefix: '', capacity: 100, active: true, group_size: 1 }]);
   };
 
   const updateCategory = (index: number, field: string, value: any) => {
@@ -67,7 +68,7 @@ export default function TicketConfig({ eventId, eventTitle }: { eventId: string,
       <div className="space-y-4">
         {categories.map((cat, idx) => (
           <div key={idx} className="grid grid-cols-1 md:grid-cols-12 gap-4 p-5 border border-white/5 rounded-2xl bg-black/50 items-center">
-            <div className="md:col-span-4 space-y-1">
+            <div className="md:col-span-3 space-y-1">
               <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 ml-2">Category Name</label>
               <input placeholder="e.g. VIP FULL COVER" value={cat.name} onChange={(e) => updateCategory(idx, 'name', e.target.value.toUpperCase())} className="w-full bg-zinc-950 border border-white/10 p-3 rounded-xl text-xs font-bold uppercase tracking-widest text-white outline-none focus:border-brandRed" />
             </div>
@@ -75,9 +76,14 @@ export default function TicketConfig({ eventId, eventTitle }: { eventId: string,
               <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 ml-2">Price (₹)</label>
               <input type="number" placeholder="0" value={cat.price} onChange={(e) => updateCategory(idx, 'price', Number(e.target.value))} className="w-full bg-zinc-950 border border-white/10 p-3 rounded-xl text-xs font-bold text-brandRed outline-none focus:border-brandRed" />
             </div>
-            <div className="md:col-span-3 space-y-1">
+            <div className="md:col-span-2 space-y-1">
               <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 ml-2">Ticket Prefix</label>
               <input placeholder="e.g. VIP-" value={cat.prefix} onChange={(e) => updateCategory(idx, 'prefix', e.target.value.toUpperCase())} className="w-full bg-zinc-950 border border-white/10 p-3 rounded-xl text-xs font-bold text-white uppercase outline-none focus:border-brandRed" />
+            </div>
+            <div className="md:col-span-2 space-y-1">
+              <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 ml-2" title="1 = single entry. Use 5 for a group ticket that admits 5 people on one QR code.">People / Ticket</label>
+              <input type="number" min={1} max={MAX_GROUP_SIZE} placeholder="1" value={cat.group_size ?? 1} onChange={(e) => updateCategory(idx, 'group_size', groupSizeOf(e.target.value))} className="w-full bg-zinc-950 border border-white/10 p-3 rounded-xl text-xs font-bold text-white outline-none focus:border-brandRed" />
+              {(cat.group_size ?? 1) > 1 && <p className="text-[9px] font-bold uppercase tracking-widest text-brandRed ml-2">Group of {cat.group_size}</p>}
             </div>
             <div className="md:col-span-2 space-y-1">
               <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 ml-2">Capacity</label>

@@ -503,7 +503,7 @@ export async function sendBatch(messages: BatchMessage[]): Promise<{ ids: string
 // "766" for whole rupees, "766.40" when there are paise.
 const inr = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 });
 
-export async function sendEventTicketEmail(to: string, bookingId: string, tickets: { categoryName: string; ticketNumber: string }[], totalAmount: number, pdfBase64: string, eventData: { title?: string; location?: string } | null) {
+export async function sendEventTicketEmail(to: string, bookingId: string, tickets: { categoryName: string; ticketNumber: string; groupSize?: number }[], totalAmount: number, pdfBase64: string, eventData: { title?: string; location?: string } | null) {
   const ticketNumbers = tickets.map(t => t.ticketNumber).join(', ');
 
   const calTitle = encodeURIComponent(eventData?.title || 'Puneri Mallus Event');
@@ -530,7 +530,7 @@ export async function sendEventTicketEmail(to: string, bookingId: string, ticket
               ${tickets.map(t => `
                 <div style="margin-bottom: 12px;">
                   <p style="margin: 0; color: #6b7280; font-size: 11px; letter-spacing: 0.5px;">Category</p>
-                  <p style="margin: 2px 0 0; color: #dc2626; font-size: 15px; font-weight: 600;">${t.categoryName}</p>
+                  <p style="margin: 2px 0 0; color: #dc2626; font-size: 15px; font-weight: 600;">${t.categoryName}${(t.groupSize || 1) > 1 ? ` <span style="color: #6b7280; font-weight: 500; font-size: 13px;">&middot; admits ${t.groupSize} people on one pass</span>` : ''}</p>
                 </div>
               `).join('')}
               <div style="margin-top: 20px; padding-top: 16px; border-top: 1px dashed #e5e7eb;">
