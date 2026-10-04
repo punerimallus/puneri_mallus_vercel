@@ -8,7 +8,7 @@ import { waitForOrder, orderRef } from '@/lib/payments/client';
 import MyTickets from '@/components/MyTickets';
 import { groupSizeOf, isGroup, pricePerPerson } from '@/lib/payments/groups';
 import { salesStatus } from '@/lib/events/sales';
-import { grossUpToPaise } from '@/lib/payments/pricing';
+import { grossUpToPaise, MAX_GROUP_TICKETS_PER_ACCOUNT, MAX_TICKETS_PER_ACCOUNT } from '@/lib/payments/pricing';
 import { formatRupees } from '@/lib/payments/format';
 
 export default function EventBookingPage({ params }: { params: Promise<{ id: string }> }) {
@@ -96,6 +96,11 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
   const chargePaise = grossUpToPaise(totalPrice);
   const feeAmount = chargePaise / 100 - totalPrice;
   
+  // Group tickets and single tickets have their own per-account limits (the server enforces them too).
+  const groupTicketsInCart = categories.reduce((n, c) => n + (isGroup(c.group_size) ? cart[c.id] || 0 : 0), 0);
+  const singleTicketsInCart = totalTickets - groupTicketsInCart;
+  const hasGroupCategory = categories.some((c) => isGroup(c.group_size));
+
   const updateCart = (id: string, delta: number, remaining: number) => {
     if (salesClosed && delta > 0) { showAlert('Ticket sales for this event have closed.', 'error'); return; }
     const currentQty = cart[id] || 0;
@@ -105,9 +110,17 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
       showAlert(`Only ${remaining} passes left in this category!`, "error");
       return;
     }
-    if (delta > 0 && totalTickets >= 7) {
-      showAlert("Maximum 7 passes per account", "error");
-      return;
+    if (delta > 0) {
+      const cat = categories.find((c) => c.id === id);
+      if (isGroup(cat?.group_size)) {
+        if (groupTicketsInCart >= MAX_GROUP_TICKETS_PER_ACCOUNT) {
+          showAlert(`Maximum ${MAX_GROUP_TICKETS_PER_ACCOUNT} group tickets per account`, "error");
+          return;
+        }
+      } else if (singleTicketsInCart >= MAX_TICKETS_PER_ACCOUNT) {
+        showAlert(`Maximum ${MAX_TICKETS_PER_ACCOUNT} passes per account`, "error");
+        return;
+      }
     }
     setCart({ ...cart, [id]: newQty });
   };
@@ -322,7 +335,7 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
                   <h2 className="text-lg font-black uppercase tracking-widest text-zinc-200 flex items-center gap-2">
                     <Sparkles size={16} className="text-brandRed" /> Select Passes
                   </h2>
-                  <p className="text-[10px] text-brandRed font-black uppercase tracking-widest bg-brandRed/10 border border-brandRed/20 px-3 py-1.5 rounded-full shadow-inner">Max 7 per account</p>
+                  <p className="text-[10px] text-brandRed font-black uppercase tracking-widest bg-brandRed/10 border border-brandRed/20 px-3 py-1.5 rounded-full shadow-inner">Max {MAX_TICKETS_PER_ACCOUNT} per account{hasGroupCategory ? ` · ${MAX_GROUP_TICKETS_PER_ACCOUNT} group tickets` : ''}</p>
                 </div>
 
                 <div className="space-y-3">

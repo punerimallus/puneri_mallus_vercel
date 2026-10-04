@@ -42,6 +42,18 @@ describe('group tickets at checkout', () => {
   it('rejects extra fields in the cart, so the browser cannot choose a group size', () => {
     expect(() => quoteEventCart({ ...base, cart: { single: 1, groupSize: 99 } as any, categories: cats as any })).toThrow(/Invalid category/);
   });
+  it('limits group tickets to 2 per account, separately from the 7 single tickets', () => {
+    const q = (cart: any, over: any = {}) => quoteEventCart({ ...base, cart, categories: cats as any, ...over });
+    expect(() => q({ grp5: 2 })).not.toThrow();
+    expect(() => q({ grp5: 3 })).toThrow(/at most 2 group tickets/);
+    expect(() => q({ grp5: 1 }, { previouslyBoughtGroups: 1 })).not.toThrow();
+    expect(() => q({ grp5: 2 }, { previouslyBoughtGroups: 1 })).toThrow(/already have 1/);
+    // groups never use up the single-ticket allowance, and singles never use up the group allowance
+    expect(() => q({ single: 7, grp5: 2 })).not.toThrow();
+    expect(() => q({ single: 8 })).toThrow(/maximum of 7/);
+    expect(() => q({ single: 1 }, { previouslyBought: 7 })).toThrow(/maximum of 7/);
+    expect(() => q({ single: 1 }, { previouslyBoughtGroups: 2 })).not.toThrow();
+  });
   it('gives each group ticket one number (one QR) that carries the group size', () => {
     const order: any = { cart: [{ categoryId: 'grp5', name: 'GROUP OF 5 - GENERAL', prefix: 'G5-', qty: 2, unitPrice: 2000, groupSize: 5 }, { categoryId: 'single', name: 'GENERAL', prefix: 'GEN-', qty: 1, unitPrice: 500 }] };
     const t = buildIssuedTickets(order, [{ categoryId: 'grp5', qty: 2, endSold: 4 }, { categoryId: 'single', qty: 1, endSold: 10 }]);

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { CheckCircle2, XCircle, AlertTriangle, Loader2, Minus, Plus, Users } from 'lucide-react';
 import { formatEventDate } from '@/lib/payments/format';
@@ -20,6 +20,10 @@ function ScannerContent() {
   const [day, setDay] = useState<string>('UNKNOWN');
   const [count, setCount] = useState(1);
   const [justAdmitted, setJustAdmitted] = useState(0);
+  // For a group with several people still outside: first ask "is everyone here?", and only if not, how many are.
+  const [mode, setMode] = useState<'ask' | 'partial'>('ask');
+  // Blocks a double submit (Enter pressed while a button is focused fires both the key handler and the click).
+  const submitting = useRef(false);
 
   const vibrate = (type: 'success' | 'error') => {
     if (typeof window !== 'undefined' && navigator.vibrate) navigator.vibrate(type === 'success' ? [100, 50, 100] : [500]);
@@ -44,6 +48,7 @@ function ScannerContent() {
       setEvent(data.event);
       setDay(data.eventDay || 'UNKNOWN');
       setCount(Math.max(1, data.ticketDetails.remaining));
+      setMode('ask');
       setPhase(data.ticketDetails.remaining === 0 ? 'used' : 'ready');
       if (data.ticketDetails.remaining === 0) vibrate('error');
     } catch {
@@ -55,11 +60,13 @@ function ScannerContent() {
 
   useEffect(() => { lookup(); }, [lookup]);
 
-  const admit = useCallback(async () => {
-    if (!details || phase !== 'ready') return;
+  const admit = useCallback(async (howMany?: number) => {
+    if (!details || phase !== 'ready' || submitting.current) return;
+    submitting.current = true;
+    const admitCount = howMany ?? count;
     setPhase('admitting');
     try {
-      const res = await post({ action: 'admit', count });
+      const res = await post({ action: 'admit', count: admitCount });
       const data = await res.json();
       if (res.ok) {
         setDetails(data.ticketDetails);
@@ -84,16 +91,26 @@ function ScannerContent() {
       setMessage('Network error. Please try again.');
       setPhase('error');
       vibrate('error');
+    } finally {
+      submitting.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [details, phase, count, lookup]);
 
+  // Several people still outside on a group pass: ask before letting anyone in.
+  const askFirst = !!details && details.groupSize > 1 && details.remaining > 1;
+
   // Enter admits, so staff can work the gate from a keyboard too.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Enter' && phase === 'ready') { e.preventDefault(); admit(); } };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' || phase !== 'ready' || !details) return;
+      e.preventDefault();
+      // On the question screen Enter means "yes, everyone is here".
+      if (askFirst && mode === 'ask') admit(details.remaining); else admit();
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [phase, admit]);
+  }, [phase, admit, askFirst, mode, details]);
 
   if (!bid || !tno) {
     return (
@@ -158,20 +175,36 @@ function ScannerContent() {
             <Progress />
             {message && <p className="text-xs font-bold text-amber-400">{message}</p>}
 
-            {isGroup && (
-              <div className="w-full">
-                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2">How many are entering now?</p>
+            {askFirst && mode === 'ask' ? (
+              <div className="w-full space-y-3">
+                <p className="text-lg font-black uppercase tracking-widest text-white">Is the whole group here?</p>
+                <p className="text-[11px] font-bold uppercase tracking-widest text-zinc-500">{details.remaining} of {details.groupSize} still to enter</p>
+                <button onClick={() => admit(details.remaining)} disabled={phase === 'admitting'} className="w-full bg-green-600 text-white py-5 rounded-2xl font-black uppercase tracking-widest text-sm active:scale-95 transition-all shadow-[0_0_30px_rgba(34,197,94,0.3)] disabled:opacity-60 flex items-center justify-center gap-2">
+                  {phase === 'admitting' ? <Loader2 className="animate-spin" size={18} /> : `Yes, all ${details.remaining} are here`}
+                </button>
+                <button onClick={() => { setCount(Math.max(1, details.remaining - 1)); setMode('partial'); }} disabled={phase === 'admitting'} className="w-full bg-white/5 border border-white/15 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs active:scale-95 transition-all disabled:opacity-60">
+                  No, some are missing
+                </button>
+              </div>
+            ) : askFirst ? (
+              <div className="w-full space-y-4">
+                <p className="text-lg font-black uppercase tracking-widest text-white">How many are here now?</p>
                 <div className="flex items-center justify-center gap-6">
                   <button type="button" aria-label="One fewer" onClick={() => setCount((c) => Math.max(1, c - 1))} disabled={count <= 1} className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center disabled:opacity-30 active:scale-95"><Minus size={18} /></button>
                   <span className="text-5xl font-black w-16 text-center">{count}</span>
-                  <button type="button" aria-label="One more" onClick={() => setCount((c) => Math.min(details.remaining, c + 1))} disabled={count >= details.remaining} className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center disabled:opacity-30 active:scale-95"><Plus size={18} /></button>
+                  <button type="button" aria-label="One more" onClick={() => setCount((c) => Math.min(details.remaining - 1, c + 1))} disabled={count >= details.remaining - 1} className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center disabled:opacity-30 active:scale-95"><Plus size={18} /></button>
                 </div>
+                <p className="text-[11px] font-bold uppercase tracking-widest text-zinc-500">{details.remaining - count} will still be to come</p>
+                <button onClick={() => admit(count)} disabled={phase === 'admitting'} className="w-full bg-brandRed text-white py-5 rounded-2xl font-black uppercase tracking-widest text-sm active:scale-95 transition-all shadow-[0_0_30px_rgba(255,0,0,0.3)] disabled:opacity-60 flex items-center justify-center gap-2">
+                  {phase === 'admitting' ? <Loader2 className="animate-spin" size={18} /> : `Admit ${count} ${count === 1 ? 'person' : 'people'}`}
+                </button>
+                <button onClick={() => setMode('ask')} className="text-xs font-bold uppercase tracking-widest text-zinc-500 hover:text-white underline">Back</button>
               </div>
+            ) : (
+              <button onClick={() => admit()} disabled={phase === 'admitting'} className="w-full bg-brandRed text-white py-5 rounded-2xl font-black uppercase tracking-widest text-sm active:scale-95 transition-all shadow-[0_0_30px_rgba(255,0,0,0.3)] disabled:opacity-60 flex items-center justify-center gap-2">
+                {phase === 'admitting' ? <Loader2 className="animate-spin" size={18} /> : isGroup ? `Admit last ${details.remaining === 1 ? 'person' : details.remaining + ' people'}` : 'Verify Entry Now'}
+              </button>
             )}
-
-            <button onClick={admit} disabled={phase === 'admitting'} className="w-full bg-brandRed text-white py-5 rounded-2xl font-black uppercase tracking-widest text-sm active:scale-95 transition-all shadow-[0_0_30px_rgba(255,0,0,0.3)] disabled:opacity-60 flex items-center justify-center gap-2">
-              {phase === 'admitting' ? <Loader2 className="animate-spin" size={18} /> : isGroup ? `Admit ${count} ${count === 1 ? 'person' : 'people'}` : 'Verify Entry Now'}
-            </button>
           </>
         )}
 
@@ -198,9 +231,13 @@ function ScannerContent() {
             </div>
             <Progress />
             {details.remaining > 0 ? (
-              <button onClick={() => { setMessage(''); setCount(details.remaining); setPhase('ready'); }} className="w-full bg-white/5 border border-white/10 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs active:scale-95">
-                {details.remaining} more to come: admit them
-              </button>
+              <>
+                <p className="text-sm font-black uppercase tracking-widest text-amber-400">{details.remaining} {details.remaining === 1 ? 'person is' : 'people are'} still to come</p>
+                <p className="text-[11px] text-zinc-500 uppercase tracking-widest">When the next person arrives, scan this same QR again.</p>
+                <button onClick={() => { setMessage(''); setCount(Math.max(1, details.remaining)); setMode('ask'); setPhase('ready'); }} className="w-full bg-white/5 border border-white/10 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs active:scale-95">
+                  Some have arrived now
+                </button>
+              </>
             ) : (
               <p className="text-xs text-zinc-500 uppercase tracking-widest">Done. Scan the next pass with your phone camera.</p>
             )}
@@ -236,7 +273,7 @@ function ScannerContent() {
 
 export default function TicketScannerPage() {
   return (
-    <div className="min-h-screen bg-[#030303] pt-24 pb-20 px-4 text-white">
+    <div className="min-h-screen bg-[#030303] pt-24 pb-40 px-4 text-white">
       {/* Suspense boundary is required by Next.js when using useSearchParams */}
       <Suspense fallback={<div className="flex justify-center pt-32"><Loader2 className="animate-spin text-brandRed" size={32} /></div>}>
         <ScannerContent />
