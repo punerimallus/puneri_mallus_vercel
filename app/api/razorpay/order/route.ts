@@ -12,6 +12,7 @@ import {
 import { CartLine, EventSnapshot, PaymentInputError, PaymentType } from '@/lib/payments/types';
 import { salesStatus } from '@/lib/events/sales';
 import { groupSizeOf } from '@/lib/payments/groups';
+import { normalizeWhatsAppNumber, whatsappConfig } from '@/lib/whatsapp';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -38,7 +39,7 @@ export async function POST(req: Request) {
     const db = supabaseAdmin();
     const { data: profile } = await db
       .from('profiles')
-      .select('email, is_member, loyalty_points, mart_unlocked')
+      .select('email, is_member, loyalty_points, mart_unlocked, phone_number')
       .eq('id', user.id)
       .maybeSingle();
 
@@ -53,6 +54,10 @@ export async function POST(req: Request) {
     let lines: CartLine[] | null = null;
     let eventSnapshot: EventSnapshot | null = null;
     let pointsApplied = 0;
+    // WhatsApp copy of the tickets: only when the buyer opted in, the feature is configured, and the profile has a valid mobile.
+    // The number always comes from the verified profile phone, never from the request.
+    const whatsappTo = body.whatsappOptIn === true && whatsappConfig() ? normalizeWhatsAppNumber(profile?.phone_number) : null;
+    const whatsappFields = paymentType === 'EVENT_TICKET' && whatsappTo ? { whatsapp_opt_in: true, whatsapp_to: whatsappTo } : {};
     let receiptEmail = cleanEmail(body.email) || cleanEmail(body.invoiceEmail) || cleanEmail(profile?.email) || cleanEmail(user.email);
 
     if (paymentType === 'LIFETIME') {
@@ -133,7 +138,7 @@ export async function POST(req: Request) {
     });
 
     // The server's own record of what this order is for. Fulfilment reads this, never the browser.
-    const { error: insertErr } = await db.from('payment_orders').insert({
+    const orderRow = {
       razorpay_order_id: order.id,
       user_id: user.id,
       payment_type: type,
@@ -148,7 +153,13 @@ export async function POST(req: Request) {
       amount_paise: amountInPaise,
       currency: 'INR',
       status: 'CREATED',
-    });
+      ...whatsappFields,
+    };
+    let { error: insertErr } = await db.from('payment_orders').insert(orderRow);
+    if (insertErr && Object.keys(whatsappFields).length && /whatsapp/i.test(insertErr.message || '')) {
+      // The WhatsApp columns haven't been added yet: never lose a payment over that, just skip the WhatsApp copy.
+      ({ error: insertErr } = await db.from('payment_orders').insert({ ...orderRow, whatsapp_opt_in: undefined, whatsapp_to: undefined }));
+    }
     if (insertErr) {
       // Without this row we could not fulfil the payment, so don't let the user pay.
       console.error('PAYMENT_ORDER_RECORD_ERROR:', insertErr);
