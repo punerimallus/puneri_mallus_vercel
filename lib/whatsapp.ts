@@ -1,0 +1,157 @@
+// WhatsApp Cloud API: send the ticket PDF to the buyer's WhatsApp, on top of the email.
+//
+// There is no API to ask "does this number have WhatsApp?" in advance. The way every business does it
+// (BookMyShow included) is: the customer opts in at checkout, we try to send, and if the number is not
+// on WhatsApp the send fails and that is recorded. Email is always sent too, so nothing is ever lost.
+//
+// Business-initiated messages must use a pre-approved TEMPLATE (see docs/whatsapp-template.md).
+// Nothing here runs unless WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID are set.
+
+const GRAPH = 'https://graph.facebook.com';
+const TIMEOUT_MS = 15_000;
+
+export interface WhatsAppConfig {
+  token: string;
+  phoneNumberId: string;
+  version: string;
+  template: string;
+  language: string;
+}
+
+export function whatsappConfig(env: Record<string, string | undefined> = process.env): WhatsAppConfig | null {
+  const token = env.WHATSAPP_ACCESS_TOKEN?.trim();
+  const phoneNumberId = env.WHATSAPP_PHONE_NUMBER_ID?.trim();
+  if (!token || !phoneNumberId) return null;
+  return {
+    token,
+    phoneNumberId,
+    version: env.WHATSAPP_API_VERSION?.trim() || 'v21.0',
+    template: env.WHATSAPP_TEMPLATE_NAME?.trim() || 'ticket_confirmation',
+    language: env.WHATSAPP_TEMPLATE_LANG?.trim() || 'en',
+  };
+}
+
+/**
+ * Digits-only international number, which is what the API wants ("919876543210").
+ * Accepts "+91 98765 43210", "09876543210", or a bare 10-digit Indian mobile. Returns null if it can't be a mobile.
+ */
+export function normalizeWhatsAppNumber(input: string | null | undefined): string | null {
+  const digits = String(input || '').replace(/[^\d]/g, '');
+  if (/^[6-9]\d{9}$/.test(digits)) return `91${digits}`;
+  if (/^0[6-9]\d{9}$/.test(digits)) return `91${digits.slice(1)}`;
+  if (/^91[6-9]\d{9}$/.test(digits)) return digits;
+  if (/^91\d{10}$/.test(digits)) return null; // an Indian number that is not a mobile (landline etc.)
+  // Any other country: 8 to 15 digits, as E.164 allows (used only for explicit test sends).
+  if (/^\d{8,15}$/.test(digits) && String(input).trim().startsWith('+')) return digits;
+  return null;
+}
+
+/** "+91 98••• ••210" for showing back to the customer. */
+export function maskNumber(number: string | null | undefined): string {
+  const d = String(number || '').replace(/[^\d]/g, '');
+  if (d.length < 8) return '';
+  const cc = d.length > 10 ? `+${d.slice(0, d.length - 10)} ` : '';
+  const local = d.slice(-10);
+  return `${cc}${local.slice(0, 2)}••• ••${local.slice(-3)}`;
+}
+
+export type WhatsAppResult =
+  | { ok: true; messageId: string }
+  | { ok: false; code: number | null; error: string; /** true when retrying later could help (rate limit, outage); false for "not on WhatsApp", bad template, etc. */ retryable: boolean };
+
+// Meta error codes worth knowing. Anything not listed is treated as final.
+//   131026  recipient can't receive the message (not on WhatsApp, or hasn't accepted the latest terms)
+//   131030  recipient not in the allowed list (test number / unverified business)
+//   132000-132016 template problems (missing, not approved, wrong parameter count)
+const RETRYABLE = new Set([1, 2, 4, 17, 80007, 130429, 131016, 131056]);
+
+async function graph(cfg: WhatsAppConfig, path: string, init: RequestInit): Promise<{ status: number; json: any }> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(`${GRAPH}/${cfg.version}/${path}`, { ...init, signal: ctl.signal, headers: { Authorization: `Bearer ${cfg.token}`, ...(init.headers || {}) } });
+    const json = await res.json().catch(() => ({}));
+    return { status: res.status, json };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function failure(status: number, json: any): WhatsAppResult {
+  const code = typeof json?.error?.code === 'number' ? json.error.code : null;
+  const detail = json?.error?.error_data?.details || json?.error?.message || `HTTP ${status}`;
+  return { ok: false, code, error: String(detail).slice(0, 300), retryable: status >= 500 || (code !== null && RETRYABLE.has(code)) };
+}
+
+/** Uploads the PDF so it can be attached to the template message. Returns the media id. */
+export async function uploadPdf(cfg: WhatsAppConfig, pdf: Buffer, filename: string): Promise<{ ok: true; mediaId: string } | Extract<WhatsAppResult, { ok: false }>> {
+  const form = new FormData();
+  form.append('messaging_product', 'whatsapp');
+  form.append('type', 'application/pdf');
+  form.append('file', new Blob([new Uint8Array(pdf)], { type: 'application/pdf' }), filename);
+  try {
+    const { status, json } = await graph(cfg, `${cfg.phoneNumberId}/media`, { method: 'POST', body: form });
+    if (status >= 200 && status < 300 && json?.id) return { ok: true, mediaId: String(json.id) };
+    return failure(status, json) as Extract<WhatsAppResult, { ok: false }>;
+  } catch (e) {
+    return { ok: false, code: null, error: e instanceof Error ? e.message : String(e), retryable: true };
+  }
+}
+
+async function postMessage(cfg: WhatsAppConfig, body: Record<string, unknown>): Promise<WhatsAppResult> {
+  try {
+    const { status, json } = await graph(cfg, `${cfg.phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual', type: 'template', ...body }),
+    });
+    const id = json?.messages?.[0]?.id;
+    if (status >= 200 && status < 300 && id) return { ok: true, messageId: String(id) };
+    return failure(status, json);
+  } catch (e) {
+    return { ok: false, code: null, error: e instanceof Error ? e.message : String(e), retryable: true };
+  }
+}
+
+export interface TicketMessage {
+  to: string; // digits-only international number
+  buyerName: string;
+  eventTitle: string;
+  eventWhen: string;
+  eventVenue: string;
+  ticketsLink: string;
+  bookingRef: string;
+  pdf: Buffer;
+  filename: string;
+}
+
+/** Strips characters WhatsApp rejects in template parameters (newlines, tabs, runs of spaces) and keeps them short. */
+export const cleanParam = (v: string, max = 120): string => (String(v || '').replace(/[\r\n\t]+/g, ' ').replace(/ {2,}/g, ' ').trim().slice(0, max) || '-');
+
+/**
+ * Sends the "ticket_confirmation" template with the PDF attached as its header.
+ * Template body parameters, in order: 1 name, 2 event, 3 date and time, 4 venue, 5 tickets link, 6 booking ref.
+ */
+export async function sendTicketOnWhatsApp(cfg: WhatsAppConfig, m: TicketMessage): Promise<WhatsAppResult> {
+  const up = await uploadPdf(cfg, m.pdf, m.filename);
+  if (!up.ok) return up;
+  return postMessage(cfg, {
+    to: m.to,
+    template: {
+      name: cfg.template,
+      language: { code: cfg.language },
+      components: [
+        { type: 'header', parameters: [{ type: 'document', document: { id: up.mediaId, filename: m.filename } }] },
+        {
+          type: 'body',
+          parameters: [m.buyerName, m.eventTitle, m.eventWhen, m.eventVenue, m.ticketsLink, m.bookingRef].map((t) => ({ type: 'text', text: cleanParam(t) })),
+        },
+      ],
+    },
+  });
+}
+
+/** Meta's built-in "hello_world" template exists on every account, so it works for checking credentials before our own template is approved. */
+export async function sendHelloWorld(cfg: WhatsAppConfig, to: string): Promise<WhatsAppResult> {
+  return postMessage(cfg, { to, template: { name: 'hello_world', language: { code: 'en_US' } } });
+}

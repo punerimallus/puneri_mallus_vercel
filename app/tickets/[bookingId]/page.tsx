@@ -13,6 +13,7 @@ type View = {
   event: { title?: string; date?: string; time?: string; location?: string } | null;
   pointsApplied: number; totalPaidPaise: number | null;
   payment: { orderId: string | null; paymentId: string | null; paidAt: string | null };
+  whatsapp?: { optedIn: boolean; status: 'SENT' | 'FAILED' | 'SKIPPED' | null; to: string };
 };
 
 const STATUS_STYLE: Record<Pass['status'], { label: string; cls: string }> = {
@@ -138,7 +139,7 @@ export default function TicketSuccessPage({ params }: { params: Promise<{ bookin
               <div className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center border-2 border-zinc-900"><Smartphone size={12} className="text-white" /></div>
             </div>
             <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 leading-relaxed">
-              Your official PDF passes have been dispatched to <span className="text-white break-all">{view.email}</span> and via WhatsApp.
+              Your official PDF passes have been dispatched to <span className="text-white break-all">{view.email}</span>{view.whatsapp?.status === 'SENT' ? <> and on WhatsApp to <span className="text-white">{view.whatsapp.to}</span></> : view.whatsapp?.optedIn && view.whatsapp.status === null ? ' and are on their way on WhatsApp' : ''}.
             </p>
           </div>
         )}

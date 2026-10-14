@@ -8,6 +8,7 @@ import {
   Receipt, ArrowUpRight, Search, Filter, AlertTriangle, RefreshCw
 } from 'lucide-react';
 import { useAlert } from '@/context/AlertContext';
+import WhatsAppTest from '@/components/admin/WhatsAppTest';
 
 export default function AdminPaymentSettings() {
   const [loading, setLoading] = useState(true);
@@ -278,6 +279,8 @@ export default function AdminPaymentSettings() {
             {saving ? <Loader2 className="animate-spin" size={24} /> : <><Save size={24} /> Deploy Changes</>}
           </button>
         </div>
+
+        <WhatsAppTest />
 
         {/* PAYMENT HEALTH */}
         <div className="space-y-6">

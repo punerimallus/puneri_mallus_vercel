@@ -80,6 +80,13 @@ export interface PaymentOrder {
   fulfilled_at: string | null;
   refunded_amount_paise: number;
   created_at: string;
+  /** Buyer ticked "send my tickets on WhatsApp" at checkout. Optional: older rows and old databases don't have these. */
+  whatsapp_opt_in?: boolean;
+  /** Digits-only number to send to, taken from the buyer's verified profile phone when the order was created. */
+  whatsapp_to?: string | null;
+  whatsapp_status?: 'SENT' | 'FAILED' | 'SKIPPED' | null;
+  whatsapp_message_id?: string | null;
+  whatsapp_error?: string | null;
 }
 
 // The subset of a Razorpay payment entity we rely on.

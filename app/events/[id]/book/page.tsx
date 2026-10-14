@@ -6,6 +6,7 @@ import { createBrowserClient } from '@supabase/ssr';
 import { useRouter } from 'next/navigation';
 import { waitForOrder, orderRef } from '@/lib/payments/client';
 import MyTickets from '@/components/MyTickets';
+import { maskNumber, normalizeWhatsAppNumber } from '@/lib/whatsapp';
 import { groupSizeOf, isGroup, pricePerPerson } from '@/lib/payments/groups';
 import { salesStatus } from '@/lib/events/sales';
 import { grossUpToPaise, MAX_GROUP_TICKETS_PER_ACCOUNT, MAX_TICKETS_PER_ACCOUNT } from '@/lib/payments/pricing';
@@ -27,6 +28,10 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [isMember, setIsMember] = useState(false);
+  // Send the passes on WhatsApp too: only offered when the feature is on and the profile has a valid mobile.
+  const [whatsappNumber, setWhatsappNumber] = useState<string | null>(null);
+  const [whatsappOptIn, setWhatsappOptIn] = useState(true);
+  const whatsappAvailable = process.env.NEXT_PUBLIC_WHATSAPP_ENABLED === 'true' && !!whatsappNumber;
   const [discountPercent, setDiscountPercent] = useState(0);
   
   const { showAlert } = useAlert();
@@ -60,13 +65,14 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
         if (user) {
           const { data: profile } = await supabase
             .from('profiles')
-            .select('is_member, loyalty_points')
+            .select('is_member, loyalty_points, phone_number')
             .eq('id', user.id)
             .single();
           
           if (profile) {
             setIsMember(profile.is_member);
             setLoyaltyBalance(profile.loyalty_points || 0);
+            setWhatsappNumber(normalizeWhatsAppNumber(profile.phone_number));
           }
         }
       } catch (e) {}
@@ -154,7 +160,7 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
       const orderRes = await fetch('/api/razorpay/order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ paymentType: 'EVENT_TICKET', cart, eventId, pointsToRedeem, email })
+        body: JSON.stringify({ paymentType: 'EVENT_TICKET', cart, eventId, pointsToRedeem, email, whatsappOptIn: whatsappAvailable && whatsappOptIn })
       });
       const orderData = await orderRes.json();
       if (!orderRes.ok) throw new Error(orderData.error);
@@ -437,6 +443,15 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
                 </div>
               )}
 
+              {whatsappAvailable && (
+                <label className="mb-4 flex items-start gap-3 cursor-pointer rounded-2xl border border-white/10 bg-black/40 p-3">
+                  <input type="checkbox" className="mt-0.5 accent-green-500 w-4 h-4" checked={whatsappOptIn} onChange={(e) => setWhatsappOptIn(e.target.checked)} />
+                  <span className="text-[11px] font-bold tracking-wide text-zinc-300 leading-snug">
+                    Also send my tickets on WhatsApp to <span className="text-white">{maskNumber(whatsappNumber)}</span>
+                    <span className="block text-[10px] font-medium text-zinc-500">If this number isn't on WhatsApp, your email still has everything.</span>
+                  </span>
+                </label>
+              )}
               <div className="mb-4 space-y-1.5 text-[11px] font-bold tracking-widest text-zinc-400">
                 <div className="flex justify-between"><span>Tickets</span><span className="text-white">{formatRupees(baseDiscountedPrice).replace('Rs. ', '₹')}</span></div>
                 {pointsToRedeem > 0 && <div className="flex justify-between text-amber-400"><span>Tribe points</span><span>- {formatRupees(pointsToRedeem).replace('Rs. ', '₹')}</span></div>}

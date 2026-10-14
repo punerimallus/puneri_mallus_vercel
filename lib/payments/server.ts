@@ -11,11 +11,14 @@ import {
   sendEventTicketEmail,
   sendMartSubscriptionEmail,
   sendPremiumMembershipEmail,
+  siteUrl,
 } from '@/lib/mail';
 import { BookingInsert, FulfilmentDeps, fulfilOrder } from './fulfil';
 import { DeliveryDeps, DeliveryOptions, deliverOrderEmail } from './delivery';
 import { nextMartExpiry } from './pricing';
 import { groupSizeOf } from './groups';
+import { whatsappConfig, sendTicketOnWhatsApp, maskNumber } from '@/lib/whatsapp';
+import { formatEventDate } from './format';
 import { progressOf } from './scan';
 import { fetchLogoBase64, generateTicketPdf } from './ticket-pdf';
 import { EventSnapshot, FulfilmentSource, GatewayPayment, PaymentOrder, SoldOutError } from './types';
@@ -313,6 +316,32 @@ export const deliveryDeps: DeliveryDeps = {
     });
   },
 
+  async sendTicketWhatsApp(order) {
+    const cfg = whatsappConfig();
+    if (!cfg) return { status: 'SKIPPED', error: 'WhatsApp is not configured' };
+    if (!order.whatsapp_to || !order.booking_id) return { status: 'SKIPPED', error: 'No WhatsApp number on the order' };
+    const pdf = await renderBookingPdf(order.booking_id);
+    if (!pdf) return { status: 'FAILED', error: 'Booking not found' };
+    const profile = order.user_id
+      ? ((await supabaseAdmin().from('profiles').select('full_name').eq('id', order.user_id).maybeSingle()).data as { full_name: string | null } | null)
+      : null;
+    const ev = order.event_snapshot;
+    const res = await sendTicketOnWhatsApp(cfg, {
+      to: order.whatsapp_to,
+      buyerName: (profile?.full_name || '').split(' ')[0] || 'there',
+      eventTitle: ev?.title || 'your event',
+      eventWhen: [formatEventDate(ev?.date), ev?.time].filter(Boolean).join(', '),
+      eventVenue: ev?.location || 'Pune',
+      ticketsLink: siteUrl(`/tickets/${order.booking_id}`),
+      bookingRef: order.booking_id.split('-')[0].toUpperCase(),
+      pdf: Buffer.from(pdf.base64, 'base64'),
+      filename: pdf.filename,
+    });
+    if (res.ok) return { status: 'SENT', messageId: res.messageId };
+    log('WHATSAPP_SEND_FAILED', { orderId: order.razorpay_order_id, code: res.code, error: res.error });
+    return { status: 'FAILED', error: `${res.code ?? ''} ${res.error}`.trim() };
+  },
+
   async sendMembershipEmail(to, orderId, paymentId) {
     await sendPremiumMembershipEmail(to, orderId, paymentId);
   },
@@ -427,6 +456,8 @@ export interface BookingView {
   /** Rupees actually charged including the gateway fee, when known (otherwise derived from the passes). */
   totalPaidPaise: number | null;
   payment: { orderId: string | null; paymentId: string | null; paidAt: string | null };
+  /** Only reports what really happened: nothing is claimed unless the message was accepted by WhatsApp. */
+  whatsapp: { optedIn: boolean; status: 'SENT' | 'FAILED' | 'SKIPPED' | null; to: string };
 }
 
 /** Everything the ticket page and the PDF download need for one booking, in one shape. */
@@ -473,6 +504,7 @@ export async function loadBookingView(bookingId: string): Promise<(BookingView &
     event: order?.event_snapshot ?? (await getEventSnapshot(booking.event_id)),
     pointsApplied: order?.points_to_redeem ?? 0,
     totalPaidPaise: order?.amount_paise ?? null,
+    whatsapp: { optedIn: !!order?.whatsapp_opt_in, status: order?.whatsapp_status ?? null, to: maskNumber(order?.whatsapp_to) },
     payment: {
       orderId: order?.razorpay_order_id ?? null,
       paymentId: order?.razorpay_payment_id ?? null,

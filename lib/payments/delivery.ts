@@ -12,6 +12,8 @@ export interface DeliveryDeps {
   sendMembershipEmail(to: string, orderId: string, paymentId: string): Promise<void>;
   sendMartEmail(to: string, plan: string, orderId: string, paymentId: string): Promise<void>;
   markBookingEmail(bookingId: string, status: 'SENT' | 'FAILED', attempts: number, at: string): Promise<void>;
+  /** Optional: also send the tickets on WhatsApp. Must never throw; failures are returned, not raised. */
+  sendTicketWhatsApp?(order: PaymentOrder): Promise<{ status: 'SENT' | 'FAILED' | 'SKIPPED'; messageId?: string; error?: string }>;
   log(message: string, extra?: unknown): void;
   now(): Date;
 }
@@ -64,6 +66,7 @@ export async function deliverOrderEmail(
       ...(opts.overrideEmail ? { receipt_email: to } : {}),
     });
     if (order.booking_id) await deps.markBookingEmail(order.booking_id, 'SENT', attempts, at).catch(() => undefined);
+    await deliverWhatsApp(order, deps);
     return { status: 'SENT' };
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
@@ -76,5 +79,25 @@ export async function deliverOrderEmail(
     });
     if (order.booking_id) await deps.markBookingEmail(order.booking_id, 'FAILED', attempts, at).catch(() => undefined);
     return { status: 'FAILED', error };
+  }
+}
+
+/**
+ * After the email went out, also send the tickets on WhatsApp if the buyer asked for it. This is strictly
+ * best-effort: it runs after the email is recorded as sent, and nothing in here can fail the delivery or
+ * block it. A number that isn't on WhatsApp simply ends up as FAILED with Meta's reason.
+ */
+async function deliverWhatsApp(order: PaymentOrder, deps: DeliveryDeps): Promise<void> {
+  if (!deps.sendTicketWhatsApp) return;
+  if (order.payment_type !== 'EVENT_TICKET' || !order.whatsapp_opt_in || order.whatsapp_status === 'SENT') return;
+  try {
+    const res = await deps.sendTicketWhatsApp(order);
+    await deps.updateOrder(order.razorpay_order_id, {
+      whatsapp_status: res.status,
+      whatsapp_message_id: res.messageId ?? null,
+      whatsapp_error: res.status === 'SENT' ? null : (res.error || null)?.slice(0, 500) ?? null,
+    });
+  } catch (e) {
+    deps.log('WHATSAPP_DELIVERY_FAILED', { orderId: order.razorpay_order_id, error: e instanceof Error ? e.message : String(e) });
   }
 }
