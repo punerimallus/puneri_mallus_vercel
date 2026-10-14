@@ -12,6 +12,7 @@ import Link from 'next/link';
 import TribeConfirm from '@/components/TribeConfirm';
 import TribeTimePicker from '@/components/ui/TribeTimePicker';
 import EmailVerificationGate from '@/components/EmailVerificationGate';
+import { onEnter } from '@/lib/ui/enter';
 
 const FIXED_CATEGORIES = [
   "FOOD & BEVERAGE", "REAL ESTATE", "HEALTH & WELLNESS",  "SPORTS" ,"EDUCATION", 
@@ -277,6 +278,13 @@ function ListContent() {
     return formattedUrl;
   };
 
+  // Same action as the "Next" button, so Enter in any field of step 1 moves on too.
+  const goNextFromStep1 = () => {
+    if (nameError) return triggerAlert("Name Unavailable", "Please choose a different business name. This one is taken.");
+    if (checkingName) return;
+    validateStep1() ? setStep(2) : triggerAlert("Required", "Fill all Step 1 fields.");
+  };
+
   const handlePreSubmit = (e: React.FormEvent, isDraftMode: boolean = false) => {
     e.preventDefault();
 
@@ -467,7 +475,7 @@ function ListContent() {
 
          {/* --- STEP 1 --- */}
          {showNewForm && step === 1 && (
-          <motion.div key="step1" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="space-y-10" onFocusCapture={handleFirstInteraction} onChangeCapture={handleFirstInteraction}>
+          <motion.div key="step1" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="space-y-10" onFocusCapture={handleFirstInteraction} onChangeCapture={handleFirstInteraction} onKeyDown={onEnter(goNextFromStep1)}>
             <div className="flex justify-between items-center gap-4">
               <h1 className="text-4xl md:text-6xl font-black italic uppercase leading-none text-white">Business <span className="text-brandRed">Core</span></h1>
               <Link href="/directory" className="p-3 md:p-4 bg-zinc-900 rounded-2xl border border-white/10 hover:bg-brandRed transition-all"><X /></Link>
@@ -543,11 +551,7 @@ function ListContent() {
               
               <div className="pt-4">
                 <button 
-                  onClick={() => {
-                    if (nameError) return triggerAlert("Name Unavailable", "Please choose a different business name. This one is taken.");
-                    if (checkingName) return;
-                    validateStep1() ? setStep(2) : triggerAlert("Required", "Fill all Step 1 fields.");
-                  }} 
+                  onClick={goNextFromStep1} 
                   className="w-full py-8 bg-white text-black rounded-[30px] font-black uppercase tracking-[0.4em] text-sm hover:bg-brandRed hover:text-white transition-all shadow-2xl flex items-center justify-center gap-3 active:scale-95"
                 >
                   Next: Services & Visuals <ArrowRight size={20} />

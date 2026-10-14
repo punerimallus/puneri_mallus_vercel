@@ -209,7 +209,9 @@ export default function Navbar() {
                 <div className="flex items-center gap-4 relative group">
                   <Link
                     href={isAdmin ? "/admin" : "/profile"}
-                    className={`flex items-center gap-3 backdrop-blur-md border p-1.5 pr-4 xl:pr-5 rounded-full transition-all ${
+                    aria-label={isAdmin ? "Admin dashboard" : "My profile"}
+                    title={isAdmin ? "Admin dashboard" : "My profile"}
+                    className={`flex items-center gap-3 backdrop-blur-md border p-1.5 2xl:pr-5 rounded-full transition-all ${
                       isAdmin
                         ? 'bg-brandRed/10 border-brandRed/30 shadow-[0_0_15px_rgba(255,0,0,0.2)]'
                         : isMember 
@@ -237,7 +239,7 @@ export default function Navbar() {
                       )}
                     </div>
                     
-                    <div className="flex flex-col text-left">
+                    <div className="hidden 2xl:flex flex-col text-left">
                       <div className="flex items-center gap-1.5">
                         <span className={`font-black uppercase tracking-widest leading-none mb-1 ${
                           isAdmin 
@@ -257,7 +259,7 @@ export default function Navbar() {
                   </Link>
                   <button
                     onClick={handleLogout}
-                    className="absolute -bottom-12 right-0 bg-zinc-900 border border-white/10 px-4 py-2 rounded-xl text-[9px] font-black uppercase text-zinc-400 hover:text-brandRed opacity-0 group-hover:opacity-100 transition-all flex items-center gap-2 whitespace-nowrap"
+                    className="absolute -bottom-12 right-0 bg-zinc-900 border border-white/10 px-4 py-2 rounded-xl text-[9px] font-black uppercase text-zinc-400 hover:text-brandRed opacity-0 group-hover:opacity-100 focus:opacity-100 group-focus-within:opacity-100 transition-all flex items-center gap-2 whitespace-nowrap"
                   >
                     <LogOut size={12} /> Sign Out
                   </button>

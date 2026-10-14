@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 import { createClient } from '@supabase/supabase-js';
+import { getIdentity, ownsDoc } from '@/lib/ownership';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -38,18 +39,11 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: "Node not found" }, { status: 404 });
     }
 
-    // 🔥 THE FIX: Securely check for an Admin Session so Admins can delete anything
-    const authHeader = req.headers.get('cookie') || '';
-    const isAdminTokenPresent = authHeader.includes('admin_token');
-
-    // Only enforce ownership if it's NOT an admin
-    if (!isAdminTokenPresent) {
-       // If you ever need normal users to delete, you'd pass their email in a body 
-       // or get it from their session token here. But for the Admin page, we just bypass.
-       
-       // Example logic if needed later:
-       // const userEmail = ...get from session...
-       // if (node.submittedBy !== userEmail) return 403;
+    // Only an admin, or the account that owns this circle, may delete it. The login session decides.
+    const who = await getIdentity();
+    if (!who) return NextResponse.json({ error: "Please log in." }, { status: 401 });
+    if (!who.isAdmin && !ownsDoc(node as unknown as Record<string, unknown>, who)) {
+      return NextResponse.json({ error: "You can only delete your own community." }, { status: 403 });
     }
 
     // 2. Comprehensive Asset Purge from Supabase

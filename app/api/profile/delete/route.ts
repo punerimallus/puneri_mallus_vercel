@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongodb';
 import { createClient } from '@supabase/supabase-js';
+import { getIdentity } from '@/lib/ownership';
 
 export async function DELETE(request: Request) {
   try {
@@ -9,6 +10,13 @@ export async function DELETE(request: Request) {
 
     if (!userId) {
       return NextResponse.json({ error: "User ID required" }, { status: 400 });
+    }
+
+    // You can delete your own account. Nobody else's: an admin removing someone is the only exception.
+    const who = await getIdentity();
+    if (!who) return NextResponse.json({ error: "Please log in." }, { status: 401 });
+    if (who.id !== userId && !who.isAdmin) {
+      return NextResponse.json({ error: "You can only delete your own account." }, { status: 403 });
     }
 
     // 1. Initialize Supabase Admin

@@ -9,7 +9,7 @@ interface WhatsAppTribeProps {
 
 // Pages where a floating button would sit on top of something people need to tap (payment bars,
 // forms, the admin tools), or where it is just noise.
-const HIDE_ON = [/^\/admin/, /^\/events\/[^/]+\/book/, /^\/tickets/, /^\/auth/, /^\/profile/, /^\/membership/];
+const HIDE_ON = [/^\/admin/, /^\/events\/[^/]+\/book/, /^\/tickets/, /^\/auth/, /^\/profile/, /^\/membership/, /^\/community\/add/, /^\/directory\/list/, /^\/football\/register/, /^\/contact/, /^\/directory\/[^/]+/, /^\/community\/[^/]+/, /^\/partners\/[^/]+/];
 
 export const WhatsAppTribe = ({
   link = "https://chat.whatsapp.com/Bzi4uYF4wCo5YNa5qKKBfN",
