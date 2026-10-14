@@ -97,7 +97,7 @@ export default function Footer() {
               <Link
                 key={link.name}
                 href={link.href}
-                className="text-[11px] md:text-[12px] font-semibold uppercase tracking-[0.2em] text-zinc-500 hover:text-white transition-colors duration-200 whitespace-nowrap"
+                className="text-[11px] md:text-[12px] font-semibold uppercase tracking-[0.2em] text-zinc-500 hover:text-white transition-colors duration-200 whitespace-nowrap inline-block py-3 -my-3"
               >
                 {link.name}
               </Link>
@@ -129,7 +129,7 @@ export default function Footer() {
     href="https://wa.me/918669865623" 
     target="_blank" 
     rel="noopener noreferrer"
-    className="hover:text-brandRed transition-colors duration-300 decoration-brandRed/30 underline-offset-4 hover:underline"
+    className="hover:text-brandRed transition-colors duration-300 decoration-brandRed/30 underline-offset-4 hover:underline inline-block py-2 -my-2"
   >
     Rohit Anish
   </a>
@@ -146,7 +146,7 @@ export default function Footer() {
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={s.label}
-                  className="text-zinc-500 hover:text-white transition-all duration-200 hover:scale-110"
+                  className="text-zinc-500 hover:text-white transition-all duration-200 hover:scale-110 p-2.5 -m-2.5 inline-flex"
                 >
                   <s.icon size={22} className="md:w-[26px] md:h-[26px]" />
                 </a>
@@ -154,17 +154,17 @@ export default function Footer() {
             </div>
 
             <div className="flex items-center gap-4 md:gap-5">
-              <Link href="/privacy" className="text-[9px] md:text-[10px] uppercase tracking-[0.25em] text-zinc-600 hover:text-white transition-colors">
+              <Link href="/privacy" className="text-[9px] md:text-[10px] uppercase tracking-[0.25em] text-zinc-500 hover:text-white transition-colors inline-block py-3 -my-3">
                 Privacy
               </Link>
-              <Link href="/terms" className="text-[9px] md:text-[10px] uppercase tracking-[0.25em] text-zinc-600 hover:text-white transition-colors">
+              <Link href="/terms" className="text-[9px] md:text-[10px] uppercase tracking-[0.25em] text-zinc-500 hover:text-white transition-colors inline-block py-3 -my-3">
                 Terms
               </Link>
             </div>
 
             <button
               onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-              className="flex items-center gap-1.5 text-[9px] md:text-[10px] uppercase tracking-[0.25em] text-zinc-600 hover:text-white transition-colors group mt-2 sm:mt-0"
+              className="flex items-center gap-1.5 text-[9px] md:text-[10px] uppercase tracking-[0.25em] text-zinc-500 hover:text-white transition-colors group mt-2 sm:mt-0 py-3 -my-3"
             >
               Top
               <ArrowUpRight size={12} className="group-hover:-translate-y-0.5 group-hover:translate-x-0.5 transition-transform duration-200" />

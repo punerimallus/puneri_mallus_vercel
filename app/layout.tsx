@@ -27,9 +27,9 @@ export const metadata: Metadata = {
     siteName: 'Puneri Mallus',
     images: [
       {
-        url: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSbcHUSuPYM3HA5pDH4lGXjgrMA1yCrAaUM9Q&s', 
-        width: 1200,
-        height: 630,
+        url: '/logo_main.png',
+        width: 552,
+        height: 472,
         alt: 'Puneri Mallus Community Banner',
       },
     ],
@@ -40,7 +40,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Puneri Mallus',
     description: 'The professional hub for Malayalees in Pune and PCMC.',
-    images: ['https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSbcHUSuPYM3HA5pDH4lGXjgrMA1yCrAaUM9Q&s'],
+    images: ['/logo_main.png'],
   },
 };
 

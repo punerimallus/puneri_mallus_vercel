@@ -133,7 +133,7 @@ export default function CommunityAdmin() {
       <div className="max-w-7xl mx-auto space-y-10">
         <div className="flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="space-y-1">
-            <h2 className="text-4xl font-black italic uppercase tracking-tighter leading-none">Community <span className="text-cyan-400">Audit .</span></h2>
+            <h1 className="text-4xl font-black italic uppercase tracking-tighter leading-none">Community <span className="text-cyan-400">Audit .</span></h1>
             <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">
               Drag to reorder // {circles.length} Nodes Registered
             </p>

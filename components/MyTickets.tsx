@@ -23,7 +23,8 @@ export default function MyTickets({ limit, highlightEventId, heading = 'My Ticke
       .then(async (res) => {
         if (res.status === 401) return [];
         if (!res.ok) throw new Error('failed');
-        return (await res.json()).bookings as Booking[];
+        const data = await res.json().catch(() => null);
+        return (Array.isArray(data?.bookings) ? data.bookings : []) as Booking[];
       })
       .then((b) => alive && setBookings(b))
       .catch(() => alive && setFailed(true));

@@ -70,7 +70,7 @@ export default function EventCard({
     return () => clearInterval(timer);
   }, [date, time, isUpcoming]);
 
-  const safeSrc = image || "/events/placeholder.jpg";
+  const safeSrc = image || "/about/placeholder.jpeg";
   const dateParts = date?.split(/[\s,]+/) || []; 
   const month = dateParts[0] || "---";
   const day = dateParts[1] || "--";

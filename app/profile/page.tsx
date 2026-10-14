@@ -353,7 +353,7 @@ export default function ProfilePage() {
       <style jsx global>{` .grecaptcha-badge { visibility: hidden !important; } `}</style>
 
       <div className="absolute inset-0 z-0">
-        <Image src="/events/signup.jpg" alt="BG" fill className="object-cover opacity-40" priority style={{ transform: 'translateZ(0)' }} />
+        <Image src="/events/login.jpg" alt="BG" fill className="object-cover opacity-40" priority style={{ transform: 'translateZ(0)' }} />
         <div className="absolute inset-0 bg-black/60" />
       </div>
 

@@ -222,7 +222,7 @@ export default function SignupPage() {
       
       <div className="absolute inset-0 z-0">
         <Image 
-          src="/events/signup.jpg" 
+          src="/events/login.jpg" 
           alt="Atmospheric Background" 
           fill 
           sizes="100vw"
@@ -238,7 +238,7 @@ export default function SignupPage() {
           style={{ transform: 'translateZ(0)' }}
         >
           <div className="text-center mb-6 relative z-10">
-            <h2 className="text-xl font-black uppercase italic tracking-tighter text-white">Join the <span className="text-brandRed">Tribe.</span></h2>
+            <h1 className="text-xl font-black uppercase italic tracking-tighter text-white">Join the <span className="text-brandRed">Tribe.</span></h1>
           </div>
 
           <form onSubmit={handleSignup} className="space-y-3.5 relative z-10">

@@ -88,9 +88,9 @@ export default function LoginPage() {
           <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-white/[0.03] to-transparent pointer-events-none rounded-[32px]" />
 
           <div className="relative z-10">
-            <h2 className="text-xl font-black uppercase italic tracking-tighter mb-6 text-center text-white">
+            <h1 className="text-xl font-black uppercase italic tracking-tighter mb-6 text-center text-white">
               Admin <span className="text-brandRed">Portal.</span>
-            </h2>
+            </h1>
 
             <form onSubmit={handleLogin} className="space-y-4">
               
@@ -127,7 +127,7 @@ export default function LoginPage() {
                   type="button"
                   aria-label={showPassword ? "Hide password" : "Show password"}
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-brandRed transition-colors z-20"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 p-3 text-zinc-500 hover:text-brandRed transition-colors z-20"
                 >
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
@@ -136,7 +136,7 @@ export default function LoginPage() {
               <div className="flex justify-end px-1">
                 <Link 
                   href="/auth/forgot-password" 
-                  className="text-[10px] font-bold text-zinc-400 hover:text-white transition-colors"
+                  className="text-[11px] font-bold text-zinc-400 hover:text-white transition-colors py-2 -my-2"
                 >
                   Forgot password?
                 </Link>
@@ -168,7 +168,7 @@ export default function LoginPage() {
             <div className="mt-6 text-center flex flex-col gap-3">
               <Link 
                 href="/" 
-                className="text-[10px] font-bold text-zinc-500 hover:text-white transition-colors flex items-center justify-center gap-1 mt-2"
+                className="text-[11px] font-bold text-zinc-500 hover:text-white transition-colors flex items-center justify-center gap-1 mt-2 py-3 -my-1"
               >
                 ← Back to Home
               </Link>

@@ -271,7 +271,7 @@ export default function Navbar() {
                 onClick={() => { 
                   if (user) setShowMembershipModal(true); 
                 }}
-                className="lg:hidden px-4 py-2 rounded-full bg-brandRed text-white font-black uppercase text-[10px] tracking-widest active:scale-95 whitespace-nowrap"
+                className="lg:hidden px-4 min-h-[40px] rounded-full bg-brandRed text-white font-black uppercase text-[10px] tracking-widest active:scale-95 whitespace-nowrap"
               >
                 {user ? "Join" : "Login"}
               </button>

@@ -148,9 +148,9 @@ export default function PartnerAdmin() {
             <div className="flex items-center justify-center md:justify-start gap-2 text-brandRed font-black uppercase text-[10px] tracking-[0.3em]">
               <ShieldCheck size={12} fill="currentColor" /> Structural Grid Management
             </div>
-            <h2 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter">
+            <h1 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter">
               Network <span className="text-brandRed">Partners .</span>
-            </h2>
+            </h1>
           </div>
           
           <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">

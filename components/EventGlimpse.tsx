@@ -7,7 +7,7 @@ const events = [
     title: "Christmas Jamming Session",
     date: "April 14, 2026",
     location: "Baner, Pune",
-    image: "/events/image_1.jpeg", // Path: public/events/vishu.jpg
+    image: "/about/image_1.jpeg", // Path: public/events/vishu.jpg
     category: "Culture"
   },
   {
