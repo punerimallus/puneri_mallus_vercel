@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import clientPromise from "@/lib/mongodb";
 import { createClient } from '@supabase/supabase-js';
 import { ObjectId } from 'mongodb';
-import { cookies } from 'next/headers';
+import { requireAdmin } from '@/lib/admin';
+import { getIdentity, ownsDoc, stripAdminFields, visibleDocs } from '@/lib/ownership';
 import { 
   sendMartPendingEmail, 
   sendMartLiveEmail, 
@@ -32,7 +33,10 @@ export async function GET() {
       .sort({ order: 1, isVerified: -1, isPremium: -1, createdAt: -1 })
       .toArray();
 
-    return NextResponse.json(items);
+    // Visitors only get live listings, and without private details (owner email, verification documents).
+    // Owners also get their own drafts and pending listings in full, and admins get everything.
+    const who = await getIdentity();
+    return NextResponse.json(visibleDocs(items as unknown as Record<string, unknown>[], who));
   } catch (e) {
     return NextResponse.json({ error: "Fetch failed" }, { status: 500 });
   }
@@ -43,7 +47,12 @@ export async function GET() {
  */
 export async function POST(req: Request) {
   try {
+    // Listings are created by logged-in members, and are always owned by the account that is logged in.
+    const who = await getIdentity();
+    if (!who) return NextResponse.json({ error: "Please log in to create a listing." }, { status: 401 });
+
     const data = await req.json();
+    data.userId = who.id;
     const client = await clientPromise;
     const db = client.db("punerimallus");
 
@@ -62,11 +71,11 @@ export async function POST(req: Request) {
       updatedAt: new Date()
     });
 
-    if (data.userId) {
+    {
       await supabaseAdmin
         .from('directory_owners')
         .upsert({ 
-          user_id: data.userId,
+          user_id: who.id,
           source: 'MALLU_MART',
           status: data.isDraft ? 'SAVED_AS_DRAFT' : (data.emailVerified ? 'SUBMITTED_FOR_PUBLISHING' : 'PENDING_VERIFICATION')
         }, { onConflict: 'user_id, source' });
@@ -96,6 +105,8 @@ export async function PATCH(req: Request) {
     const body = await req.json();
 
     if (body.reorder && Array.isArray(body.newOrder)) {
+      const denied = await requireAdmin();
+      if (denied) return denied;
       const operations = body.newOrder.map((item: any) => ({
         updateOne: {
           filter: { _id: new ObjectId(item.id) },
@@ -110,6 +121,9 @@ export async function PATCH(req: Request) {
 
     // --- ADMIN AUDIT ---
     if (id && (isVerified !== undefined || isPremium !== undefined || isApproved !== undefined || isRejected === true)) {
+      // Approving, verifying, featuring and rejecting listings is for admins only.
+      const denied = await requireAdmin();
+      if (denied) return denied;
       const updateFields: any = { updatedAt: new Date() };
       
       if (isVerified !== undefined) {
@@ -147,14 +161,11 @@ export async function PATCH(req: Request) {
     const existing = await db.collection("mallu_mart").findOne({ _id: new ObjectId(id) });
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    const authHeader = req.headers.get('cookie') || '';
-    const isAdmin = authHeader.includes('admin_token');
-    
-    // Master Key Ownership Check
-    const isOwner = (userEmail && existing.userEmail === userEmail) || (updatedData?.userId && existing.userId === updatedData.userId);
-
-    if (!isAdmin && !isOwner) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Who is asking comes from the login session, not from anything the browser claims.
+    const who = await getIdentity();
+    if (!who) return NextResponse.json({ error: "Please log in." }, { status: 401 });
+    if (!who.isAdmin && !ownsDoc(existing as unknown as Record<string, unknown>, who)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
     // --- USER SUBMITTING VERIFICATION REQUEST ---
@@ -177,7 +188,8 @@ export async function PATCH(req: Request) {
     // --- USER EDIT (Standard) ---
     if (!updatedData) return NextResponse.json({ error: "Missing parameters" }, { status: 400 });
 
-    const { _id: _, ...cleanData } = updatedData;
+    // A normal edit can change the listing's content, but never its approval, verification, premium or owner fields.
+    const cleanData: any = stripAdminFields(updatedData);
     if (cleanData.category) cleanData.category = cleanData.category.toUpperCase();
 
     const shouldNotify = !cleanData.isDraft && (existing.isDraft || existing.isApproved);
@@ -196,7 +208,7 @@ export async function PATCH(req: Request) {
       }
     );
 
-    const targetUserId = updatedData?.userId || existing.userId;
+    const targetUserId = existing.userId || who.id;
     if (targetUserId) {
       await supabaseAdmin
         .from('directory_owners')
@@ -226,9 +238,6 @@ export async function DELETE(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
-    const adminEmail = searchParams.get('adminEmail');
-    const userEmail = searchParams.get('userEmail');
-    const userId = searchParams.get('userId');
 
     if (!id || !ObjectId.isValid(id)) {
       return NextResponse.json({ error: "Valid ID required" }, { status: 400 });
@@ -240,22 +249,11 @@ export async function DELETE(req: Request) {
     const post = await db.collection("mallu_mart").findOne({ _id: new ObjectId(id) });
     if (!post) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    let isAdmin = false;
-    if (adminEmail) {
-      const { data: adminRecord } = await supabaseAdmin
-        .from('authorized_admins')
-        .select('email')
-        .eq('email', adminEmail)
-        .maybeSingle();
-      
-      if (adminRecord) isAdmin = true;
-    }
-
-    const isOwner = (userEmail && post.userEmail === userEmail) || (userId && post.userId === userId);
-
-    if (!isAdmin && !isOwner) {
-      console.log("❌ DELETE BLOCKED - Not Admin & Not Owner");
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Only an admin, or the account that owns the listing, can remove it. The login session decides, not the URL.
+    const who = await getIdentity();
+    if (!who) return NextResponse.json({ error: "Please log in." }, { status: 401 });
+    if (!who.isAdmin && !ownsDoc(post as unknown as Record<string, unknown>, who)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
     const posterPaths = post.imagePaths || (post.imagePath ? [post.imagePath] : []);

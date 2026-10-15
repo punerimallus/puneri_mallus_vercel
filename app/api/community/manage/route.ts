@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 import { createClient } from '@supabase/supabase-js';
+import { requireAdmin } from '@/lib/admin';
+import { getIdentity, ownsDoc, stripAdminFields } from '@/lib/ownership';
 import { 
   sendPendingCommunityEmail, 
   sendApprovedCommunityEmail, 
@@ -22,12 +24,18 @@ const getFileName = (url: string) => {
 
 export async function POST(req: Request) {
   try {
+    // Everything here needs a real login. Who is asking comes from the session, never from the request body.
+    const who = await getIdentity();
+    if (!who) return NextResponse.json({ error: "Please log in." }, { status: 401 });
+
     const client = await clientPromise;
     const db = client.db("punerimallus");
     const data = await req.json();
 
     // 🔥 ADDED: REORDER LOGIC (Bulk Update)
     if (data.reorder && Array.isArray(data.newOrder)) {
+      const denied = await requireAdmin();
+      if (denied) return denied;
       const operations = data.newOrder.map((item: any) => ({
         updateOne: {
           filter: { _id: new ObjectId(item.id) },
@@ -38,7 +46,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, message: `Reordered ${result.modifiedCount} nodes` });
     }
 
-    const { _id, isRejected, ...body } = data;
+    const { _id, isRejected, ...rawBody } = data;
+    // Admins may set approval, verification and ordering. Everyone else can only change their own circle's content.
+    const body: any = who.isAdmin ? { ...rawBody } : stripAdminFields(rawBody);
 
     if (body.category) body.category = body.category.toUpperCase();
 
@@ -51,9 +61,14 @@ export async function POST(req: Request) {
         _id: new ObjectId(_id) 
       });
 
+      if (!oldNode) return NextResponse.json({ error: "Not found" }, { status: 404 });
+      if (!who.isAdmin && !ownsDoc(oldNode as unknown as Record<string, unknown>, who)) {
+        return NextResponse.json({ error: "You can only edit your own community." }, { status: 403 });
+      }
+
       if (oldNode) {
         // REJECTION LOGIC
-        if (isRejected === true) {
+        if (isRejected === true && who.isAdmin) {
           const submitterEmail = oldNode.submittedBy || body.submittedBy;
           if (submitterEmail) {
             await sendRejectedCommunityEmail(submitterEmail, body.title || oldNode.title);
@@ -90,7 +105,7 @@ export async function POST(req: Request) {
 
         // 🔥 ADDED: RE-APPROVAL & SMART NOTIFICATION LOGIC
         // Logic: Notify if it's NOT a draft AND it was previously a Draft OR previously Approved
-        const isUserEdit = !body.approvedBy; 
+        const isUserEdit = !who.isAdmin; 
         const shouldNotify = !body.isDraft && (oldNode.isDraft || oldNode.isApproved);
 
         if (isUserEdit) {
@@ -122,9 +137,10 @@ export async function POST(req: Request) {
       // NEW SUBMISSION LOGIC
       const result = await db.collection("community_circles").insertOne({
         ...body,
+        userId: who.id,
         isDraft: body.isDraft ?? false,
         isApproved: false, 
-        isVerified: body.isVerified || false,
+        isVerified: false,
         order: 999, // 🔥 ADDED: Default high order
         services: body.services || [],
         createdAt: new Date(),

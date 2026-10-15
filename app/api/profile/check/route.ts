@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getIdentity } from '@/lib/ownership';
 
 export async function GET(request: Request) {
   try {
@@ -9,6 +10,11 @@ export async function GET(request: Request) {
     if (!userId) {
       return NextResponse.json({ exists: false, message: "User ID required" }, { status: 400 });
     }
+
+    // A profile (email, phone, membership) can only be read by its owner or an admin.
+    const who = await getIdentity();
+    if (!who) return NextResponse.json({ exists: false, message: "Please log in." }, { status: 401 });
+    if (who.id !== userId && !who.isAdmin) return NextResponse.json({ exists: false, message: "Not allowed." }, { status: 403 });
 
     // 1. Initialize the Supabase Client
     // We use the Service Role Key here because we are simply reading a profile by ID

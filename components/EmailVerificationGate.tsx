@@ -163,8 +163,9 @@ export default function EmailVerificationGate({ userId, source, onVerified, pref
 
               <div className="relative group">
                 <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-brandRed transition-colors" size={16} />
-                <input type="email" placeholder="Business Email (Needs Verification)" required className="w-full bg-black/50 border border-white/10 p-4 pl-12 rounded-2xl text-white outline-none focus:border-brandRed transition-all font-bold text-[13px]" value={email} onChange={e => { setEmail(e.target.value); setErrorMsg(''); }} />
+                <input type="email" placeholder="Business email" aria-label="Business email" required className="w-full bg-black/50 border border-white/10 p-4 pl-12 rounded-2xl text-white outline-none focus:border-brandRed transition-all font-bold text-[13px]" value={email} onChange={e => { setEmail(e.target.value); setErrorMsg(''); }} />
               </div>
+              <p className="text-[10px] font-medium text-zinc-500 text-center">We'll email a link to this address to confirm it's yours.</p>
               
               {errorMsg && <p className="text-brandRed text-[10px] font-bold uppercase tracking-widest text-center pt-2">{errorMsg}</p>}
             </div>

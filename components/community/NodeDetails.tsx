@@ -71,7 +71,7 @@ export default function NodeDetails({ isAdminView = false }: NodeDetailsProps) {
   const tabs = [
     { id: 'overview', label: 'Identity', icon: Info, ref: overviewRef },
     { id: 'services', label: 'Services', icon: ListChecks, ref: servicesRef },
-    ...(item.members && item.members.length > 0 ? [{ id: 'members', label: 'Members', icon: Users, ref: membersRef }] : []),
+    ...(Array.isArray(item.members) && item.members.length > 0 ? [{ id: 'members', label: 'Members', icon: Users, ref: membersRef }] : []),
     { id: 'photos', label: 'Gallery', icon: ImageIcon, ref: photosRef },
   ];
 
@@ -254,7 +254,7 @@ export default function NodeDetails({ isAdminView = false }: NodeDetailsProps) {
             </section>
 
             {/* MEMBERS SECTION */}
-            {item.members && item.members.length > 0 && (
+            {Array.isArray(item.members) && item.members.length > 0 && (
               <section ref={membersRef} className="space-y-10 scroll-mt-44">
                 <h2 className="text-xs font-black text-white uppercase tracking-[0.4em] flex items-center gap-4 pl-2">
                   <div className="w-12 h-px bg-brandRed" /> Leadership & Members

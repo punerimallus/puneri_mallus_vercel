@@ -31,7 +31,9 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
   // Send the passes on WhatsApp too: only offered when the feature is on and the profile has a valid mobile.
   const [whatsappNumber, setWhatsappNumber] = useState<string | null>(null);
   const [whatsappOptIn, setWhatsappOptIn] = useState(true);
-  const whatsappAvailable = process.env.NEXT_PUBLIC_WHATSAPP_ENABLED === 'true' && !!whatsappNumber;
+  // The server says whether WhatsApp is set up, so this never depends on a build-time flag matching exactly.
+  const [whatsappServerOn, setWhatsappServerOn] = useState(false);
+  const whatsappAvailable = whatsappServerOn && !!whatsappNumber;
   const [discountPercent, setDiscountPercent] = useState(0);
   
   const { showAlert } = useAlert();
@@ -41,6 +43,10 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
+
+  useEffect(() => {
+    fetch('/api/whatsapp/status').then((r) => r.json()).then((d) => setWhatsappServerOn(d?.enabled === true)).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     async function init() {
@@ -94,8 +100,9 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
   }, 0);
 
   // 🔥 Calculate actual redemption automatically based on toggle
-  const maxRedeemable = Math.min(loyaltyBalance, Math.floor(baseDiscountedPrice)); // whole rupees, exactly as the server applies them
-  const pointsToRedeem = applyPoints && loyaltyBalance >= MIN_REDEEM_THRESHOLD ? maxRedeemable : 0;
+  // Whole rupees, exactly as the server applies them, always leaving at least Rs 1 to pay.
+  const maxRedeemable = Math.max(0, Math.min(loyaltyBalance, Math.floor(baseDiscountedPrice - 1)));
+  const pointsToRedeem = applyPoints && loyaltyBalance >= MIN_REDEEM_THRESHOLD && maxRedeemable >= 1 ? maxRedeemable : 0;
   const totalPrice = baseDiscountedPrice - pointsToRedeem;
   const salesClosed = salesStatus(eventData?.date, eventData?.time) === 'CLOSED';
   // Same formula the server charges with, so the amount shown is the amount debited, to the paisa.
@@ -424,7 +431,9 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
                     </span>
                   </div>
 
-                  {loyaltyBalance >= MIN_REDEEM_THRESHOLD ? (
+                  {loyaltyBalance >= MIN_REDEEM_THRESHOLD && maxRedeemable < 1 ? (
+                    <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 text-right max-w-[140px] leading-snug">Points can be used on larger orders</span>
+                  ) : loyaltyBalance >= MIN_REDEEM_THRESHOLD ? (
                     <label className="flex items-center gap-3 cursor-pointer bg-black/40 px-3 py-2 rounded-xl border border-amber-500/30 hover:bg-black/60 transition-all">
                       <span className="text-xs font-bold text-amber-400">- ₹{maxRedeemable}</span>
                       <div className={`w-10 h-5 rounded-full p-1 transition-colors ${applyPoints ? 'bg-amber-500' : 'bg-zinc-700'}`}>

@@ -17,7 +17,7 @@ import { BookingInsert, FulfilmentDeps, fulfilOrder } from './fulfil';
 import { DeliveryDeps, DeliveryOptions, deliverOrderEmail } from './delivery';
 import { nextMartExpiry } from './pricing';
 import { groupSizeOf } from './groups';
-import { whatsappConfig, sendTicketOnWhatsApp, maskNumber } from '@/lib/whatsapp';
+import { whatsappConfig, whatsappEnabled, sendTicketOnWhatsApp, maskNumber } from '@/lib/whatsapp';
 import { formatEventDate } from './format';
 import { progressOf } from './scan';
 import { fetchLogoBase64, generateTicketPdf } from './ticket-pdf';
@@ -317,7 +317,7 @@ export const deliveryDeps: DeliveryDeps = {
   },
 
   async sendTicketWhatsApp(order) {
-    const cfg = whatsappConfig();
+    const cfg = whatsappEnabled() ? whatsappConfig() : null;
     if (!cfg) return { status: 'SKIPPED', error: 'WhatsApp is not configured' };
     if (!order.whatsapp_to || !order.booking_id) return { status: 'SKIPPED', error: 'No WhatsApp number on the order' };
     const pdf = await renderBookingPdf(order.booking_id);

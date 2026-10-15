@@ -34,7 +34,7 @@ Samples for review: `1 = Asha`, `2 = Onam Night 2026`, `3 = Sun, 18 Oct 2026, 6:
 |----------|-------|
 | `WHATSAPP_ACCESS_TOKEN` | a **permanent** System User token (the 24-hour test token in API Setup stops working after a day) |
 | `WHATSAPP_PHONE_NUMBER_ID` | the Phone Number ID |
-| `NEXT_PUBLIC_WHATSAPP_ENABLED` | `true` to show the checkbox at checkout (redeploy after changing) |
+| `WHATSAPP_ENABLED` | optional kill switch: set to `false` to hide the checkout checkbox and stop sending. Leave unset to keep WhatsApp on whenever the two values above are set |
 | `WHATSAPP_TEMPLATE_NAME` / `WHATSAPP_TEMPLATE_LANG` | optional, defaults above |
 
-Nothing happens until the first two are set. Never commit the token.
+The checkout box appears automatically once the first two are set (the server tells the page). Nothing happens until then. Never commit the token.

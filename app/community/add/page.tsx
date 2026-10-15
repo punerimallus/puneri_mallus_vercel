@@ -11,6 +11,7 @@ import {
 import TribeTimePicker from '@/components/ui/TribeTimePicker';
 import TribeAlert from '@/components/TribeAlert'; 
 import EmailVerificationGate from '@/components/EmailVerificationGate';
+import { onEnter } from '@/lib/ui/enter';
 
 const EXTERNAL_CATEGORIES = ["SAMAJAM", "TEMPLE", "CHURCH", "ORGANIZATION","MOSQUE","OTHER"];
 
@@ -245,6 +246,13 @@ function AddCommunityForm() {
     if (thumbnailId === id) setThumbnailId(null);
   };
 
+  // Same action as the "Next" button, so Enter in any field of step 1 moves on too.
+  const goNextFromStep1 = () => {
+    if (nameError) return triggerAlert("Please choose a different organization name. This one is taken.", "error");
+    if (checkingName) return;
+    setStep(2);
+  };
+
   const handleSubmit = async (isDraftMode: boolean = false) => {
     if (!isDraftMode) {
       if (gallery.length === 0) return triggerAlert("At least one image is required", "error");
@@ -392,7 +400,7 @@ function AddCommunityForm() {
         </div>
 
         {step === 1 ? (
-          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="space-y-10">
+          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="space-y-10" onKeyDown={onEnter(goNextFromStep1)}>
             <header className="space-y-2">
                <h1 className="text-5xl font-black italic uppercase leading-none">
                  Register <span className="text-brandRed">Circle .</span>
@@ -458,11 +466,7 @@ function AddCommunityForm() {
             
             {/* 🔥 UPDATED: Blocks advancement if name is taken */}
             <button 
-              onClick={() => {
-                if (nameError) return triggerAlert("Please choose a different organization name. This one is taken.", "error");
-                if (checkingName) return;
-                setStep(2);
-              }} 
+              onClick={goNextFromStep1} 
               className="w-full py-8 bg-white text-black rounded-[32px] font-black uppercase tracking-[0.3em] transition-all hover:bg-brandRed hover:text-white flex items-center justify-center gap-4"
             >
               <span>Next: Services & Media</span><ArrowRight size={20} />

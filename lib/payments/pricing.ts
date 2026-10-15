@@ -107,11 +107,14 @@ export function quoteEventCart(input: EventCartInput): EventCartQuote {
   let pointsApplied = 0;
   if (requestedPoints > 0) {
     if (!input.isLoggedIn) throw new PaymentInputError('Unauthorized redemption attempt.', 401);
-    if (requestedPoints < MIN_REDEEM_POINTS) {
+    // Redemption unlocks once the BALANCE reaches the minimum (this is what the checkout page tells people).
+    // It is not a minimum on how much a single order uses: a small order may use only a few points.
+    if (input.loyaltyBalance < MIN_REDEEM_POINTS) {
       throw new PaymentInputError(`A minimum of ${MIN_REDEEM_POINTS} points is required to unlock redemption.`);
     }
     if (input.loyaltyBalance < requestedPoints) throw new PaymentInputError('Insufficient loyalty balance for redemption.');
-    pointsApplied = Math.min(requestedPoints, Math.floor(subtotal));
+    // Always leave at least Rs 1 to pay: the payment gateway cannot take less.
+    pointsApplied = Math.max(0, Math.min(requestedPoints, Math.floor(subtotal - 1)));
   }
 
   const total = subtotal - pointsApplied;

@@ -61,6 +61,20 @@ body::before {
   }
 }
 
+@layer base {
+  /* A clear keyboard focus ring everywhere. Components that draw their own focus style use outline-none and win. */
+  :focus-visible {
+    outline: 2px solid #ff4d4d;
+    outline-offset: 2px;
+  }
+  /* Text inputs show focus with their border; don't double up. */
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline: none;
+  }
+}
+
 @layer utilities {
   .gpu-boost {
     transform: translateZ(0);

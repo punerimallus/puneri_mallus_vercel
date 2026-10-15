@@ -67,7 +67,7 @@ export default function AdminPortal() {
     // },
     {
       title: "Photo Gallery",
-      desc: "Upload and organize photos for t he 'About Us' legacy archive.",
+      desc: "Upload and organize photos for the 'About Us' legacy archive.",
       icon: <Camera className="text-brandRed" size={32} />,
       link: "/admin/gallery",
       status: "Live",

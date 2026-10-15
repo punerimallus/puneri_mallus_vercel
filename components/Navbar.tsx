@@ -35,24 +35,17 @@ export default function Navbar() {
   const fetchUserStatus = async (userId: string) => {
     try {
       // 1. Check Standard Profile / Membership
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_member, full_name, phone_number')
-        .eq('id', userId)
-        .single();
-        
+      // The profile and admin lookups don't depend on each other, so ask for both at once.
+      const [{ data: profile }, { data: adminData }] = await Promise.all([
+        supabase.from('profiles').select('is_member, full_name, phone_number').eq('id', userId).single(),
+        supabase.from('authorized_admins').select('role').eq('id', userId).maybeSingle(),
+      ]);
+
       if (profile) {
         setIsMember(profile.is_member || false);
         setUser((prev: any) => ({ ...prev, user_metadata: { ...prev?.user_metadata, full_name: profile.full_name } }));
       }
 
-      // 2. 🔥 Check Admin Status
-      const { data: adminData } = await supabase
-        .from('authorized_admins')
-        .select('role')
-        .eq('id', userId)
-        .maybeSingle();
-      
       if (adminData) setIsAdmin(true);
 
     } catch (e) {
@@ -97,12 +90,9 @@ export default function Navbar() {
   useEffect(() => {
     const fetchGlobalData = async () => {
       try {
-        const eventRes = await fetch('/api/events/manage');
-        const eventData = await eventRes.json();
+        const [eventRes, settingsRes] = await Promise.all([fetch('/api/events/manage'), fetch('/api/admin/settings')]);
+        const [eventData, settingsData] = await Promise.all([eventRes.json(), settingsRes.json()]);
         setHasUpcoming(eventData.hasUpcoming);
-
-        const settingsRes = await fetch('/api/admin/settings');
-        const settingsData = await settingsRes.json();
         if (settingsData?.membershipPrice) {
           setMembershipPrice(settingsData.membershipPrice);
         }
@@ -209,7 +199,9 @@ export default function Navbar() {
                 <div className="flex items-center gap-4 relative group">
                   <Link
                     href={isAdmin ? "/admin" : "/profile"}
-                    className={`flex items-center gap-3 backdrop-blur-md border p-1.5 pr-4 xl:pr-5 rounded-full transition-all ${
+                    aria-label={isAdmin ? "Admin dashboard" : "My profile"}
+                    title={isAdmin ? "Admin dashboard" : "My profile"}
+                    className={`flex items-center gap-3 backdrop-blur-md border p-1.5 2xl:pr-5 rounded-full transition-all ${
                       isAdmin
                         ? 'bg-brandRed/10 border-brandRed/30 shadow-[0_0_15px_rgba(255,0,0,0.2)]'
                         : isMember 
@@ -237,7 +229,7 @@ export default function Navbar() {
                       )}
                     </div>
                     
-                    <div className="flex flex-col text-left">
+                    <div className="hidden 2xl:flex flex-col text-left">
                       <div className="flex items-center gap-1.5">
                         <span className={`font-black uppercase tracking-widest leading-none mb-1 ${
                           isAdmin 
@@ -257,7 +249,7 @@ export default function Navbar() {
                   </Link>
                   <button
                     onClick={handleLogout}
-                    className="absolute -bottom-12 right-0 bg-zinc-900 border border-white/10 px-4 py-2 rounded-xl text-[9px] font-black uppercase text-zinc-400 hover:text-brandRed opacity-0 group-hover:opacity-100 transition-all flex items-center gap-2 whitespace-nowrap"
+                    className="absolute -bottom-12 right-0 bg-zinc-900 border border-white/10 px-4 py-2 rounded-xl text-[9px] font-black uppercase text-zinc-400 hover:text-brandRed opacity-0 group-hover:opacity-100 focus:opacity-100 group-focus-within:opacity-100 transition-all flex items-center gap-2 whitespace-nowrap"
                   >
                     <LogOut size={12} /> Sign Out
                   </button>
@@ -271,7 +263,7 @@ export default function Navbar() {
                 onClick={() => { 
                   if (user) setShowMembershipModal(true); 
                 }}
-                className="lg:hidden px-4 py-2 rounded-full bg-brandRed text-white font-black uppercase text-[10px] tracking-widest active:scale-95 whitespace-nowrap"
+                className="lg:hidden px-4 min-h-[40px] rounded-full bg-brandRed text-white font-black uppercase text-[10px] tracking-widest active:scale-95 whitespace-nowrap"
               >
                 {user ? "Join" : "Login"}
               </button>

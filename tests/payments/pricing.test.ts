@@ -77,13 +77,16 @@ describe('quoteEventCart', () => {
       expect(() => quoteEventCart({ ...withPoints, pointsToRedeem: -500 })).toThrow(/Invalid points/);
     });
     it('rejects below the minimum, above the balance, and for guests', () => {
-      expect(() => quoteEventCart({ ...withPoints, pointsToRedeem: 20 })).toThrow(/minimum/);
+      expect(() => quoteEventCart({ ...withPoints, loyaltyBalance: 30, pointsToRedeem: 20 })).toThrow(/minimum/);
       expect(() => quoteEventCart({ ...withPoints, pointsToRedeem: 300 })).toThrow(/Insufficient/);
       expect(() => quoteEventCart({ ...withPoints, isLoggedIn: false, pointsToRedeem: 100 })).toThrow(/Unauthorized/);
     });
     it('floors fractional points and never lets the total reach zero', () => {
       expect(quoteEventCart({ ...withPoints, pointsToRedeem: 99.9 }).pointsApplied).toBe(99);
-      expect(() => quoteEventCart({ ...base, cart: { ga: 1 }, loyaltyBalance: 1000, pointsToRedeem: 300 })).toThrow(/Invalid amount/);
+      // Over-asking is trimmed so at least Rs 1 is always left to pay, instead of failing the checkout.
+      const q = quoteEventCart({ ...base, cart: { ga: 1 }, loyaltyBalance: 1000, pointsToRedeem: 300 });
+      expect(q.total).toBeGreaterThanOrEqual(1);
+      expect(q.pointsApplied + q.total).toBeCloseTo(q.subtotal, 5);
     });
   });
 });
@@ -115,5 +118,22 @@ describe('nextMartExpiry', () => {
   });
   it('lifetime never expires', () => {
     expect(nextMartExpiry('LIFETIME', null, now)).toBeNull();
+  });
+});
+
+describe('small orders with a healthy points balance (the Rs 1 ticket case)', () => {
+  const tiny = { ...base, cart: { ga: 1 }, categories: [{ id: 'ga', name: 'GA', prefix: 'GA-', price: 1, capacity: 100, sold: 0 }] as any };
+  it('does not reject the order: a 101-point balance on a Rs 1 ticket just uses no points', () => {
+    const q = quoteEventCart({ ...tiny, loyaltyBalance: 101, pointsToRedeem: 1 });
+    expect(q.pointsApplied).toBe(0);
+    expect(q.total).toBe(1);
+  });
+  it('uses what it can on a slightly bigger order and still leaves Rs 1 to pay', () => {
+    const q = quoteEventCart({ ...tiny, categories: [{ id: 'ga', name: 'GA', prefix: 'GA-', price: 10, capacity: 100, sold: 0 }] as any, loyaltyBalance: 101, pointsToRedeem: 50 });
+    expect(q.pointsApplied).toBe(9);
+    expect(q.total).toBe(1);
+  });
+  it('still keeps redemption locked until the balance reaches 50', () => {
+    expect(() => quoteEventCart({ ...tiny, loyaltyBalance: 49, pointsToRedeem: 1 })).toThrow(/minimum/);
   });
 });
