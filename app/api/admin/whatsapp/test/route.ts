@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/admin';
-import { normalizeWhatsAppNumber, sendHelloWorld, sendTicketOnWhatsApp, whatsappConfig } from '@/lib/whatsapp';
+import { fetchTemplateInfo, normalizeWhatsAppNumber, sendHelloWorld, sendTicketOnWhatsApp, whatsappConfig } from '@/lib/whatsapp';
 import { fetchLogoBase64, generateTicketPdf } from '@/lib/payments/ticket-pdf';
 import { baseUrl } from '@/lib/payments/server';
 import { siteUrl } from '@/lib/mail';
@@ -22,6 +22,14 @@ export async function POST(req: Request) {
   if (!cfg) return NextResponse.json({ ok: false, error: 'WhatsApp is not configured. Set WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID in Vercel.' }, { status: 400 });
 
   const { to, mode } = await req.json().catch(() => ({}));
+
+  // Read-only: show what Meta says about our ticket template (approved? named or numbered placeholders? PDF header?).
+  if (mode === 'template') {
+    const { info, error } = await fetchTemplateInfo(cfg, true);
+    if (!info) return NextResponse.json({ ok: false, error: error || 'Could not read the template.' }, { status: 502 });
+    return NextResponse.json({ ok: true, template: cfg.template, language: info.language, status: info.status, format: info.format, bodyParams: info.bodyParams, documentHeader: info.documentHeader });
+  }
+
   const number = normalizeWhatsAppNumber(typeof to === 'string' ? to : '');
   if (!number) return NextResponse.json({ ok: false, error: 'Enter a valid mobile number, for example +919876543210.' }, { status: 400 });
 

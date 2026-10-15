@@ -7,18 +7,20 @@ import { onEnter } from '@/lib/ui/enter';
 /** Admin-only: send one WhatsApp message to a number to check the setup, before customers are involved. */
 export default function WhatsAppTest() {
   const [to, setTo] = useState('');
-  const [busy, setBusy] = useState<'hello' | 'ticket' | null>(null);
+  const [busy, setBusy] = useState<'hello' | 'ticket' | 'template' | null>(null);
   const [result, setResult] = useState<string>('');
   const { showAlert } = useAlert();
 
-  const send = async (mode: 'hello' | 'ticket') => {
-    if (busy || !to.trim()) return;
+  const send = async (mode: 'hello' | 'ticket' | 'template') => {
+    if (busy || (mode !== 'template' && !to.trim())) return;
     setBusy(mode);
     setResult('');
     try {
       const res = await fetch('/api/admin/whatsapp/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to, mode }) });
       const data = await res.json().catch(() => ({}));
-      if (data.ok) {
+      if (data.ok && mode === 'template') {
+        setResult(`Template "${data.template}" (${data.language}): ${data.status}. Placeholders: ${data.format === 'NAMED' ? 'named' : 'numbered'} (${(data.bodyParams || []).join(', ') || 'none'}). PDF header: ${data.documentHeader ? 'yes' : 'no'}.`);
+      } else if (data.ok) {
         setResult('Accepted by WhatsApp. It should arrive on that phone within a few seconds.');
         showAlert('WhatsApp message sent', 'success');
       } else {
@@ -49,6 +51,9 @@ export default function WhatsAppTest() {
         />
         <button onClick={() => send('hello')} disabled={!!busy || !to.trim()} className="px-6 py-4 bg-white text-black rounded-2xl text-[10px] font-black uppercase tracking-widest disabled:opacity-50 flex items-center justify-center gap-2">
           {busy === 'hello' && <Loader2 size={14} className="animate-spin" />} Send hello
+        </button>
+        <button onClick={() => send('template')} disabled={!!busy} className="px-6 py-4 bg-white/10 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest disabled:opacity-50 flex items-center justify-center gap-2">
+          {busy === 'template' && <Loader2 size={14} className="animate-spin" />} Check template
         </button>
         <button onClick={() => send('ticket')} disabled={!!busy || !to.trim()} className="px-6 py-4 bg-green-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest disabled:opacity-50 flex items-center justify-center gap-2">
           {busy === 'ticket' && <Loader2 size={14} className="animate-spin" />} Send sample ticket

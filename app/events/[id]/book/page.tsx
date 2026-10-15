@@ -305,7 +305,7 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
             <p className="text-[10px] text-zinc-400 font-black uppercase tracking-[0.3em] mt-2">Official Ticketing Portal</p>
           </div>
 
-          <div className="flex-1 p-8 overflow-y-auto pb-48 custom-scrollbar">
+          <div className="flex-1 min-h-0 p-8 pb-6 overflow-y-auto custom-scrollbar">
             {salesClosed && (
               <div className="max-w-md mx-auto mb-6 p-4 rounded-2xl border border-red-500/30 bg-red-500/10 text-center">
                 <p className="text-xs font-black uppercase tracking-widest text-red-400">Ticket sales have closed</p>
@@ -415,9 +415,9 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
             )}
           </div>
 
-          {/* Absolute Checkout Bar */}
+          {/* Checkout bar: sits below the pass list instead of floating over it, so it can grow (points, WhatsApp, price breakdown) without hiding anything */}
           {step === 2 && totalTickets > 0 && (
-            <div className="absolute bottom-0 left-0 right-0 bg-zinc-950/95 backdrop-blur-2xl border-t border-white/10 p-6 md:rounded-br-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+            <div className="shrink-0 bg-zinc-950/95 backdrop-blur-2xl border-t border-white/10 p-6 md:rounded-br-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
               
               {/* 🔥 THRESHOLD-LOCKED REDEMPTION TOGGLE */}
               {loyaltyBalance > 0 && (

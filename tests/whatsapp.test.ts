@@ -170,3 +170,85 @@ describe('whatsappEnabled (what decides if checkout offers WhatsApp)', () => {
     for (const v of ['false', 'FALSE', 'off', '0', 'no']) expect(whatsappEnabled({ ...creds, WHATSAPP_ENABLED: v })).toBe(false);
   });
 });
+
+import { buildBodyParams, parseTemplate, placeholdersOf, valueKeyFor } from '@/lib/whatsapp';
+
+describe('template shape (named vs numbered placeholders)', () => {
+  const named = { name: 'ticket_confirmation', status: 'APPROVED', language: 'en', parameter_format: 'NAMED', components: [{ type: 'HEADER', format: 'DOCUMENT' }, { type: 'BODY', text: 'Hi {{customer_name}}, tickets for {{event_name}} on {{event_date}} at {{venue}}. See {{tickets_link}} ref {{booking_id}}' }] };
+  const numbered = { name: 'ticket_confirmation', status: 'APPROVED', language: 'en', components: [{ type: 'HEADER', format: 'DOCUMENT' }, { type: 'BODY', text: 'Hi {{1}}, {{2}} on {{3}} at {{4}} {{5}} ref {{6}}' }] };
+  const msg = { to: '919876543210', buyerName: 'Asha', eventTitle: 'Onam Night', eventWhen: 'Sun, 18 Oct 2026, 6:00 PM', eventVenue: 'Pune', ticketsLink: 'https://x/t', bookingRef: 'AB12', pdf: Buffer.from('%PDF'), filename: 't.pdf' };
+
+  it('reads placeholders in order, once each', () => {
+    expect(placeholdersOf('Hi {{ name }}, {{event}} {{name}}')).toEqual(['name', 'event']);
+    expect(placeholdersOf('no placeholders')).toEqual([]);
+  });
+  it('recognises a named template and a numbered one', () => {
+    expect(parseTemplate(named, 'en')).toMatchObject({ format: 'NAMED', bodyParams: ['customer_name', 'event_name', 'event_date', 'venue', 'tickets_link', 'booking_id'], documentHeader: true, status: 'APPROVED' });
+    expect(parseTemplate(numbered, 'en')).toMatchObject({ format: 'POSITIONAL', bodyParams: ['1', '2', '3', '4', '5', '6'] });
+  });
+  it('maps placeholder names to the right values whatever the wording', () => {
+    expect(['customer_name', 'event_name', 'event_date', 'venue', 'tickets_link', 'booking_id'].map(valueKeyFor)).toEqual(['name', 'event', 'when', 'venue', 'link', 'ref']);
+    expect(valueKeyFor('whatever')).toBeNull();
+  });
+  it('sends named placeholders WITH their names (the "Parameter name is missing" failure)', () => {
+    const params = buildBodyParams(msg, parseTemplate(named, 'en'));
+    expect(params).toEqual([
+      { type: 'text', parameter_name: 'customer_name', text: 'Asha' },
+      { type: 'text', parameter_name: 'event_name', text: 'Onam Night' },
+      { type: 'text', parameter_name: 'event_date', text: 'Sun, 18 Oct 2026, 6:00 PM' },
+      { type: 'text', parameter_name: 'venue', text: 'Pune' },
+      { type: 'text', parameter_name: 'tickets_link', text: 'https://x/t' },
+      { type: 'text', parameter_name: 'booking_id', text: 'AB12' },
+    ]);
+  });
+  it('sends numbered placeholders without names, and only as many as the template has', () => {
+    expect(buildBodyParams(msg, parseTemplate(numbered, 'en')).every((p: any) => !('parameter_name' in p))).toBe(true);
+    const short = parseTemplate({ ...numbered, components: [{ type: 'BODY', text: 'Hi {{1}}, {{2}}' }] }, 'en');
+    expect(buildBodyParams(msg, short)).toHaveLength(2);
+  });
+  it('can be told the names by hand when the template cannot be read', () => {
+    expect(buildBodyParams(msg, null, ['customer_name', 'event_name'])).toEqual([
+      { type: 'text', parameter_name: 'customer_name', text: 'Asha' },
+      { type: 'text', parameter_name: 'event_name', text: 'Onam Night' },
+    ]);
+  });
+});
+
+describe('sending adapts to the real template', () => {
+  const cfgWaba = { token: 'T', phoneNumberId: '555', version: 'v21.0', template: 'ticket_confirmation', language: 'en', wabaId: 'WABA1' };
+  const msg = { to: '919876543210', buyerName: 'Asha', eventTitle: 'Onam Night', eventWhen: 'Sun', eventVenue: 'Pune', ticketsLink: 'https://x/t', bookingRef: 'AB12', pdf: Buffer.from('%PDF'), filename: 't.pdf' };
+  const tpl = (over: any = {}) => ({ data: [{ name: 'ticket_confirmation', status: 'APPROVED', language: 'en', parameter_format: 'NAMED', components: [{ type: 'HEADER', format: 'DOCUMENT' }, { type: 'BODY', text: 'Hi {{customer_name}} {{event_name}}' }], ...over }] });
+
+  it('reads the template, then uploads the PDF and sends named parameters', async () => {
+    const { sendTicketOnWhatsApp: send } = await import('@/lib/whatsapp');
+    const { calls } = mockFetch([{ status: 200, json: tpl() }, { status: 200, json: { id: 'MEDIA' } }, { status: 200, json: { messages: [{ id: 'wamid.N' }] } }]);
+    const res = await send({ ...cfgWaba, template: 'ticket_confirmation_named_a' }, msg);
+    expect(res).toEqual({ ok: true, messageId: 'wamid.N' });
+    expect(calls[0].url).toContain('/WABA1/message_templates?name=ticket_confirmation_named_a');
+    const body = JSON.parse(calls[2].init.body as string);
+    expect(body.template.components[1].parameters).toEqual([{ type: 'text', parameter_name: 'customer_name', text: 'Asha' }, { type: 'text', parameter_name: 'event_name', text: 'Onam Night' }]);
+  });
+  it('does not even try while the template is not approved, and says so', async () => {
+    const { sendTicketOnWhatsApp: send } = await import('@/lib/whatsapp');
+    const { calls } = mockFetch([{ status: 200, json: tpl({ status: 'PENDING' }) }]);
+    const res = await send({ ...cfgWaba, template: 'ticket_confirmation_pending_b' }, msg);
+    expect(res).toMatchObject({ ok: false, retryable: false });
+    expect(!res.ok && res.error).toContain('PENDING');
+    expect(calls).toHaveLength(1);
+  });
+  it('skips the PDF upload when the template has no document header', async () => {
+    const { sendTicketOnWhatsApp: send } = await import('@/lib/whatsapp');
+    const { calls } = mockFetch([{ status: 200, json: tpl({ components: [{ type: 'BODY', text: 'Hi {{customer_name}}' }] }) }, { status: 200, json: { messages: [{ id: 'wamid.H' }] } }]);
+    const res = await send({ ...cfgWaba, template: 'ticket_confirmation_nohdr_c' }, msg);
+    expect(res.ok).toBe(true);
+    expect(calls).toHaveLength(2);
+    expect(JSON.parse(calls[1].init.body as string).template.components.map((c: any) => c.type)).toEqual(['body']);
+  });
+  it('explains a template that does not exist', async () => {
+    const { fetchTemplateInfo } = await import('@/lib/whatsapp');
+    mockFetch([{ status: 200, json: { data: [] } }]);
+    const r = await fetchTemplateInfo({ ...cfgWaba, template: 'missing_template_d' }, true);
+    expect(r.info).toBeNull();
+    expect(r.error).toContain('No template called');
+  });
+});
