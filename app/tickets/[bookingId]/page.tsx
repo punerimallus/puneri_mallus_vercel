@@ -139,7 +139,7 @@ export default function TicketSuccessPage({ params }: { params: Promise<{ bookin
               <div className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center border-2 border-zinc-900"><Smartphone size={12} className="text-white" /></div>
             </div>
             <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 leading-relaxed">
-              Your official PDF passes have been dispatched to <span className="text-white break-all">{view.email}</span>{view.whatsapp?.status === 'SENT' ? <> and on WhatsApp to <span className="text-white">{view.whatsapp.to}</span></> : view.whatsapp?.optedIn && view.whatsapp.status === null ? ' and are on their way on WhatsApp' : ''}.
+              Your official PDF passes have been dispatched to <span className="text-white break-words">{view.email}</span>{view.whatsapp?.status === 'SENT' ? <> and on WhatsApp to <span className="text-white">{view.whatsapp.to}</span></> : view.whatsapp?.optedIn && view.whatsapp.status === null ? ' and are on their way on WhatsApp' : ''}.
             </p>
           </div>
         )}
@@ -210,7 +210,7 @@ export default function TicketSuccessPage({ params }: { params: Promise<{ bookin
             <div className="flex justify-between border-t border-white/10 pt-3 mt-3 text-sm font-black text-white"><span>Total paid</span><span>{formatRupees(receipt.total)}</span></div>
           </div>
           {(view.payment.paymentId || view.payment.paidAt) && (
-            <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-600 mt-4 leading-relaxed break-all">
+            <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-600 mt-4 leading-relaxed break-words">
               {view.payment.paidAt && formatIst(view.payment.paidAt)}{view.payment.paymentId && ` · Payment ${view.payment.paymentId}`}
             </p>
           )}

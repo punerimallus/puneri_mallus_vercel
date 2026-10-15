@@ -16,6 +16,10 @@ export interface WhatsAppConfig {
   version: string;
   template: string;
   language: string;
+  /** WhatsApp Business Account id: lets the app read the template's definition from Meta and adapt to it. Optional. */
+  wabaId?: string;
+  /** Optional override: the template's placeholder names, in order, when it uses named placeholders. */
+  paramNames?: string[];
 }
 
 export function whatsappConfig(env: Record<string, string | undefined> = process.env): WhatsAppConfig | null {
@@ -28,6 +32,8 @@ export function whatsappConfig(env: Record<string, string | undefined> = process
     version: env.WHATSAPP_API_VERSION?.trim() || 'v21.0',
     template: env.WHATSAPP_TEMPLATE_NAME?.trim() || 'ticket_confirmation',
     language: env.WHATSAPP_TEMPLATE_LANG?.trim() || 'en',
+    wabaId: env.WHATSAPP_BUSINESS_ACCOUNT_ID?.trim() || undefined,
+    paramNames: env.WHATSAPP_TEMPLATE_PARAMS?.split(',').map((n) => n.trim()).filter(Boolean),
   };
 }
 
@@ -138,27 +144,111 @@ export interface TicketMessage {
 /** Strips characters WhatsApp rejects in template parameters (newlines, tabs, runs of spaces) and keeps them short. */
 export const cleanParam = (v: string, max = 120): string => (String(v || '').replace(/[\r\n\t]+/g, ' ').replace(/ {2,}/g, ' ').trim().slice(0, max) || '-');
 
+// ---- the template's shape -------------------------------------------------------------------------------
+// A template's placeholders are either numbered ({{1}}) or named ({{customer_name}}). The API must be called the
+// matching way ("Parameter name is missing or empty" means a named template got numbered values), so the app
+// reads the template's definition from Meta once and builds the message to fit it.
+
+export interface TemplateInfo {
+  status: string;
+  language: string;
+  format: 'NAMED' | 'POSITIONAL';
+  /** Body placeholders in order of appearance: ["1","2"] or ["customer_name","event_name"]. */
+  bodyParams: string[];
+  documentHeader: boolean;
+}
+
+/** Placeholders in order of first appearance. */
+export function placeholdersOf(text: string): string[] {
+  const seen: string[] = [];
+  for (const m of text.matchAll(/\{\{\s*([^}\s]+)\s*\}\}/g)) if (!seen.includes(m[1])) seen.push(m[1]);
+  return seen;
+}
+
+export function parseTemplate(t: any, language: string): TemplateInfo | null {
+  if (!t) return null;
+  const comps: any[] = Array.isArray(t.components) ? t.components : [];
+  const body = comps.find((c) => String(c.type).toUpperCase() === 'BODY');
+  const header = comps.find((c) => String(c.type).toUpperCase() === 'HEADER');
+  const bodyParams = placeholdersOf(String(body?.text || ''));
+  const named = String(t.parameter_format || '').toUpperCase() === 'NAMED' || bodyParams.some((p) => !/^\d+$/.test(p));
+  return {
+    status: String(t.status || 'UNKNOWN'),
+    language: String(t.language || language),
+    format: named ? 'NAMED' : 'POSITIONAL',
+    bodyParams,
+    documentHeader: String(header?.format || '').toUpperCase() === 'DOCUMENT',
+  };
+}
+
+let templateCache: { key: string; at: number; info: TemplateInfo | null } | null = null;
+const TEMPLATE_CACHE_MS = 10 * 60_000;
+
+export async function fetchTemplateInfo(cfg: WhatsAppConfig, force = false): Promise<{ info: TemplateInfo | null; error?: string }> {
+  if (!cfg.wabaId) return { info: null, error: 'Set WHATSAPP_BUSINESS_ACCOUNT_ID so the app can read the template.' };
+  const key = `${cfg.wabaId}|${cfg.template}|${cfg.language}`;
+  if (!force && templateCache && templateCache.key === key && Date.now() - templateCache.at < TEMPLATE_CACHE_MS && templateCache.info) return { info: templateCache.info };
+  try {
+    const { status, json } = await graph(cfg, `${cfg.wabaId}/message_templates?name=${encodeURIComponent(cfg.template)}&fields=name,status,language,parameter_format,components&limit=20`, { method: 'GET' });
+    if (status < 200 || status >= 300) return { info: null, error: String(json?.error?.message || `HTTP ${status}`).slice(0, 200) };
+    const rows: any[] = Array.isArray(json?.data) ? json.data : [];
+    const row = rows.find((r) => r.language === cfg.language) || rows.find((r) => String(r.language).startsWith(cfg.language.split('_')[0])) || rows[0];
+    if (!row) return { info: null, error: `No template called "${cfg.template}" exists on this WhatsApp account.` };
+    const info = parseTemplate(row, cfg.language);
+    templateCache = { key, at: Date.now(), info };
+    return { info };
+  } catch (e) {
+    return { info: null, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** Which of our values a placeholder name is asking for, judged from the name. */
+export function valueKeyFor(name: string): 'link' | 'ref' | 'venue' | 'when' | 'event' | 'name' | null {
+  const n = name.toLowerCase();
+  if (/(link|url)/.test(n)) return 'link';
+  if (/(ref|booking|code|ticket_?id|order)/.test(n)) return 'ref';
+  if (/(venue|location|place|address)/.test(n)) return 'venue';
+  if (/(date|time|when|schedule)/.test(n)) return 'when';
+  if (/(event|show|title)/.test(n)) return 'event';
+  if (/(name|customer|user|buyer|guest)/.test(n)) return 'name';
+  return null;
+}
+
+/** The body parameters for the template, in the form its definition demands. */
+export function buildBodyParams(m: TicketMessage, info: TemplateInfo | null, overrideNames?: string[]): Record<string, unknown>[] {
+  const values = { name: m.buyerName, event: m.eventTitle, when: m.eventWhen, venue: m.eventVenue, link: m.ticketsLink, ref: m.bookingRef };
+  const inOrder = [values.name, values.event, values.when, values.venue, values.link, values.ref];
+  const names = info?.format === 'NAMED' ? info.bodyParams : overrideNames?.length ? overrideNames : null;
+  if (names) {
+    return names.map((n, i) => {
+      const key = valueKeyFor(n);
+      return { type: 'text', parameter_name: n, text: cleanParam(key ? values[key] : inOrder[i] ?? '-') };
+    });
+  }
+  const count = info?.bodyParams.length || inOrder.length;
+  return inOrder.slice(0, count).map((t) => ({ type: 'text', text: cleanParam(t) }));
+}
+
 /**
- * Sends the "ticket_confirmation" template with the PDF attached as its header.
- * Template body parameters, in order: 1 name, 2 event, 3 date and time, 4 venue, 5 tickets link, 6 booking ref.
+ * Sends the ticket template with the PDF attached as its header, shaped to the template's real definition.
+ * Default body order, for numbered templates: 1 name, 2 event, 3 date and time, 4 venue, 5 tickets link, 6 booking ref.
  */
 export async function sendTicketOnWhatsApp(cfg: WhatsAppConfig, m: TicketMessage): Promise<WhatsAppResult> {
-  const up = await uploadPdf(cfg, m.pdf, m.filename);
-  if (!up.ok) return up;
-  return postMessage(cfg, {
-    to: m.to,
-    template: {
-      name: cfg.template,
-      language: { code: cfg.language },
-      components: [
-        { type: 'header', parameters: [{ type: 'document', document: { id: up.mediaId, filename: m.filename } }] },
-        {
-          type: 'body',
-          parameters: [m.buyerName, m.eventTitle, m.eventWhen, m.eventVenue, m.ticketsLink, m.bookingRef].map((t) => ({ type: 'text', text: cleanParam(t) })),
-        },
-      ],
-    },
-  });
+  const { info } = await fetchTemplateInfo(cfg);
+  if (info && info.status !== 'APPROVED') {
+    return { ok: false, code: null, error: `Template "${cfg.template}" is ${info.status}, not APPROVED yet. WhatsApp will not deliver it until Meta approves it.`, retryable: false };
+  }
+  const components: Record<string, unknown>[] = [];
+  let mediaId: string | null = null;
+  if (!info || info.documentHeader) {
+    const up = await uploadPdf(cfg, m.pdf, m.filename);
+    if (!up.ok) return up;
+    mediaId = up.mediaId;
+    components.push({ type: 'header', parameters: [{ type: 'document', document: { id: mediaId, filename: m.filename } }] });
+  }
+  const params = buildBodyParams(m, info, cfg.paramNames);
+  if (params.length) components.push({ type: 'body', parameters: params });
+  return postMessage(cfg, { to: m.to, template: { name: cfg.template, language: { code: info?.language || cfg.language }, components } });
 }
 
 /** Meta's built-in "hello_world" template exists on every account, so it works for checking credentials before our own template is approved. */
