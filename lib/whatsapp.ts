@@ -32,6 +32,16 @@ export function whatsappConfig(env: Record<string, string | undefined> = process
 }
 
 /**
+ * Is WhatsApp delivery switched on? True when the credentials are set, unless WHATSAPP_ENABLED is set to
+ * false/off/0/no (an easy kill switch that needs no redeploy of code, only of settings). The checkout page asks
+ * the server this, so nothing depends on a build-time flag matching exactly.
+ */
+export function whatsappEnabled(env: Record<string, string | undefined> = process.env): boolean {
+  if (!whatsappConfig(env)) return false;
+  return !/^(false|off|0|no)$/i.test((env.WHATSAPP_ENABLED || '').trim());
+}
+
+/**
  * Digits-only international number, which is what the API wants ("919876543210").
  * Accepts "+91 98765 43210", "09876543210", or a bare 10-digit Indian mobile. Returns null if it can't be a mobile.
  */

@@ -12,7 +12,7 @@ import {
 import { CartLine, EventSnapshot, PaymentInputError, PaymentType } from '@/lib/payments/types';
 import { salesStatus } from '@/lib/events/sales';
 import { groupSizeOf } from '@/lib/payments/groups';
-import { normalizeWhatsAppNumber, whatsappConfig } from '@/lib/whatsapp';
+import { normalizeWhatsAppNumber, whatsappEnabled } from '@/lib/whatsapp';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -56,7 +56,7 @@ export async function POST(req: Request) {
     let pointsApplied = 0;
     // WhatsApp copy of the tickets: only when the buyer opted in, the feature is configured, and the profile has a valid mobile.
     // The number always comes from the verified profile phone, never from the request.
-    const whatsappTo = body.whatsappOptIn === true && whatsappConfig() ? normalizeWhatsAppNumber(profile?.phone_number) : null;
+    const whatsappTo = body.whatsappOptIn === true && whatsappEnabled() ? normalizeWhatsAppNumber(profile?.phone_number) : null;
     const whatsappFields = paymentType === 'EVENT_TICKET' && whatsappTo ? { whatsapp_opt_in: true, whatsapp_to: whatsappTo } : {};
     let receiptEmail = cleanEmail(body.email) || cleanEmail(body.invoiceEmail) || cleanEmail(profile?.email) || cleanEmail(user.email);
 

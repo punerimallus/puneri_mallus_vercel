@@ -155,3 +155,18 @@ describe('WhatsApp step in delivery', () => {
     expect((await deliverOrderEmail('order_1', w.deps)).status).toBe('SENT');
   });
 });
+
+describe('whatsappEnabled (what decides if checkout offers WhatsApp)', () => {
+  const creds = { WHATSAPP_ACCESS_TOKEN: 't', WHATSAPP_PHONE_NUMBER_ID: '1' };
+  it('is on whenever the credentials are set, with no separate flag to get wrong', async () => {
+    const { whatsappEnabled } = await import('@/lib/whatsapp');
+    expect(whatsappEnabled(creds)).toBe(true);
+    expect(whatsappEnabled({ ...creds, WHATSAPP_ENABLED: 'true' })).toBe(true);
+    expect(whatsappEnabled({ ...creds, WHATSAPP_ENABLED: ' TRUE ' })).toBe(true);
+  });
+  it('is off without credentials, or when switched off', async () => {
+    const { whatsappEnabled } = await import('@/lib/whatsapp');
+    expect(whatsappEnabled({})).toBe(false);
+    for (const v of ['false', 'FALSE', 'off', '0', 'no']) expect(whatsappEnabled({ ...creds, WHATSAPP_ENABLED: v })).toBe(false);
+  });
+});

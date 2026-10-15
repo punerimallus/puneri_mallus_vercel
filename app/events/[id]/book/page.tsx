@@ -31,7 +31,9 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
   // Send the passes on WhatsApp too: only offered when the feature is on and the profile has a valid mobile.
   const [whatsappNumber, setWhatsappNumber] = useState<string | null>(null);
   const [whatsappOptIn, setWhatsappOptIn] = useState(true);
-  const whatsappAvailable = process.env.NEXT_PUBLIC_WHATSAPP_ENABLED === 'true' && !!whatsappNumber;
+  // The server says whether WhatsApp is set up, so this never depends on a build-time flag matching exactly.
+  const [whatsappServerOn, setWhatsappServerOn] = useState(false);
+  const whatsappAvailable = whatsappServerOn && !!whatsappNumber;
   const [discountPercent, setDiscountPercent] = useState(0);
   
   const { showAlert } = useAlert();
@@ -41,6 +43,10 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
+
+  useEffect(() => {
+    fetch('/api/whatsapp/status').then((r) => r.json()).then((d) => setWhatsappServerOn(d?.enabled === true)).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     async function init() {
