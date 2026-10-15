@@ -35,24 +35,17 @@ export default function Navbar() {
   const fetchUserStatus = async (userId: string) => {
     try {
       // 1. Check Standard Profile / Membership
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_member, full_name, phone_number')
-        .eq('id', userId)
-        .single();
-        
+      // The profile and admin lookups don't depend on each other, so ask for both at once.
+      const [{ data: profile }, { data: adminData }] = await Promise.all([
+        supabase.from('profiles').select('is_member, full_name, phone_number').eq('id', userId).single(),
+        supabase.from('authorized_admins').select('role').eq('id', userId).maybeSingle(),
+      ]);
+
       if (profile) {
         setIsMember(profile.is_member || false);
         setUser((prev: any) => ({ ...prev, user_metadata: { ...prev?.user_metadata, full_name: profile.full_name } }));
       }
 
-      // 2. 🔥 Check Admin Status
-      const { data: adminData } = await supabase
-        .from('authorized_admins')
-        .select('role')
-        .eq('id', userId)
-        .maybeSingle();
-      
       if (adminData) setIsAdmin(true);
 
     } catch (e) {
@@ -97,12 +90,9 @@ export default function Navbar() {
   useEffect(() => {
     const fetchGlobalData = async () => {
       try {
-        const eventRes = await fetch('/api/events/manage');
-        const eventData = await eventRes.json();
+        const [eventRes, settingsRes] = await Promise.all([fetch('/api/events/manage'), fetch('/api/admin/settings')]);
+        const [eventData, settingsData] = await Promise.all([eventRes.json(), settingsRes.json()]);
         setHasUpcoming(eventData.hasUpcoming);
-
-        const settingsRes = await fetch('/api/admin/settings');
-        const settingsData = await settingsRes.json();
         if (settingsData?.membershipPrice) {
           setMembershipPrice(settingsData.membershipPrice);
         }

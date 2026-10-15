@@ -2,13 +2,17 @@
 import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
+import { usePathname } from 'next/navigation';
 
 export default function Preloader() {
-  const [loading, setLoading] = useState(true);
+  // The branded intro is for visitors. Admins are here to work, so it never holds up the admin area.
+  const isAdminArea = (usePathname() || '').startsWith('/admin');
+  const [loading, setLoading] = useState(!isAdminArea);
   const [percent, setPercent] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
+    if (isAdminArea) { setLoading(false); return; }
     let timeoutId: NodeJS.Timeout;
     
     // Check if the browser has already finished loading everything

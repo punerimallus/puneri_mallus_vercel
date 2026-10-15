@@ -2,6 +2,22 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
+/**
+ * Who is logged in, verified. `getClaims()` checks the login token's signature locally when the project uses
+ * asymmetric signing keys (no network call), and falls back to asking Supabase Auth otherwise, so it is never
+ * slower or less safe than `getUser()`. It also refreshes an expired session, like `getUser()` does.
+ */
+export async function getVerifiedUser(supabase: any): Promise<{ id: string; email?: string; phone?: string } | null> {
+  if (typeof supabase?.auth?.getClaims === 'function') {
+    const { data, error } = await supabase.auth.getClaims();
+    const claims = data?.claims;
+    if (error || !claims?.sub) return null;
+    return { id: String(claims.sub), email: claims.email as string | undefined, phone: claims.phone as string | undefined };
+  }
+  const { data: { user } } = await supabase.auth.getUser();
+  return user ? { id: user.id, email: user.email, phone: user.phone } : null;
+}
+
 export async function checkAdminAccess() {
   const cookieStore = await cookies();
 
@@ -28,7 +44,7 @@ export async function checkAdminAccess() {
     }
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getVerifiedUser(supabase);
   if (!user) return { isAdmin: false, user: null };
 
   // Use .ilike for a safer, case-insensitive match

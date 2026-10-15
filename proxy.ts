@@ -29,7 +29,10 @@ export async function proxy(request: NextRequest) {
 
   // This is the magic line that fixes the "Invalid Refresh Token" error.
   // It automatically refreshes the session if it's about to expire.
-  const { data: { user } } = await supabase.auth.getUser()
+  // getClaims() verifies the login token locally when the project uses signing keys (no round trip to Supabase,
+  // which is in Sydney) and otherwise asks Supabase Auth, exactly like getUser(). It refreshes an expiring session too.
+  const { data: claimsData } = await supabase.auth.getClaims()
+  const user = claimsData?.claims?.sub ? { id: claimsData.claims.sub } : null
 
   // --- THE GLOBAL API BOUNCER ---
   // Only intercept requests going to the /api/ folder
