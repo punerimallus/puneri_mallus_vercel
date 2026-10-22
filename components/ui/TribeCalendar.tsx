@@ -60,6 +60,7 @@ export default function TribeCalendar({ value, onChange, onClose, maxDate, minDa
   const [view, setView] = useState<View>(() => (max && !selectedDate ? 'years' : 'days'));
   const [mounted, setMounted] = useState(false);
   const [coords, setCoords] = useState({ top: 0, left: 0 });
+  const [phone, setPhone] = useState(false);
 
   const years = useMemo(() => {
     const now = new Date().getFullYear();
@@ -71,15 +72,27 @@ export default function TribeCalendar({ value, onChange, onClose, maxDate, minDa
   const updatePosition = useCallback(() => {
     if (!anchorRef?.current) return;
     const rect = anchorRef.current.getBoundingClientRect();
-    const width = 300;
-    const height = 400;
-    // On a phone, centre it: it is easier to reach and can never run off the edge.
-    let left = window.innerWidth < 480 ? (window.innerWidth - width) / 2 : Math.min(rect.left, window.innerWidth - width - 16);
-    left = Math.max(12, left);
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const spaceAbove = rect.top;
-    let top = rect.bottom + window.scrollY + 8;
-    if (spaceBelow < height && spaceAbove > spaceBelow) top = Math.max(window.scrollY + 8, rect.top + window.scrollY - height - 8);
+    const isPhone = window.innerWidth < 480;
+    setPhone(isPhone);
+    const width = Math.min(300, window.innerWidth - 24);
+    // Use the real height once it's on screen (a month with six rows is taller than one with five).
+    const height = calendarRef.current?.offsetHeight || 420;
+    const vh = window.innerHeight;
+    let left: number;
+    let top: number;
+    if (isPhone) {
+      // On a phone it is a centred sheet: always fully on screen, never cut off by the edge or the keyboard area,
+      // and never hanging off the field that opened it.
+      left = (window.innerWidth - width) / 2;
+      top = window.scrollY + Math.max(12, (vh - height) / 2);
+    } else {
+      left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 16));
+      const spaceBelow = vh - rect.bottom;
+      const spaceAbove = rect.top;
+      if (spaceBelow >= height + 8) top = rect.bottom + window.scrollY + 8;
+      else if (spaceAbove >= height + 8) top = rect.top + window.scrollY - height - 8;
+      else top = window.scrollY + Math.max(12, (vh - height) / 2);
+    }
     setCoords({ top, left });
   }, [anchorRef]);
 
@@ -103,6 +116,9 @@ export default function TribeCalendar({ value, onChange, onClose, maxDate, minDa
     };
   }, [updatePosition, onClose, anchorRef]);
 
+  // The calendar changes height between views and months, so re-place it after each change.
+  useEffect(() => { updatePosition(); }, [view, currentMonth, updatePosition]);
+
   // Open the year list already scrolled to the chosen year, instead of at the top of a hundred years.
   useEffect(() => {
     if (view === 'years') selectedYearRef.current?.scrollIntoView({ block: 'center' });
@@ -122,11 +138,12 @@ export default function TribeCalendar({ value, onChange, onClose, maxDate, minDa
       <button type="button" aria-label="Previous month" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} disabled={!canPrev} className="p-2.5 hover:bg-brandRed/20 rounded-full transition-colors disabled:opacity-10">
         <ChevronLeft size={20} className="text-brandRed" />
       </button>
-      <div className="flex items-center gap-1">
-        <button type="button" onClick={() => setView('months')} className="px-2 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-widest text-white hover:text-brandRed hover:bg-white/5 transition-colors">
-          {format(currentMonth, 'MMMM')}
+      {/* Short month name and no letter-spacing squeeze: the month and year always fit, even with large system text */}
+      <div className="flex items-center justify-center gap-1 min-w-0 flex-1">
+        <button type="button" aria-label={`Month: ${format(currentMonth, 'MMMM')}. Change month`} onClick={() => setView('months')} className="px-2.5 py-2 rounded-lg text-[12px] font-black uppercase tracking-wider text-white hover:text-brandRed hover:bg-white/5 transition-colors whitespace-nowrap">
+          {format(currentMonth, 'MMM')}
         </button>
-        <button type="button" onClick={() => setView('years')} className="px-2 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-widest text-white hover:text-brandRed hover:bg-white/5 transition-colors">
+        <button type="button" aria-label={`Year: ${format(currentMonth, 'yyyy')}. Change year`} onClick={() => setView('years')} className="px-2.5 py-2 rounded-lg text-[12px] font-black uppercase tracking-wider text-white hover:text-brandRed hover:bg-white/5 transition-colors whitespace-nowrap">
           {format(currentMonth, 'yyyy')}
         </button>
       </div>
@@ -144,14 +161,14 @@ export default function TribeCalendar({ value, onChange, onClose, maxDate, minDa
       initial={{ opacity: 0, y: 10, scale: 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      style={{ position: 'absolute', top: `${coords.top}px`, left: `${coords.left}px`, width: '300px' }}
+      style={{ position: 'absolute', top: `${coords.top}px`, left: `${coords.left}px`, width: 'min(300px, calc(100vw - 24px))' }}
       className="bg-zinc-950 border border-white/10 rounded-[32px] shadow-[0_20px_60px_rgba(0,0,0,0.9)] z-[9999] overflow-hidden backdrop-blur-3xl"
     >
       <AnimatePresence mode="wait">
         {view === 'years' ? (
           <motion.div key="years" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <p className="px-4 pt-4 text-[10px] font-black uppercase tracking-[0.25em] text-zinc-500">Choose year</p>
-            <div className="h-[290px] overflow-y-auto p-4 grid grid-cols-3 gap-2 content-start">
+            <div className="h-[300px] overflow-y-auto overscroll-contain p-4 pb-6 grid grid-cols-3 gap-2 content-start">
               {years.map((year) => {
                 const selected = currentMonth.getFullYear() === year;
                 return (
@@ -239,5 +256,12 @@ export default function TribeCalendar({ value, onChange, onClose, maxDate, minDa
     </motion.div>
   );
 
-  return createPortal(content, document.body);
+  return createPortal(
+    <>
+      {/* On a phone the form behind is dimmed so attention stays on the picker. Tapping it closes the picker. */}
+      {phone && <div className="fixed inset-0 z-[9998] bg-black/60" aria-hidden="true" />}
+      {content}
+    </>,
+    document.body,
+  );
 }
