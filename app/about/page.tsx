@@ -69,6 +69,10 @@ const shuffleArray = <T,>(array: T[]): T[] => {
 
 export default function AboutPage() {
   const [cycle, setCycle] = useState(false);
+  // The stills cross-fade into the videos only once a video is really playing (it never is on phones / Data Saver),
+  // otherwise the card would fade to an empty black box.
+  const [jamPlaying, setJamPlaying] = useState(false);
+  const [beautyPlaying, setBeautyPlaying] = useState(false);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [zoomImage, setZoomImage] = useState<string | null>(null);
   
@@ -317,13 +321,14 @@ export default function AboutPage() {
                 fill 
                 blurDataURL={blurPlaceholder} placeholder="blur"
                 sizes="(max-width: 768px) 100vw, 50vw" 
-                className={`object-cover transition-opacity duration-500 ease-in-out ${cycle ? 'opacity-0' : 'opacity-80'}`} 
+                className={`object-cover transition-opacity duration-500 ease-in-out ${cycle && jamPlaying ? 'opacity-0' : 'opacity-80'}`} 
                 priority
               />
               <LazyVideo
                 src="/videos/jam.mp4"
                 skipOnPhones
-                className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ease-in-out ${cycle ? 'opacity-80' : 'opacity-0'}`}
+                onPlaying={() => setJamPlaying(true)}
+                className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ease-in-out ${cycle && jamPlaying ? 'opacity-80' : 'opacity-0'}`}
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-90" />
             </div>
@@ -391,12 +396,13 @@ export default function AboutPage() {
                 fill 
                 blurDataURL={blurPlaceholder} placeholder="blur"
                 sizes="(max-width: 768px) 100vw, 50vw" 
-                className={`object-cover transition-opacity duration-1000 ${cycle ? 'opacity-0' : 'opacity-100'}`} 
+                className={`object-cover transition-opacity duration-1000 ${cycle && beautyPlaying ? 'opacity-0' : 'opacity-100'}`} 
               />
               <LazyVideo
                 src="/videos/beauty.mp4"
                 skipOnPhones
-                className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ${cycle ? 'opacity-100' : 'opacity-0'}`}
+                onPlaying={() => setBeautyPlaying(true)}
+                className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ${cycle && beautyPlaying ? 'opacity-100' : 'opacity-0'}`}
               />
             </div>
             

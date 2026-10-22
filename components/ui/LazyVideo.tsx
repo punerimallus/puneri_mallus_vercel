@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
 
 type NetworkInformation = { saveData?: boolean; effectiveType?: string };
 
@@ -16,6 +17,10 @@ interface LazyVideoProps {
   className?: string;
   /** Show a still (the parent's own background) instead of the video on phones. These clips are 10-20 MB each. */
   skipOnPhones?: boolean;
+  /** A still shown underneath, so the card is never an empty dark box while the video is absent or still loading. */
+  poster?: string;
+  /** Called with true once the video is really playing, so a parent that cross-fades from a still never fades to nothing. */
+  onPlaying?: () => void;
 }
 
 /**
@@ -23,7 +28,7 @@ interface LazyVideoProps {
  * screen, it pauses when it scrolls away, and it stays out entirely on Data Saver / slow connections
  * (and, if asked, on phones).
  */
-export default function LazyVideo({ src, className, skipOnPhones = false }: LazyVideoProps) {
+export default function LazyVideo({ src, className, skipOnPhones = false, poster, onPlaying }: LazyVideoProps) {
   const holder = useRef<HTMLDivElement>(null);
   const video = useRef<HTMLVideoElement>(null);
   const [allowed, setAllowed] = useState(false);
@@ -49,8 +54,9 @@ export default function LazyVideo({ src, className, skipOnPhones = false }: Lazy
 
   return (
     <div ref={holder} className="absolute inset-0">
+      {poster && <Image src={poster} alt="" fill sizes="(max-width: 768px) 100vw, 50vw" className="object-cover" />}
       {allowed && started && (
-        <video ref={video} src={src} className={className} autoPlay loop muted playsInline preload="metadata" />
+        <video ref={video} src={src} className={className} autoPlay loop muted playsInline preload="metadata" onPlaying={onPlaying} />
       )}
     </div>
   );
