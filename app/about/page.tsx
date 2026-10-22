@@ -16,6 +16,7 @@ import {
   ChevronDown
 } from 'lucide-react';
 import MembershipCard from '@/components/Membership'; 
+import LazyVideo from '@/components/ui/LazyVideo';
 
 interface TeamMember {
   name: string;
@@ -319,12 +320,11 @@ export default function AboutPage() {
                 className={`object-cover transition-opacity duration-500 ease-in-out ${cycle ? 'opacity-0' : 'opacity-80'}`} 
                 priority
               />
-              <video 
-                autoPlay loop muted playsInline preload="none"
+              <LazyVideo
+                src="/videos/jam.mp4"
+                skipOnPhones
                 className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ease-in-out ${cycle ? 'opacity-80' : 'opacity-0'}`}
-              >
-                <source src="/videos/jam.mp4" type="video/mp4" />
-              </video>
+              />
               <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-90" />
             </div>
 
@@ -393,13 +393,11 @@ export default function AboutPage() {
                 sizes="(max-width: 768px) 100vw, 50vw" 
                 className={`object-cover transition-opacity duration-1000 ${cycle ? 'opacity-0' : 'opacity-100'}`} 
               />
-              <video 
-                autoPlay loop muted playsInline 
-                preload="metadata"
+              <LazyVideo
+                src="/videos/beauty.mp4"
+                skipOnPhones
                 className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ${cycle ? 'opacity-100' : 'opacity-0'}`}
-              >
-                <source src="/videos/beauty.mp4" type="video/mp4" />
-              </video>
+              />
             </div>
             
           </div>

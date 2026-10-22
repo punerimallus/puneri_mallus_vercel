@@ -1,7 +1,10 @@
 "use client";
 
 import { usePathname } from 'next/navigation';
-import GlobalEntryGate from '@/components/GlobalEntryGate';
+import dynamic from 'next/dynamic';
+
+// The login gate pulls in Firebase; load it after the page is up instead of in the first bundle.
+const GlobalEntryGate = dynamic(() => import('@/components/GlobalEntryGate'), { ssr: false });
 
 export default function ConditionalGate() {
   const pathname = usePathname();

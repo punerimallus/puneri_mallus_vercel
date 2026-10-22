@@ -1,60 +1,40 @@
 "use client";
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 
+// Seen once per browser session: the branded intro is a welcome, not a toll on every page load.
+const SEEN_KEY = 'pm_intro_seen';
+const INTRO_MS = 1100;
+
 export default function Preloader() {
-  // The branded intro is for visitors. Admins are here to work, so it never holds up the admin area.
+  // Admins are here to work, so the intro never holds up the admin area.
   const isAdminArea = (usePathname() || '').startsWith('/admin');
   const [loading, setLoading] = useState(!isAdminArea);
   const [percent, setPercent] = useState(0);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    if (isAdminArea) { setLoading(false); return; }
-    let timeoutId: NodeJS.Timeout;
-    
-    // Check if the browser has already finished loading everything
-    let assetsLoaded = document.readyState === 'complete';
+    let seen = false;
+    try { seen = sessionStorage.getItem(SEEN_KEY) === '1'; } catch { /* storage blocked: just show it */ }
+    const reduceMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (isAdminArea || seen || reduceMotion) { setLoading(false); return; }
+    try { sessionStorage.setItem(SEEN_KEY, '1'); } catch { /* ignore */ }
 
-    // Listener for when all heavy assets (images, videos, etc.) finish downloading
-    const handleLoad = () => {
-      assetsLoaded = true;
-    };
-    
-    if (!assetsLoaded) {
-      window.addEventListener('load', handleLoad);
-    }
+    // Time-based, not tied to window "load": waiting on every image and script made slow phones sit here for seconds.
+    const startedAt = performance.now();
+    let done: ReturnType<typeof setTimeout> | undefined;
+    const tick = setInterval(() => {
+      const p = Math.min(100, Math.round(((performance.now() - startedAt) / INTRO_MS) * 100));
+      setPercent(p);
+      if (p >= 100) {
+        clearInterval(tick);
+        done = setTimeout(() => setLoading(false), 150);
+      }
+    }, 50);
 
-    intervalRef.current = setInterval(() => {
-      setPercent((prev) => {
-        // If we reach 95%, WAIT for actual assets to finish loading before jumping to 100%
-        if (prev >= 95 && !assetsLoaded) {
-          return 95; // Stall the preloader here
-        }
-
-        // If assets are loaded and we are high enough, finish the sequence
-        if (prev >= 95 && assetsLoaded) {
-          clearInterval(intervalRef.current!);
-          timeoutId = setTimeout(() => {
-            setLoading(false);
-          }, 800);
-          return 100;
-        }
-
-        // Standard simulated jump
-        return Math.min(prev + Math.floor(Math.random() * 10) + 2, 100);
-      });
-    }, 80);
-
-    // CLEANUP
-    return () => {
-      window.removeEventListener('load', handleLoad);
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      if (timeoutId) clearTimeout(timeoutId);
-    };
-  }, []);
+    return () => { clearInterval(tick); if (done) clearTimeout(done); };
+  }, [isAdminArea]);
 
   const mantra = ["ONE COMMUNITY", "MANY DREAMS", "ZERO DIVIDE"];
 
@@ -63,21 +43,13 @@ export default function Preloader() {
       {loading && (
         <motion.div
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.6, ease: "easeInOut" }}
-          className="fixed inset-0 z-[999] bg-[#030303] flex flex-col items-center justify-center overflow-hidden"
-          style={{ transform: 'translateZ(0)' }} 
+          transition={{ duration: 0.4, ease: "easeInOut" }}
+          className="intro-overlay fixed inset-0 z-[999] bg-[#030303] flex flex-col items-center justify-center overflow-hidden"
         >
-          {/* 1. ATMOSPHERIC FX */}
-          <div className="absolute inset-0 opacity-[0.03] bg-[url('https://grainy-gradients.vercel.app/noise.svg')] pointer-events-none" />
-          
-          {/* Moving Ambient Orbs */}
-          <div 
-            className="absolute top-1/4 -left-20 w-[400px] h-[400px] bg-brandRed/15 blur-[150px] rounded-full pointer-events-none" 
-            style={{ transform: 'translateZ(0)' }}
-          />
-          <div 
-            className="absolute bottom-1/4 -right-20 w-[400px] h-[400px] bg-brandRed/10 blur-[150px] rounded-full pointer-events-none" 
-            style={{ transform: 'translateZ(0)' }}
+          {/* 1. ATMOSPHERIC FX: plain gradients, no blur filters or remote textures (they stall phones) */}
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{ background: 'radial-gradient(circle at 20% 28%, rgba(255,0,0,0.10), transparent 45%), radial-gradient(circle at 85% 72%, rgba(255,0,0,0.07), transparent 45%)' }}
           />
 
           <div className="relative flex flex-col items-center w-full px-10 z-10 space-y-8 md:space-y-16">

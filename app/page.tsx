@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import EventCard from '@/components/EventCard';
 import DynamicTribeAd from '@/components/Popup';
+import LazyVideo from '@/components/ui/LazyVideo';
 import { ArrowRight } from 'lucide-react';
 
 // COMPACT LASER DIVIDER
@@ -19,29 +20,19 @@ const LaserDivider = () => (
   </div>
 );
 
-// GPU-Accelerated Lazy Video
-function LazyVideo({ src, className }: { src: string; className?: string }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [inView, setInView] = useState(false);
-
+// Slider videos: only the slide on screen downloads and plays. The others used to stream in the background, invisibly.
+function SlideVideo({ src, active, className, style }: { src: string; active: boolean; className?: string; style?: React.CSSProperties }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  const [wanted, setWanted] = useState(active);
+  useEffect(() => { if (active) setWanted(true); }, [active]);
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) setInView(true); },
-      { threshold: 0.1 }
-    );
-    if (ref.current) observer.observe(ref.current);
-    return () => observer.disconnect();
-  }, []);
-
-  return (
-    <div ref={ref} className="w-full h-full" style={{ transform: 'translateZ(0)', willChange: 'transform' }}>
-      {inView && (
-        <video autoPlay loop muted playsInline className={className}>
-          <source src={src} type="video/mp4" />
-        </video>
-      )}
-    </div>
-  );
+    const v = ref.current;
+    if (!v) return;
+    if (active) v.play().catch(() => { /* autoplay refused: the first frame stays */ });
+    else v.pause();
+  }, [active, wanted]);
+  if (!wanted) return null;
+  return <video ref={ref} src={src} className={className} style={style} autoPlay={active} loop muted playsInline preload={active ? 'auto' : 'none'} />;
 }
 
 export default function Home() {
@@ -156,17 +147,12 @@ export default function Home() {
               >
                 <div className="absolute inset-0 z-0">
                   {isVideo(slide.mediaUrl) ? (
-                    <video 
-                      autoPlay 
-                      loop 
-                      muted 
-                      playsInline 
-                      preload="auto" 
+                    <SlideVideo
+                      src={slide.mediaUrl}
+                      active={isActive}
                       className="w-full h-full object-cover transition-opacity duration-700"
                       style={{ opacity: Math.min(((slide.visibility || 60) + 20) / 100, 1), objectPosition: `50% ${slide.vOffset || 50}%` }}
-                    >
-                      <source src={slide.mediaUrl} type="video/mp4" />
-                    </video>
+                    />
                   ) : (
                     <Image src={slide.mediaUrl} alt="Slide" fill
                       sizes="100vw"
@@ -340,15 +326,7 @@ export default function Home() {
                     style={{ transform: 'translateZ(0)' }}
                   >                
                     <div className="absolute inset-0 z-0 opacity-40 group-hover:opacity-80 transition-opacity duration-1000">
-                      <video 
-                        src="/videos/agam-recap.mp4" 
-                        className="w-full h-full object-cover"
-                        autoPlay 
-                        loop 
-                        muted 
-                        playsInline 
-                        preload="metadata"
-                      />
+                      <LazyVideo src="/videos/agam-recap.mp4" className="w-full h-full object-cover" skipOnPhones />
                       <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
                     </div>
                     <div className="relative z-10">
@@ -363,15 +341,7 @@ export default function Home() {
                     style={{ transform: 'translateZ(0)' }}
                   >                
                     <div className="absolute inset-0 z-0 opacity-40 group-hover:opacity-80 transition-opacity duration-1000">
-                      <video 
-                        src="/videos/jam.mp4" 
-                        className="w-full h-full object-cover"
-                        autoPlay 
-                        loop 
-                        muted 
-                        playsInline 
-                        preload="metadata"
-                      />
+                      <LazyVideo src="/videos/jam.mp4" className="w-full h-full object-cover" skipOnPhones />
                       <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
                     </div>
                     <div className="relative z-10">

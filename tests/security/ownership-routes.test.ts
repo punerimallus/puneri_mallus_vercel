@@ -25,6 +25,7 @@ const col = (name: string) => ({
   insertOne: async (d: any) => { const doc = { _id: `new${store[name].length}`, ...d }; store[name].push(doc); return { insertedId: doc._id }; },
   updateOne: async (f: any, u: any) => { const d = store[name].find((x) => matches(x, f)); if (d) Object.assign(d, u.$set || {}); return { modifiedCount: d ? 1 : 0 }; },
   deleteOne: async (f: any) => { const i = store[name].findIndex((x) => matches(x, f)); if (i >= 0) store[name].splice(i, 1); return { deletedCount: i >= 0 ? 1 : 0 }; },
+  deleteMany: async (f: any) => { const before = store[name].length; store[name] = store[name].filter((x) => !matches(x, f)); return { deletedCount: before - store[name].length }; },
   bulkWrite: async (ops: any[]) => ({ modifiedCount: ops.length }),
   countDocuments: async () => 0,
 });
@@ -198,8 +199,14 @@ describe('Profiles', () => {
     session = bob;
     expect((await call('@/app/api/profile/delete/route', 'DELETE', '/api/profile/delete?id=alice')).status).toBe(403);
     expect(deleted).toEqual([]);
+    const bobsListings = store.mallu_mart.filter((d) => d.userId === 'bob').length;
+    const othersListings = store.mallu_mart.length - bobsListings;
     expect((await call('@/app/api/profile/delete/route', 'DELETE', '/api/profile/delete?id=bob')).status).toBe(200);
     expect(deleted).toEqual(['bob']);
+    // Their own Mallu Mart listings go with the account; nobody else's do.
+    expect(store.mallu_mart.some((d) => d.userId === 'bob')).toBe(false);
+    expect(store.mallu_mart).toHaveLength(othersListings);
+    expect(bobsListings).toBeGreaterThan(0);
   });
   it("another member's profile (email, phone, membership) cannot be read", async () => {
     session = bob;

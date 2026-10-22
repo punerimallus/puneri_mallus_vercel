@@ -61,6 +61,33 @@ body::before {
   }
 }
 
+html[data-intro="seen"] .intro-overlay {
+  display: none;
+}
+
+/* Phones: the decorative effects below are what make scrolling and taps feel laggy, and none of them carry information. */
+@media (max-width: 768px) {
+  /* Glow orbs: a radial fade looks the same as a huge blur filter and costs almost nothing. */
+  div:empty.blur-3xl, div:empty.blur-2xl, div:empty.blur-xl,
+  div:empty.blur-\[30px\], div:empty.blur-\[40px\], div:empty.blur-\[50px\], div:empty.blur-\[60px\],
+  div:empty.blur-\[70px\], div:empty.blur-\[80px\], div:empty.blur-\[100px\], div:empty.blur-\[120px\], div:empty.blur-\[150px\] {
+    filter: none !important;
+    -webkit-mask-image: radial-gradient(closest-side, #000 0%, transparent 100%);
+    mask-image: radial-gradient(closest-side, #000 0%, transparent 100%);
+  }
+  /* Blurred photo backdrops: a small blur is indistinguishable behind the overlays. */
+  img.blur-2xl, img.blur-\[100px\] {
+    filter: blur(12px) !important;
+  }
+  /* Film-grain overlays: a remote SVG noise filter drawn full-screen with a blend mode. Invisible at 3-4% opacity, costly to paint. */
+  [class*="grainy-gradients"] {
+    display: none !important;
+  }
+  .mix-blend-overlay, .mix-blend-screen {
+    mix-blend-mode: normal !important;
+  }
+}
+
 @layer base {
   /* A clear keyboard focus ring everywhere. Components that draw their own focus style use outline-none and win. */
   :focus-visible {
