@@ -134,7 +134,7 @@ export default function EventCard({
 
           {/* 5. COUNTDOWN OVERLAY */}
           {isUpcoming && isLive && (
-            <div className="absolute inset-0 bg-black/70 flex items-center justify-center backdrop-blur-md opacity-0 group-hover:opacity-100 transition-all duration-700 z-40">
+            <div className="absolute inset-0 bg-black/70 flex items-center justify-center backdrop-blur-md opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition-all duration-700 z-40">
               <div className="text-center">
                 <p className="text-[10px] tracking-[.4em] text-brandRed mb-5 uppercase font-black">Syncing Pulse</p>
                 <div className="flex gap-4 text-white font-black italic text-4xl tracking-tighter">
