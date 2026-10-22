@@ -8,6 +8,7 @@ import TribeCalendar from '@/components/ui/TribeCalendar';
 import { useRouter } from 'next/navigation'; // 🔥 NEW: Added router for success redirection
 import { waitForOrder, orderRef } from '@/lib/payments/client';
 import { onEnter } from '@/lib/ui/enter';
+import { formatDobDisplay, isOldEnough, maxDobFor, minDobFor } from '@/lib/dob';
 
 interface MembershipCardProps {
   price: number;
@@ -54,15 +55,12 @@ export default function MembershipCard({ price, benefits, userId, userEmail }: M
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  const maxDobDate = useMemo(() => {
-    const date = new Date();
-    date.setFullYear(date.getFullYear() - 16);
-    return date.toISOString().split("T")[0];
-  }, []);
+  const maxDobDate = useMemo(() => maxDobFor(), []);
+  const minDobDate = useMemo(() => minDobFor(), []);
 
   const isFormValid = useMemo(() => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email) && dob && location && profession;
+    return emailRegex.test(email) && isOldEnough(dob) && location && profession;
   }, [email, dob, location, profession]);
 
   const displayBenefits = benefits.length > 0 ? benefits : [
@@ -99,6 +97,11 @@ export default function MembershipCard({ price, benefits, userId, userEmail }: M
       return;
     }
     
+    if (!isOldEnough(dob)) {
+      showAlert("Membership is open from age 16. Please check your birth date.", "error");
+      return;
+    }
+
     setUpgrading(true);
     try {
       const cleanEmail = email.trim().toLowerCase();
@@ -320,11 +323,11 @@ export default function MembershipCard({ price, benefits, userId, userEmail }: M
                 <div className="relative" ref={dateContainerRef}>
                   <div className="bg-black/50 border border-white/10 p-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:border-white/30 transition-colors h-full" onClick={() => setShowCalendar(!showCalendar)}>
                     <CalendarIcon size={16} className={dob ? "text-brandRed" : "text-zinc-500"} />
-                    <span className={`font-medium text-base md:text-[13px] truncate ${dob ? "text-white" : "text-zinc-500"}`}>{dob ? new Date(dob).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : "Birth Date"}</span>
+                    <span className={`font-medium text-base md:text-[13px] truncate ${dob ? "text-white" : "text-zinc-500"}`}>{dob ? formatDobDisplay(dob) : "Birth Date"}</span>
                   </div>
                   <AnimatePresence>
                     {showCalendar && (
-                      <TribeCalendar value={dob} onChange={(date) => { setDob(date); setShowCalendar(false); }} onClose={() => setShowCalendar(false)} maxDate={maxDobDate} defaultDate={maxDobDate} anchorRef={dateContainerRef} />
+                      <TribeCalendar value={dob} onChange={(date) => { setDob(date); setShowCalendar(false); }} onClose={() => setShowCalendar(false)} maxDate={maxDobDate} minDate={minDobDate} defaultDate={maxDobDate} anchorRef={dateContainerRef} label="Choose your birth date" />
                     )}
                   </AnimatePresence>
                 </div>

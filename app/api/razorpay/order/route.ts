@@ -11,6 +11,7 @@ import {
 } from '@/lib/payments/pricing';
 import { CartLine, EventSnapshot, PaymentInputError, PaymentType } from '@/lib/payments/types';
 import { salesStatus } from '@/lib/events/sales';
+import { isOldEnough } from '@/lib/dob';
 import { groupSizeOf } from '@/lib/payments/groups';
 import { normalizeWhatsAppNumber, whatsappEnabled } from '@/lib/whatsapp';
 
@@ -39,7 +40,7 @@ export async function POST(req: Request) {
     const db = supabaseAdmin();
     const { data: profile } = await db
       .from('profiles')
-      .select('email, is_member, loyalty_points, mart_unlocked, phone_number')
+      .select('email, is_member, loyalty_points, mart_unlocked, phone_number, dob')
       .eq('id', user.id)
       .maybeSingle();
 
@@ -62,6 +63,11 @@ export async function POST(req: Request) {
 
     if (paymentType === 'LIFETIME') {
       if (profile?.is_member) throw new PaymentInputError('You are already a lifetime member.', 409);
+      // Membership is for ages 16 and over. The sign-up and membership forms already ask for a birth date; this makes the
+      // rule hold even if someone skips the form and calls the API directly.
+      if (!isOldEnough(profile?.dob)) {
+        throw new PaymentInputError('Membership is open from age 16. Please add a valid birth date in your profile first.', 403);
+      }
       type = 'LIFETIME';
       basePrice = membershipPrice(settings);
     } else if (paymentType === 'MART') {

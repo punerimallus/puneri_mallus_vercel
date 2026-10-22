@@ -13,6 +13,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import TribeCalendar from '@/components/ui/TribeCalendar';
 import { auth } from '@/lib/firebase';
 import { RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult } from "firebase/auth";
+import { formatDobDisplay, isOldEnough, maxDobFor, minDobFor } from '@/lib/dob';
 
 const DEV_MODE_PHONE = false; 
 const DEV_MODE_EMAIL = false; 
@@ -91,22 +92,10 @@ export default function SignupPage() {
 
   const isPhoneValid = useMemo(() => phone.length === 10, [phone]);
   
-  // 🔥 This perfectly calculates the exact date 16 years ago from today
-  const maxDobDate = useMemo(() => {
-    const date = new Date();
-    date.setFullYear(date.getFullYear() - 16);
-    return date.toISOString().split("T")[0];
-  }, []);
-
-  const isAdult = useMemo(() => {
-    if (!dob) return false;
-    const birthDate = new Date(dob);
-    const today = new Date();
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const m = today.getMonth() - birthDate.getMonth();
-    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
-    return age >= 16;
-  }, [dob]);
+  // Same rule everywhere: at least 16 (see lib/dob.ts)
+  const maxDobDate = useMemo(() => maxDobFor(), []);
+  const minDobDate = useMemo(() => minDobFor(), []);
+  const isAdult = useMemo(() => isOldEnough(dob), [dob]);
 
   useEffect(() => {
     let interval: any;
@@ -265,7 +254,7 @@ export default function SignupPage() {
               <div className="relative" ref={dateContainerRef}>
                 <div className="bg-black/40 border border-white/10 p-3.5 rounded-xl flex items-center gap-3 cursor-pointer hover:border-white/30 transition-colors h-full" onClick={() => setShowCalendar(!showCalendar)}>
                   <CalendarIcon size={16} className={dob ? "text-brandRed" : "text-zinc-500"} />
-                  <span className={`font-medium text-[14px] truncate ${dob ? "text-white" : "text-zinc-500"}`}>{dob ? new Date(dob).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : "Birth date"}</span>
+                  <span className={`font-medium text-[14px] truncate ${dob ? "text-white" : "text-zinc-500"}`}>{dob ? formatDobDisplay(dob) : "Birth date"}</span>
                 </div>
                 <AnimatePresence>
                   {showCalendar && (
@@ -274,7 +263,9 @@ export default function SignupPage() {
                       onChange={(date) => setDob(date)} 
                       onClose={() => setShowCalendar(false)} 
                       maxDate={maxDobDate} 
-                      defaultDate={maxDobDate} // 🔥 Forces the calendar to open exactly at 2010
+                      minDate={minDobDate}
+                      defaultDate={maxDobDate}
+                      label="Choose your birth date"
                       anchorRef={dateContainerRef} 
                     />
                   )}

@@ -16,6 +16,7 @@ import MyTickets from '@/components/MyTickets';
 import { auth } from '@/lib/firebase';
 import { RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult } from "firebase/auth";
 import { onEnter } from '@/lib/ui/enter';
+import { formatDobDisplay, isOldEnough, maxDobFor, minDobFor } from '@/lib/dob';
 
 const DEV_MODE_PHONE = false; 
 
@@ -62,22 +63,10 @@ export default function ProfilePage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  // --- AGE LOGIC ---
-  const maxDobDate = useMemo(() => {
-    const date = new Date();
-    date.setFullYear(date.getFullYear() - 16);
-    return date.toISOString().split("T")[0];
-  }, []);
-
-  const isAdult = useMemo(() => {
-    if (!dob) return false;
-    const birthDate = new Date(dob);
-    const today = new Date();
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const m = today.getMonth() - birthDate.getMonth();
-    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
-    return age >= 16;
-  }, [dob]);
+  // --- AGE LOGIC (shared with sign-up and membership) ---
+  const maxDobDate = useMemo(() => maxDobFor(), []);
+  const minDobDate = useMemo(() => minDobFor(), []);
+  const isAdult = useMemo(() => isOldEnough(dob), [dob]);
 
   const isPhoneValid = useMemo(() => phone.length === 10, [phone]);
 
@@ -538,7 +527,7 @@ export default function ProfilePage() {
                   <div className="flex items-center gap-3">
                     <Calendar size={14} className={isMember ? "text-brandRed group-hover:scale-110 transition-transform" : "text-zinc-800"} />
                     <span className={`font-bold text-sm ${dob ? (isMember ? "text-white" : "text-zinc-500") : "text-zinc-600"}`}>
-                      {dob ? new Date(dob).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : "NOT SET"}
+                      {dob ? formatDobDisplay(dob) : "NOT SET"}
                     </span>
                   </div>
                   {!isMember && <Lock className="text-zinc-700" size={16} />}
@@ -548,7 +537,7 @@ export default function ProfilePage() {
                   {showCalendar && isMember && (
                     <>
                       <div className="fixed inset-0 z-[90]" onClick={() => setShowCalendar(false)} />
-                      <TribeCalendar value={dob} onChange={handleDateSelect} onClose={() => setShowCalendar(false)} anchorRef={dateContainerRef} maxDate={maxDobDate} />
+                      <TribeCalendar value={dob} onChange={handleDateSelect} onClose={() => setShowCalendar(false)} anchorRef={dateContainerRef} maxDate={maxDobDate} minDate={minDobDate} label="Choose your birth date" />
                     </>
                   )}
                 </AnimatePresence>
