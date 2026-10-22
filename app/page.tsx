@@ -326,7 +326,7 @@ export default function Home() {
                     style={{ transform: 'translateZ(0)' }}
                   >                
                     <div className="absolute inset-0 z-0 opacity-40 group-hover:opacity-80 transition-opacity duration-1000">
-                      <LazyVideo src="/videos/agam-recap.mp4" className="w-full h-full object-cover" skipOnPhones />
+                      <LazyVideo src="/videos/agam-recap.mp4" poster="/about/agams.jpg" className="w-full h-full object-cover" skipOnPhones />
                       <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
                     </div>
                     <div className="relative z-10">
@@ -341,7 +341,7 @@ export default function Home() {
                     style={{ transform: 'translateZ(0)' }}
                   >                
                     <div className="absolute inset-0 z-0 opacity-40 group-hover:opacity-80 transition-opacity duration-1000">
-                      <LazyVideo src="/videos/jam.mp4" className="w-full h-full object-cover" skipOnPhones />
+                      <LazyVideo src="/videos/jam.mp4" poster="/about/image_1.jpeg" className="w-full h-full object-cover" skipOnPhones />
                       <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
                     </div>
                     <div className="relative z-10">
