@@ -17,6 +17,7 @@ export default function AdminMartManager() {
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'live'>('all');
   const { showAlert } = useAlert();
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -149,13 +150,24 @@ const handleDelete = async () => {
     }
   };
 
+  // Waiting for an admin: not live yet and not just the owner's unsent draft. (A rejected listing is back to not-approved, so it shows here too.)
+  const isPending = (i: any) => i.isApproved !== true && i.isDraft !== true;
+  const pendingCount = useMemo(() => items.filter(isPending).length, [items]);
+  const liveCount = useMemo(() => items.filter(i => i.isApproved === true).length, [items]);
+
   const filtered = useMemo(() => {
-    return items.filter(i => 
-      i.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      i.category?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      i.userEmail?.toLowerCase().includes(searchQuery.toLowerCase())
+    const q = searchQuery.toLowerCase();
+    return items.filter(i =>
+      (statusFilter === 'all' || (statusFilter === 'pending' ? isPending(i) : i.isApproved === true)) &&
+      (!q ||
+        i.name?.toLowerCase().includes(q) ||
+        i.category?.toLowerCase().includes(q) ||
+        i.userEmail?.toLowerCase().includes(q))
     );
-  }, [items, searchQuery]);
+  }, [items, searchQuery, statusFilter]);
+
+  // Reordering only makes sense on the full list; on a filtered view the positions would be misleading.
+  const canReorder = statusFilter === 'all' && !searchQuery;
 
   return (
     <div className="min-h-screen bg-black pt-40 pb-20 px-6 lg:px-16 text-white">
@@ -174,7 +186,7 @@ const handleDelete = async () => {
               Mart <span className="text-brandRed">Audit .</span>
             </h1>
             <p className="text-zinc-500 font-bold uppercase tracking-[0.3em] text-[10px]">
-              Drag to reorder // {items.length} Registered Business
+              {canReorder ? 'Drag to reorder' : 'Clear filters to reorder'} // {items.length} Registered Business
             </p>
           </div>
 
@@ -189,13 +201,44 @@ const handleDelete = async () => {
           </div>
         </div>
 
+        <div className="flex flex-wrap gap-3" role="tablist" aria-label="Filter businesses">
+          {([
+            { key: 'all', label: 'All', count: items.length },
+            { key: 'pending', label: 'Pending approval', count: pendingCount },
+            { key: 'live', label: 'Live', count: liveCount },
+          ] as const).map(tab => (
+            <button
+              key={tab.key}
+              role="tab"
+              aria-selected={statusFilter === tab.key}
+              onClick={() => setStatusFilter(tab.key)}
+              className={`flex items-center gap-2 px-5 py-3 rounded-full text-[10px] font-black uppercase tracking-widest border transition-colors ${
+                statusFilter === tab.key
+                  ? 'bg-brandRed text-white border-brandRed'
+                  : 'bg-zinc-950 text-zinc-500 border-white/5 hover:text-white'
+              }`}
+            >
+              {tab.label}
+              <span className={`min-w-[22px] px-1.5 py-0.5 rounded-full text-[9px] ${
+                statusFilter === tab.key ? 'bg-white/20' : tab.key === 'pending' && tab.count > 0 ? 'bg-amber-500/20 text-amber-500' : 'bg-white/5'
+              }`}>{tab.count}</span>
+            </button>
+          ))}
+        </div>
+
+        {!loading && filtered.length === 0 && (
+          <div className="py-24 text-center text-zinc-600 font-black uppercase tracking-widest text-xs">
+            {statusFilter === 'pending' && !searchQuery ? 'Nothing waiting for approval' : 'No businesses match'}
+          </div>
+        )}
+
         <Reorder.Group axis="y" values={items} onReorder={setItems} className="grid grid-cols-1 gap-4">
           {filtered.map((item) => (
             <Reorder.Item 
               key={item._id} 
               value={item}
               onDragEnd={() => handleReorderSave(items)}
-              dragListener={!updatingId}
+              dragListener={canReorder && !updatingId}
               className="group relative bg-zinc-950 border border-white/5 p-6 rounded-[32px] flex flex-col md:flex-row items-center gap-8 hover:bg-zinc-900/50 transition-all active:cursor-grabbing"
             >
               {updatingId === item._id && (

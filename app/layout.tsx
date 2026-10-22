@@ -50,7 +50,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark scroll-smooth overflow-x-hidden">
+    <html lang="en" className="dark scroll-smooth overflow-x-hidden" suppressHydrationWarning>
+      <head>
+        {/* Returning within the same session: hide the intro before first paint so it never flashes. */}
+        <script dangerouslySetInnerHTML={{ __html: "try{if(sessionStorage.getItem('pm_intro_seen')==='1')document.documentElement.setAttribute('data-intro','seen')}catch(e){}" }} />
+      </head>
       <body className={`${inter.className} antialiased bg-black text-white selection:bg-brandRed/30 overflow-x-hidden w-full`}>
         <AlertProvider>
           <Preloader />
