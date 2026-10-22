@@ -16,6 +16,7 @@ import TribeTimePicker from '@/components/ui/TribeTimePicker';
 import { AnimatePresence, motion } from 'framer-motion';
 // 🔥 NEW: Import the TicketConfig component
 import TicketConfig from '@/components/admin/TicketConfig'; 
+import { parseDateOnly } from '@/lib/dob';
 
 interface TribeEvent {
   _id: string;
@@ -246,7 +247,8 @@ export default function AdminEventsPage() {
   };
 
   const handleDateSelect = (date: string) => {
-    const formatted = new Date(date).toLocaleDateString('en-US', { 
+    const picked = parseDateOnly(date) ?? new Date(date);
+    const formatted = picked.toLocaleDateString('en-US', { 
       month: 'short', day: 'numeric', year: 'numeric'
     }).toUpperCase();
     setForm({ ...form, date: formatted });
