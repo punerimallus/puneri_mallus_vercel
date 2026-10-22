@@ -39,9 +39,15 @@ export async function DELETE(request: Request) {
     const client = await clientPromise;
     const db = client.db("punerimallus");
     
-    const mongoResult = await db.collection("profiles").deleteOne({ supabase_id: userId });
+    await db.collection("profiles").deleteOne({ supabase_id: userId });
 
-    
+    // Their directory listings and communities live in MongoDB, which has no foreign keys,
+    // so remove them here. Matched by account id only (an email match could hit someone else's listing).
+    await Promise.all([
+      db.collection("mallu_mart").deleteMany({ userId }),
+      db.collection("community_circles").deleteMany({ userId }),
+    ]);
+
 
     return NextResponse.json({ 
       success: true, 
