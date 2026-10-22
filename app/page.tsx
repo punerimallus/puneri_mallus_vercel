@@ -62,9 +62,9 @@ export default function Home() {
           .filter((e: any) => e.isUpcoming === true && e.featured === true)
           .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-        // 🔥 THE FIX: Removed 'e.featured === true'. Now it grabs ALL past events and sorts newest-first.
+        // RECENT: a past event shows here only while it is starred in the admin, newest first.
         const pastNodes = allEvents
-          .filter((e: any) => e.isUpcoming === false)
+          .filter((e: any) => e.isUpcoming === false && e.featured === true)
           .sort((a: any, b: any) => {
             const timeA = new Date(`${a.date} ${a.time || "12:00 AM"}`).getTime();
             const timeB = new Date(`${b.date} ${b.time || "12:00 AM"}`).getTime();
@@ -79,7 +79,7 @@ export default function Home() {
         }));
 
         setUpcoming(format(upcomingNodes).slice(0, 2));
-        setPast(format(pastNodes).slice(0, 3)); // Automatically grabs the latest 3
+        setPast(format(pastNodes).slice(0, 3)); // the latest 3 starred ones
 
       } catch (err) {
         // Silent Failure

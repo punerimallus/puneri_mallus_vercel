@@ -197,16 +197,11 @@ export default function AdminEventsPage() {
       executeToggle(event);
       return;
     }
-    const now = new Date();
     const eventDateTime = new Date(`${event.date} ${event.time}`);
-    const isUpcoming = isNaN(eventDateTime.getTime()) || eventDateTime >= now;
+    const isUpcoming = isNaN(eventDateTime.getTime()) || eventDateTime >= new Date();
 
-    if (!isUpcoming) {
-      showAlert("Past events are automatically sorted by date. Toggle disabled.", "error");
-      return;
-    }
-
-    if (upcoming.filter(e => e.featured).length >= 2) {
+    // Upcoming events: at most 2 on the home page. Past events: any number can be starred; home shows the latest 3.
+    if (isUpcoming && upcoming.filter(e => e.featured).length >= 2) {
       showAlert("LIMIT REACHED: Max 2 Featured Upcoming events allowed.", "error");
       return;
     }
@@ -221,7 +216,7 @@ export default function AdminEventsPage() {
         body: JSON.stringify({ ...event, featured: !event.featured })
       });
       if (res.ok) {
-        showAlert(event.featured ? "Unpinned from Home" : "Pinned to Home", "success");
+        showAlert(event.featured ? "Removed from Home" : "Pinned to Home", "success");
         fetchFromMongo();
       }
     } catch (error) {
@@ -615,7 +610,7 @@ export default function AdminEventsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                 {upcoming.map(event => (
                   <div key={event._id} className="relative group">
-                    <div className="absolute top-4 right-4 z-40 flex gap-2 opacity-0 group-hover:opacity-100 transition-all scale-90 group-hover:scale-100">
+                    <div className="absolute top-4 right-4 z-40 flex gap-2 opacity-0 group-hover:opacity-100 transition-all scale-90 group-hover:scale-100 [@media(hover:none)]:opacity-100 [@media(hover:none)]:scale-100">
                       
                       {/* 🔥 NEW: Manage Tickets Button */}
                       <button onClick={() => setManageTicketsEvent(event)} className="p-4 bg-black/80 backdrop-blur-md hover:bg-green-600 rounded-2xl transition-all border border-white/10 text-white">
@@ -638,13 +633,19 @@ export default function AdminEventsPage() {
           <section className="space-y-8 pt-10">
             <h3 className="text-[10px] font-black uppercase tracking-[0.5em] text-zinc-600 flex items-center gap-4">
               Past Archive 
+              <span className="px-3 py-1 rounded-full border border-zinc-800 text-zinc-500 text-[9px]">
+                Starred: {past.filter(e => e.featured).length} (latest 3 show on Home)
+              </span>
               <div className="h-px flex-1 bg-zinc-900" />
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-10 opacity-60 grayscale hover:grayscale-0 hover:opacity-100 transition-all duration-500">
               {past.map(event => (
                 <div key={event._id} className="relative group">
-                  <div className="absolute top-4 right-4 z-40 flex gap-2 opacity-0 group-hover:opacity-100 transition-all scale-90 group-hover:scale-100">
+                  <div className="absolute top-4 right-4 z-40 flex gap-2 opacity-0 group-hover:opacity-100 transition-all scale-90 group-hover:scale-100 [@media(hover:none)]:opacity-100 [@media(hover:none)]:scale-100">
+                    <button onClick={() => toggleFeatured(event)} title={event.featured ? "Remove from Home" : "Show on Home"} aria-label={event.featured ? "Remove from Home" : "Show on Home"} className={`p-4 rounded-2xl backdrop-blur-md border border-white/10 transition-all ${event.featured ? 'bg-brandRed text-white shadow-lg' : 'bg-black/80 hover:bg-brandRed text-white'}`}>
+                      <Star size={16} fill={event.featured ? "currentColor" : "none"} />
+                    </button>
                     <button onClick={() => startEdit(event)} className="p-4 bg-black/80 backdrop-blur-md hover:bg-blue-600 rounded-2xl transition-all border border-white/10 text-white"><Edit3 size={16}/></button>
                     <button onClick={() => {setEventToDelete({id: event._id, title: event.title}); setConfirmOpen(true);}} className="p-4 bg-black/80 backdrop-blur-md hover:bg-red-600 rounded-2xl transition-all border border-white/10 text-white"><Trash2 size={16}/></button>
                   </div>
