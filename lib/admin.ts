@@ -18,6 +18,28 @@ export async function getVerifiedUser(supabase: any): Promise<{ id: string; emai
   return user ? { id: user.id, email: user.email, phone: user.phone } : null;
 }
 
+/**
+ * The logged-in user for an API route, verified, with session refresh handled properly (getAll/setAll).
+ * Routes that built their own client with the old get-only cookie adapter could not save a refreshed session, which
+ * is how an expired login turned into a silent "Unauthorized" (and a log warning) on the first click after an hour.
+ */
+export async function getRequestUser(): Promise<{ id: string; email?: string; phone?: string } | null> {
+  const cookieStore = await cookies();
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll(); },
+        setAll(cookiesToSet) {
+          try { cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)); } catch { /* read-only context */ }
+        },
+      },
+    }
+  );
+  return getVerifiedUser(supabase);
+}
+
 export async function checkAdminAccess() {
   const cookieStore = await cookies();
 

@@ -1,23 +1,15 @@
+import { getRequestUser } from '@/lib/admin';
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
     // 1. Authenticate the User making the request
-    const cookieStore = await cookies();
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { cookies: { get(name: string) { return cookieStore.get(name)?.value; } } }
-    );
+    const user = await getRequestUser();
 
-    const { data: { user }, error: authError } = await supabaseAuth.auth.getUser();
-
-    if (authError || !user || !user.email) {
+    if (!user || !user.email) {
       return NextResponse.json({ error: "Unauthorized access" }, { status: 401 });
     }
 

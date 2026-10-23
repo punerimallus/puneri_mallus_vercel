@@ -105,16 +105,16 @@ export default function AdminPaymentSettings() {
         body: JSON.stringify({ membershipEnabled: next })
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error('save failed');
+      if (!res.ok) throw new Error(data.error || 'save failed');
       if (data.membershipSwitchSaved === false) {
         setSettings(prev => ({ ...prev, membershipEnabled: true }));
         showAlert("The switch needs a one-time database update first (run supabase/migrations/20261023_membership_switch.sql).", "error");
         return;
       }
       showAlert(next ? "Membership is OPEN. The Join button is back." : "Membership is CLOSED. The Join button is hidden.", "success");
-    } catch {
+    } catch (err: any) {
       setSettings(prev => ({ ...prev, membershipEnabled: !next }));
-      showAlert("Could not change the membership switch.", "error");
+      showAlert(`Could not change the membership switch${err?.message && err.message !== 'save failed' ? `: ${err.message}` : '.'}`, "error");
     }
   };
 

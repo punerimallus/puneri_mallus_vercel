@@ -1,6 +1,5 @@
+import { getRequestUser } from '@/lib/admin';
 import { NextResponse, after } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
 import { isValidCheckoutSignature } from '@/lib/payments/signature';
 import { fulfilAndDeliver } from '@/lib/payments/server';
 
@@ -16,13 +15,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Invalid payment signature." }, { status: 400 });
     }
 
-    const cookieStore = await cookies();
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { cookies: { get(name: string) { return cookieStore.get(name)?.value; } } }
-    );
-    const { data: { user } } = await supabaseAuth.auth.getUser();
+  const user = await getRequestUser();
 
     const result = await fulfilAndDeliver(razorpay_order_id, razorpay_payment_id, 'CLIENT', { defer: after });
     const mine = !!user && result.order?.user_id === user.id;

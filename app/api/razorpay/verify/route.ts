@@ -1,6 +1,5 @@
+import { getRequestUser } from '@/lib/admin';
 import { NextResponse, after } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
 import { isValidCheckoutSignature } from '@/lib/payments/signature';
 import { fulfilAndDeliver } from '@/lib/payments/server';
 
@@ -10,14 +9,8 @@ import { fulfilAndDeliver } from '@/lib/payments/server';
 // work, so if this request never arrives (tab closed) the user still gets access.
 export async function POST(req: Request) {
   try {
-    const cookieStore = await cookies();
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { cookies: { get(name: string) { return cookieStore.get(name)?.value; } } }
-    );
-    const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
-    if (userError || !user) {
+    const user = await getRequestUser();
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized: Invalid Session" }, { status: 401 });
     }
 

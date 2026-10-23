@@ -1,6 +1,5 @@
+import { getRequestUser } from '@/lib/admin';
 import { NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
 import { razorpay, supabaseAdmin, getEventSnapshot } from '@/lib/payments/server';
 import {
   grossUpToPaise,
@@ -28,13 +27,7 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { paymentType, plan, cart, eventId, pointsToRedeem = 0 } = body;
 
-    const cookieStore = await cookies();
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { cookies: { get(name: string) { return cookieStore.get(name)?.value; } } }
-    );
-    const { data: { user } } = await supabaseAuth.auth.getUser();
+  const user = await getRequestUser();
     if (!user) return NextResponse.json({ error: 'Please log in to continue.' }, { status: 401 });
 
     const db = supabaseAdmin();

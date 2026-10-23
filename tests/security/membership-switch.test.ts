@@ -71,6 +71,7 @@ describe('membership switch: orders', () => {
 describe('membership switch: settings API', () => {
   const upserts: Record<string, unknown>[] = [];
   let failFirstUpsertWithMissingColumn = false;
+  let adminDenial: Response | null = null;
 
   const load = async () => {
     vi.resetModules();
@@ -91,14 +92,11 @@ describe('membership switch: settings API', () => {
         }),
       }),
     }));
-    vi.doMock('@supabase/ssr', () => ({
-      createServerClient: () => ({ auth: { getUser: async () => ({ data: { user: { id: 'a', email: 'a@x.com' } }, error: null }) } }),
-    }));
-    vi.doMock('next/headers', () => ({ cookies: async () => ({ get: () => undefined }) }));
+    vi.doMock('@/lib/admin', () => ({ requireAdmin: async () => adminDenial }));
     return import('@/app/api/admin/settings/route');
   };
 
-  beforeEach(() => { upserts.length = 0; failFirstUpsertWithMissingColumn = false; });
+  beforeEach(() => { upserts.length = 0; failFirstUpsertWithMissingColumn = false; adminDenial = null; });
 
   it('reports the switch, defaulting to open', async () => {
     let mod = await load();
@@ -108,6 +106,14 @@ describe('membership switch: settings API', () => {
     expect((await (await mod.GET()).json()).membershipEnabled).toBe(true);
     settingsRow = { membership_price: 499 };
     expect((await (await mod.GET()).json()).membershipEnabled).toBe(true);
+  });
+
+  it('only an admin can change it', async () => {
+    adminDenial = new Response(JSON.stringify({ error: 'Admin access required.' }), { status: 403 });
+    const mod = await load();
+    const res = await mod.PATCH(new Request('http://x', { method: 'PATCH', body: JSON.stringify({ membershipEnabled: false }) }));
+    expect(res.status).toBe(403);
+    expect(upserts).toHaveLength(0);
   });
 
   it('saves the switch', async () => {
