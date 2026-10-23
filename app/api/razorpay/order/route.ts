@@ -63,6 +63,10 @@ export async function POST(req: Request) {
 
     if (paymentType === 'LIFETIME') {
       if (profile?.is_member) throw new PaymentInputError('You are already a lifetime member.', 409);
+      // Admin switch (Admin → Payments). Hiding the button is not enough: the server refuses new orders too.
+      if (settings?.membership_enabled === false) {
+        throw new PaymentInputError('Membership sign-ups are closed right now. Please check back soon.', 403);
+      }
       // Membership is for ages 16 and over. The sign-up and membership forms already ask for a birth date; this makes the
       // rule hold even if someone skips the form and calls the API directly.
       if (!isOldEnough(profile?.dob)) {

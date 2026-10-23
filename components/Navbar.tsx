@@ -26,6 +26,8 @@ export default function Navbar() {
   ]);
   
   const [showMembershipModal, setShowMembershipModal] = useState(false);
+  // Admin → Payments switch. When off there is no Join button (visitors who are logged out still get Login).
+  const [membershipOpen, setMembershipOpen] = useState(true);
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -93,6 +95,7 @@ export default function Navbar() {
         const [eventRes, settingsRes] = await Promise.all([fetch('/api/events/manage'), fetch('/api/admin/settings')]);
         const [eventData, settingsData] = await Promise.all([eventRes.json(), settingsRes.json()]);
         setHasUpcoming(eventData.hasUpcoming);
+        setMembershipOpen(settingsData?.membershipEnabled !== false);
         if (settingsData?.membershipPrice) {
           setMembershipPrice(settingsData.membershipPrice);
         }
@@ -182,7 +185,7 @@ export default function Navbar() {
             <div className="hidden lg:flex items-center gap-4">
               
               {/* JOIN TRIBE BUTTON (Hidden for Admins and Members) */}
-              {(!isMember && !isAdmin) && (
+              {(!isMember && !isAdmin) && (membershipOpen || !user) && (
                 <button 
                   onClick={() => { 
                     if (user) {
@@ -191,7 +194,7 @@ export default function Navbar() {
                   }}
                   className="px-5 lg:px-6 xl:px-8 py-2.5 xl:py-3 rounded-full bg-brandRed text-white font-black uppercase text-[10px] tracking-widest hover:bg-white hover:text-black transition-all duration-300 shadow-[0_0_20px_rgba(255,0,0,0.3)] active:scale-95 whitespace-nowrap"
                 >
-                  {user ? "Join Tribe" : "Login / Join"}
+                  {user ? "Join Tribe" : membershipOpen ? "Login / Join" : "Login"}
                 </button>
               )}
 
@@ -258,7 +261,7 @@ export default function Navbar() {
             </div>
 
            {/* JOIN TRIBE BUTTON (MOBILE) */}
-            {(!isMember && !isAdmin) && (
+            {(!isMember && !isAdmin) && (membershipOpen || !user) && (
               <button 
                 onClick={() => { 
                   if (user) setShowMembershipModal(true); 
@@ -329,7 +332,7 @@ export default function Navbar() {
               <div className="pt-6 sm:pt-8 border-t border-white/10 space-y-5">
                 
                {/* MOBILE MENU BUTTONS */}
-                {(!isMember && !isAdmin) && (
+                {(!isMember && !isAdmin) && (membershipOpen || !user) && (
                   <button 
                     onClick={() => {
                       setIsMobileMenuOpen(false);
@@ -339,7 +342,7 @@ export default function Navbar() {
                     }}
                     className="w-full py-4 rounded-full bg-brandRed text-white font-black uppercase text-[11px] tracking-widest shadow-[0_0_20px_rgba(255,0,0,0.3)] mb-4"
                   >
-                    {user ? "Join Tribe" : "Login / Join"}
+                    {user ? "Join Tribe" : membershipOpen ? "Login / Join" : "Login"}
                   </button>
                 )}
 
@@ -412,7 +415,7 @@ export default function Navbar() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {showMembershipModal && (
+        {showMembershipModal && membershipOpen && (
           <div className="fixed inset-0 z-[200] overflow-y-auto overscroll-contain">
            <div className="relative min-h-full flex items-center justify-center p-4 py-10">
             <motion.div 

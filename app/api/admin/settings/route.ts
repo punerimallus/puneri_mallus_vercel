@@ -33,6 +33,8 @@ export async function GET() {
       martLifetimePrice: settings.mart_lifetime_price,
       membershipPrice: settings.membership_price,
       membershipBenefits: settings.membership_benefits,
+      // Open unless an admin has switched it off. A missing column (migration not run yet) also reads as open.
+      membershipEnabled: settings.membership_enabled !== false,
       currency: settings.currency,
       // 🔥 NEW: Football Fee
       footballFee: settings.football_fee, 
@@ -44,6 +46,7 @@ export async function GET() {
       martYearlyPrice: 899,
       martLifetimePrice: 2499,
       membershipPrice: 499,
+      membershipEnabled: true,
       footballFee: 1500 // Default fallback
     });
   } catch (e) {
@@ -98,19 +101,29 @@ export async function PATCH(req: Request) {
       ...(body.martLifetimePrice !== undefined && { mart_lifetime_price: body.martLifetimePrice }),
       ...(body.membershipPrice !== undefined && { membership_price: body.membershipPrice }),
       ...(body.membershipBenefits !== undefined && { membership_benefits: body.membershipBenefits }),
+      ...(body.membershipEnabled !== undefined && { membership_enabled: body.membershipEnabled === true }),
       ...(body.currency !== undefined && { currency: body.currency }),
       // 🔥 NEW: Football Fee update
       ...(body.football_fee !== undefined && { football_fee: body.football_fee }),
       updated_at: new Date().toISOString()
     };
 
-    const { error: upsertError } = await supabaseAdmin
+    let { error: upsertError } = await supabaseAdmin
       .from('app_settings')
       .upsert(dbPayload);
 
+    // The membership switch needs its column (supabase/migrations/20261023_membership_switch.sql). Until it exists,
+    // still save everything else rather than failing the whole settings form, and say the switch was not saved.
+    let membershipSwitchSaved = body.membershipEnabled !== undefined;
+    if (upsertError && 'membership_enabled' in dbPayload && /membership_enabled/i.test(upsertError.message || '')) {
+      const { membership_enabled: _skip, ...withoutSwitch } = dbPayload as Record<string, unknown>;
+      ({ error: upsertError } = await supabaseAdmin.from('app_settings').upsert(withoutSwitch));
+      membershipSwitchSaved = false;
+    }
+
     if (upsertError) throw upsertError;
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, membershipSwitchSaved });
   } catch (e: any) {
     console.error("Supabase Settings Update Error:", e.message);
     return NextResponse.json({ error: "Update failed" }, { status: 500 });

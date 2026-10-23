@@ -26,6 +26,7 @@ export default function AdminPaymentSettings() {
     martLifetimeActive: true,
     martLifetimePrice: 2499,
     membershipPrice: 499,
+    membershipEnabled: true,
     currency: "INR",
     membershipBenefits: "Lifetime Access, Decision Making Power, VIP Community Badge, Exclusive Events"
   });
@@ -92,6 +93,30 @@ export default function AdminPaymentSettings() {
     fetchAdminData();
     loadProblemOrders();
   }, []);
+
+  // The membership switch saves on its own, straight away: it is a kill switch, not a field to remember to "deploy".
+  const toggleMembership = async () => {
+    const next = !settings.membershipEnabled;
+    setSettings(prev => ({ ...prev, membershipEnabled: next }));
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ membershipEnabled: next })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error('save failed');
+      if (data.membershipSwitchSaved === false) {
+        setSettings(prev => ({ ...prev, membershipEnabled: true }));
+        showAlert("The switch needs a one-time database update first (run supabase/migrations/20261023_membership_switch.sql).", "error");
+        return;
+      }
+      showAlert(next ? "Membership is OPEN. The Join button is back." : "Membership is CLOSED. The Join button is hidden.", "success");
+    } catch {
+      setSettings(prev => ({ ...prev, membershipEnabled: !next }));
+      showAlert("Could not change the membership switch.", "error");
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -238,10 +263,26 @@ export default function AdminPaymentSettings() {
                 </h3>
                 <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Global Community Product</p>
               </div>
-              <div className="px-4 py-1.5 bg-brandRed/10 border border-brandRed/20 rounded-full">
-                <span className="text-[8px] font-black uppercase text-brandRed tracking-widest">Always Active</span>
-              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={settings.membershipEnabled}
+                aria-label="Accept new memberships"
+                onClick={toggleMembership}
+                className="relative z-10 flex items-center gap-3"
+              >
+                <span className={`text-[8px] font-black uppercase tracking-widest ${settings.membershipEnabled ? 'text-brandRed' : 'text-zinc-500'}`}>
+                  {settings.membershipEnabled ? 'Open' : 'Closed'}
+                </span>
+                {settings.membershipEnabled ? <ToggleRight size={48} className="text-brandRed" /> : <ToggleLeft size={48} className="text-zinc-500" />}
+              </button>
             </div>
+
+            {!settings.membershipEnabled && (
+              <p className="relative z-10 -mt-2 px-4 py-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-[10px] font-bold uppercase tracking-widest text-amber-500">
+                Closed: the Join button is hidden and new membership payments are refused. Existing members are not affected.
+              </p>
+            )}
 
             <div className="pt-6 border-t border-white/5 space-y-6 relative z-10">
               <div className="space-y-3">
