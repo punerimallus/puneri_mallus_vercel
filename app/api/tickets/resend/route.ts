@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
-import { checkAdminAccess } from '@/lib/admin';
+import { checkAdminAccess, getRequestUser } from '@/lib/admin';
 import { resendBooking, supabaseAdmin } from '@/lib/payments/server';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -14,13 +12,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'bookingId required' }, { status: 400 });
   }
 
-  const cookieStore = await cookies();
-  const supabaseAuth = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { get(name: string) { return cookieStore.get(name)?.value; } } }
-  );
-  const { data: { user } } = await supabaseAuth.auth.getUser();
+  const user = await getRequestUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { data: booking } = await supabaseAdmin().from('ticket_bookings').select('id, user_id').eq('id', bookingId).maybeSingle();

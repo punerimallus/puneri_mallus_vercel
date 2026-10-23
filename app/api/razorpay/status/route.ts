@@ -1,6 +1,5 @@
+import { getRequestUser } from '@/lib/admin';
 import { NextResponse, after } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
 import { fulfilAndDeliver, getOrder } from '@/lib/payments/server';
 
 export const dynamic = 'force-dynamic';
@@ -12,13 +11,7 @@ export async function GET(req: Request) {
   const orderId = new URL(req.url).searchParams.get('orderId');
   if (!orderId) return NextResponse.json({ error: 'orderId required' }, { status: 400 });
 
-  const cookieStore = await cookies();
-  const supabaseAuth = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { get(name: string) { return cookieStore.get(name)?.value; } } }
-  );
-  const { data: { user } } = await supabaseAuth.auth.getUser();
+  const user = await getRequestUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {

@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
+import { requireAdmin } from '@/lib/admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,33 +56,14 @@ export async function GET() {
 
 export async function PATCH(req: Request) {
   try {
-    const cookieStore = await cookies();
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { cookies: { get(name: string) { return cookieStore.get(name)?.value; } } }
-    );
-
-    const { data: { user }, error: authError } = await supabaseAuth.auth.getUser();
-
-    if (authError || !user || !user.email) {
-      return NextResponse.json({ error: "Unauthorized access" }, { status: 401 });
-    }
+    // Same admin check as every other admin route: verified login (with session refresh) plus authorized_admins.
+    const denied = await requireAdmin();
+    if (denied) return denied;
 
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY! 
     );
-
-    const { data: adminRecord, error: adminError } = await supabaseAdmin
-      .from('authorized_admins')
-      .select('email')
-      .eq('email', user.email)
-      .single();
-
-    if (adminError || !adminRecord) {
-      return NextResponse.json({ error: "Forbidden: Master Admin Access Required" }, { status: 403 });
-    }
 
     const body = await req.json();
 
