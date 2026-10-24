@@ -173,7 +173,10 @@ export const fulfilmentDeps: FulfilmentDeps = {
 
   async setBookingStatus(bookingId, status) {
     const db = supabaseAdmin();
-    const booking = await must(db.from('ticket_bookings').select('tickets_data').eq('id', bookingId).single());
+    // An admin may have deleted the booking row by hand. Nothing is left to void, and failing here would make Razorpay
+    // retry the refund webhook for days.
+    const booking = await must(db.from('ticket_bookings').select('tickets_data').eq('id', bookingId).maybeSingle());
+    if (!booking) return;
     const tickets = ((booking as { tickets_data: { status: string }[] | null }).tickets_data || []).map((t) => ({
       ...t,
       status: status === 'REFUNDED' ? 'REFUNDED' : t.status,
