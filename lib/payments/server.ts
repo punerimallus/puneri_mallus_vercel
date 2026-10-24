@@ -140,8 +140,14 @@ export const fulfilmentDeps: FulfilmentDeps = {
     }
   },
 
-  async allocateTickets(items) {
-    const { data, error } = await supabaseAdmin().rpc('allocate_tickets', { p_items: items });
+  async allocateTickets(items, orderId) {
+    const db = supabaseAdmin();
+    // The current function takes the order id and saves the chosen numbers on the order in the same transaction.
+    let { data, error } = await db.rpc('allocate_tickets', { p_items: items, p_order_id: orderId ?? null });
+    if (error && /p_order_id|could not find the function|PGRST202/i.test(`${error.code} ${error.message}`)) {
+      // The ticket-number SQL (20261025) is not applied yet: use the older one-argument function. Numbers then follow the sold counter.
+      ({ data, error } = await db.rpc('allocate_tickets', { p_items: items }));
+    }
     if (error) {
       const m = /SOLD_OUT:(.*)/.exec(error.message);
       if (m) throw new SoldOutError(m[1].trim());

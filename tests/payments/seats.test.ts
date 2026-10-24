@@ -69,7 +69,7 @@ describe('refunds give seats back', () => {
     expect(w.released.cat_vip).toBe(0);
   });
 
-  it('ticket numbers are never reused after a refund', async () => {
+  it('a refunded ticket number goes back to the next buyer', async () => {
     const second = makeOrder({ razorpay_order_id: 'order_2', razorpay_payment_id: null });
     const w = makeWorld([makeOrder(), second], [payment(), payment({ id: 'pay_2', order_id: 'order_2' })]);
     const first = await buy(w);
@@ -77,9 +77,8 @@ describe('refunds give seats back', () => {
 
     await applyRefund('pay_1', 122904, w.deps);
     const next = await buy(w, 'order_2', 'pay_2');
-    const numbers = w.bookings.get(next.bookingId!)!.tickets_data.map((t) => t.ticketNumber);
-    expect(numbers).toEqual(['VIP013', 'VIP014', 'GA043']);
-    // ...while the refund really did free capacity: 10 + 2 now held by the second buyer.
+    // Same numbers again: one less happened, so the next buyer takes the freed ones.
+    expect(w.bookings.get(next.bookingId!)!.tickets_data.map((t) => t.ticketNumber)).toEqual(['VIP011', 'VIP012', 'GA042']);
     expect(inUse(w, 'cat_vip')).toBe(12);
   });
 
@@ -209,5 +208,87 @@ describe('through the real Razorpay refund notification', () => {
 
     await handleWebhookEvent(refundEvent(122904), deps);      // Razorpay repeats itself: no change
     expect([inUse(w, 'cat_vip'), inUse(w, 'cat_ga'), w.loyalty.user_1]).toEqual([10, 41, 100]);
+  });
+});
+
+describe('ticket numbers: lowest free number, never a duplicate', () => {
+  // Five buyers take one VIP each.
+  const fiveBuyers = async () => {
+    const orders = [1, 2, 3, 4, 5].map((i) =>
+      makeOrder({ razorpay_order_id: `o${i}`, razorpay_payment_id: null, cart: [{ categoryId: 'cat_vip', name: 'VIP', prefix: 'VIP', qty: 1, unitPrice: 500 }] }),
+    );
+    const w = makeWorld(orders, orders.map((o, i) => payment({ id: `p${i + 1}`, order_id: o.razorpay_order_id })));
+    w.sold.cat_vip = 0;
+    const numberOf = async (i: number) => {
+      const r = await buy(w, `o${i}`, `p${i}`);
+      return w.bookings.get(r.bookingId!)!.tickets_data[0].ticketNumber;
+    };
+    return { w, numberOf };
+  };
+
+  it('VIP001..VIP005 sold, the last one cancels: the next buyer gets VIP005 again', async () => {
+    const { w, numberOf } = await fiveBuyers();
+    expect([await numberOf(1), await numberOf(2), await numberOf(3), await numberOf(4), await numberOf(5)]).toEqual(['VIP001', 'VIP002', 'VIP003', 'VIP004', 'VIP005']);
+
+    await applyRefund('p5', 122904, w.deps);
+    const next = makeOrder({ razorpay_order_id: 'o6', razorpay_payment_id: null, cart: [{ categoryId: 'cat_vip', name: 'VIP', prefix: 'VIP', qty: 1, unitPrice: 500 }] });
+    w.orders.set('o6', { ...next });
+    w.payments.push(payment({ id: 'p6', order_id: 'o6' }));
+    const r = await buy(w, 'o6', 'p6');
+    expect(w.bookings.get(r.bookingId!)!.tickets_data[0].ticketNumber).toBe('VIP005');
+  });
+
+  it('a middle ticket cancels: the next buyer gets that number, not VIP006 and not a duplicate of VIP005', async () => {
+    const { w, numberOf } = await fiveBuyers();
+    for (let i = 1; i <= 5; i++) await numberOf(i);
+    await applyRefund('p2', 122904, w.deps);
+
+    const next = makeOrder({ razorpay_order_id: 'o6', razorpay_payment_id: null, cart: [{ categoryId: 'cat_vip', name: 'VIP', prefix: 'VIP', qty: 1, unitPrice: 500 }] });
+    w.orders.set('o6', { ...next });
+    w.payments.push(payment({ id: 'p6', order_id: 'o6' }));
+    const r = await buy(w, 'o6', 'p6');
+    expect(w.bookings.get(r.bookingId!)!.tickets_data[0].ticketNumber).toBe('VIP002');
+
+    // Every number held by a valid ticket is unique.
+    const held = [...w.bookings.values()].filter((b) => b.status !== 'REFUNDED').flatMap((b) => b.tickets_data.map((t) => t.ticketNumber));
+    expect(new Set(held).size).toBe(held.length);
+    expect(held.sort()).toEqual(['VIP001', 'VIP002', 'VIP003', 'VIP004', 'VIP005']);
+  });
+
+  it('a partial refund keeps its numbers held', async () => {
+    const { w, numberOf } = await fiveBuyers();
+    for (let i = 1; i <= 5; i++) await numberOf(i);
+    await applyRefund('p3', 50000, w.deps); // partial: the ticket is still valid
+    const next = makeOrder({ razorpay_order_id: 'o6', razorpay_payment_id: null, cart: [{ categoryId: 'cat_vip', name: 'VIP', prefix: 'VIP', qty: 1, unitPrice: 500 }] });
+    w.orders.set('o6', { ...next });
+    w.payments.push(payment({ id: 'p6', order_id: 'o6' }));
+    const r = await buy(w, 'o6', 'p6');
+    expect(w.bookings.get(r.bookingId!)!.tickets_data[0].ticketNumber).toBe('VIP006');
+  });
+
+  it('a cart of several tickets fills the gaps first, in order', async () => {
+    const { w, numberOf } = await fiveBuyers();
+    for (let i = 1; i <= 5; i++) await numberOf(i);
+    await applyRefund('p2', 122904, w.deps);
+    await applyRefund('p4', 122904, w.deps);
+    const cart = [{ categoryId: 'cat_vip', name: 'VIP', prefix: 'VIP', qty: 3, unitPrice: 500 }];
+    w.orders.set('o6', { ...makeOrder({ razorpay_order_id: 'o6', razorpay_payment_id: null, cart }) });
+    w.payments.push(payment({ id: 'p6', order_id: 'o6' }));
+    const r = await buy(w, 'o6', 'p6');
+    expect(w.bookings.get(r.bookingId!)!.tickets_data.map((t) => t.ticketNumber)).toEqual(['VIP002', 'VIP004', 'VIP006']);
+  });
+
+  it('orders from before this change (no stored numbers) still hold the numbers they were issued', async () => {
+    const legacy = makeOrder({
+      razorpay_order_id: 'old', razorpay_payment_id: 'pold', status: 'FULFILLED',
+      allocated_tickets: [{ categoryId: 'cat_vip', qty: 2, endSold: 12 }], // issued as VIP011, VIP012
+    });
+    const w = makeWorld([legacy, makeOrder()]);
+    w.sold.cat_vip = 12; // 10 older + the legacy order's 2
+    // the world starts with 10 + legacy 2 allocated outside it
+    const r = await buy(w);
+    const vip = w.bookings.get(r.bookingId!)!.tickets_data.filter((t) => t.categoryName === 'VIP').map((t) => t.ticketNumber);
+    expect(vip).not.toContain('VIP011');
+    expect(vip).not.toContain('VIP012');
   });
 });

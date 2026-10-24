@@ -47,7 +47,10 @@ export interface IssuedTicket {
 export interface Allocation {
   categoryId: string;
   qty: number;
+  /** The category's sold counter after this order took its seats. Older orders issued numbers as the range ending here. */
   endSold: number;
+  /** The exact ticket numbers issued: the lowest ones nobody holds. Absent on orders from before numbers were reused. */
+  numbers?: number[];
 }
 
 export interface PaymentOrder {

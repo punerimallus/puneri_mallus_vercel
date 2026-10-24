@@ -44,7 +44,8 @@ export interface FulfilmentDeps {
   fetchOrderPayments(orderId: string): Promise<GatewayPayment[]>;
   capturePayment(paymentId: string, amount: number, currency: string): Promise<GatewayPayment>;
 
-  allocateTickets(items: { categoryId: string; qty: number }[]): Promise<Allocation[]>;
+  /** Take the seats and pick the ticket numbers. Given the order id, the numbers are saved on the order in the same step. */
+  allocateTickets(items: { categoryId: string; qty: number }[], orderId?: string): Promise<Allocation[]>;
   /** Insert or, if one already exists for this Razorpay order, return the existing booking id. */
   upsertBooking(row: BookingInsert): Promise<string>;
   setBookingStatus(bookingId: string, status: 'CONFIRMED' | 'REFUNDED'): Promise<void>;
@@ -98,7 +99,9 @@ export function buildIssuedTickets(order: PaymentOrder, allocations: Allocation[
     const prefix = line?.prefix ?? '';
     const name = line?.name ?? 'General';
     const groupSize = groupSizeOf(line?.groupSize);
-    for (let n = a.endSold - a.qty + 1; n <= a.endSold; n++) {
+    // Newer orders carry the exact numbers; older ones were issued as the range ending at endSold.
+    const numbers = a.numbers && a.numbers.length === a.qty ? a.numbers : Array.from({ length: a.qty }, (_, i) => a.endSold - a.qty + 1 + i);
+    for (const n of numbers) {
       tickets.push({ categoryName: name, ticketNumber: `${prefix}${String(n).padStart(3, '0')}`, status: 'ISSUED', ...(groupSize > 1 ? { groupSize } : {}) });
     }
   }
@@ -212,6 +215,7 @@ export async function fulfilOrder(
         try {
           allocations = await deps.allocateTickets(
             (order.cart || []).map((l) => ({ categoryId: l.categoryId, qty: l.qty })),
+            orderId,
           );
         } catch (e) {
           if (e instanceof SoldOutError) {
