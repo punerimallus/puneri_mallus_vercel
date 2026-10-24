@@ -1,5 +1,6 @@
 import { CartLine, MartPlan, PaymentInputError } from './types';
 import { groupSizeOf } from './groups';
+import { seatsInUse } from './seats';
 
 // Razorpay's 2% fee + 18% GST on it, passed on to the buyer.
 export const GATEWAY_FEE_RATE = 0.0236;
@@ -24,6 +25,8 @@ export interface TicketCategory {
   price: number;
   capacity: number | null;
   sold: number | null;
+  /** Seats given back by fully refunded orders (see seats.ts). Absent before the seat-release SQL is run. */
+  released?: number | null;
   active?: boolean | null;
   group_size?: number | null;
 }
@@ -74,7 +77,7 @@ export function quoteEventCart(input: EventCartInput): EventCartQuote {
     const cat = categories.find((c) => String(c.id) === categoryId);
     if (!cat) throw new PaymentInputError('Invalid category selected');
     if (cat.active === false) throw new PaymentInputError(`"${cat.name}" is no longer on sale.`);
-    if (cat.capacity != null && (cat.sold || 0) + qty > cat.capacity) {
+    if (cat.capacity != null && seatsInUse(cat) + qty > cat.capacity) {
       throw new PaymentInputError(`Oops! "${cat.name}" is sold out. Someone just bought the last ones.`, 409);
     }
 

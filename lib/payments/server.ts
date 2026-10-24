@@ -184,6 +184,24 @@ export const fulfilmentDeps: FulfilmentDeps = {
     await must(db.from('ticket_bookings').update({ status, tickets_data: tickets }).eq('id', bookingId));
   },
 
+  async releaseSeats(orderId) {
+    const { data, error } = await supabaseAdmin().rpc('release_order_seats', { p_order_id: orderId });
+    if (error) throw new Error(error.message);
+    return Number(data) || 0;
+  },
+
+  async claimLoyaltyReversal(orderId) {
+    const { data, error } = await supabaseAdmin()
+      .from('payment_orders')
+      .update({ loyalty_reversed: true })
+      .eq('razorpay_order_id', orderId)
+      .eq('loyalty_applied', true)
+      .eq('loyalty_reversed', false)
+      .select('razorpay_order_id');
+    if (error) throw new Error(error.message);
+    return !!data && data.length > 0;
+  },
+
   async adjustLoyalty(userId, delta) {
     await must(supabaseAdmin().rpc('adjust_loyalty_points', { p_user_id: userId, p_delta: Math.round(delta) }));
   },

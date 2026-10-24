@@ -41,10 +41,10 @@ describe('ticket category validation', () => {
     expect(check([ok, { ...ok, name: 'vip' }])).toMatchObject({ ok: false });
     expect(check([ok, { ...ok, name: 'vip', prefix: 'GEN-' }])).toMatchObject({ ok: false });
   });
-  it('will not let capacity drop below what is already sold', () => {
+  it('will not let capacity drop below the seats already taken', () => {
     const r = check([{ id: 'c1', ...ok, capacity: 30 }], [{ id: 'c1', name: 'GENERAL', sold: 40 }]);
     expect(r).toMatchObject({ ok: false });
-    expect(!r.ok && r.error).toContain('40 already sold');
+    expect(!r.ok && r.error).toContain('40 seats are already taken');
   });
   it('deletes a removed category that never sold, but only takes a sold one off sale', () => {
     const r = check([{ id: 'keep', ...ok }], [

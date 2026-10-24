@@ -49,6 +49,10 @@ export interface FulfilmentDeps {
   upsertBooking(row: BookingInsert): Promise<string>;
   setBookingStatus(bookingId: string, status: 'CONFIRMED' | 'REFUNDED'): Promise<void>;
   adjustLoyalty(userId: string, delta: number): Promise<void>;
+  /** Give this order's seats back to their categories, once. Returns how many seats were released (0 if already done or none were taken). */
+  releaseSeats(orderId: string): Promise<number>;
+  /** Atomically mark an order's points as reversed. True only for the first caller, so a repeated refund event cannot reverse twice. */
+  claimLoyaltyReversal(orderId: string): Promise<boolean>;
 
   hasOtherFulfilledMembership(userId: string, excludingOrderId: string): Promise<boolean>;
   activateMembership(order: PaymentOrder, paymentId: string): Promise<void>;
@@ -299,6 +303,41 @@ export async function markOrderFailed(orderId: string, paymentId: string | null,
 }
 
 /**
+ * A fully refunded ticket order frees its seats (so they can be sold again) and undoes its points: the points it earned are
+ * taken back and any the buyer spent are returned. Each is done at most once, however many times Razorpay repeats the event.
+ * Voiding the passes does not depend on this, so a failure here is logged and reported to the admin, never thrown.
+ */
+async function giveBackSeatsAndPoints(order: PaymentOrder, deps: FulfilmentDeps) {
+  try {
+    const released = await deps.releaseSeats(order.razorpay_order_id);
+    if (released > 0) deps.log('SEATS_RELEASED', { orderId: order.razorpay_order_id, released });
+  } catch (e) {
+    deps.log('SEATS_RELEASE_FAILED', { orderId: order.razorpay_order_id, e });
+    await deps
+      .alertAdmin(
+        `Refund: seats not released for ${order.razorpay_order_id}`,
+        'The tickets were voided, but their seats could not be given back to the category count. Run the seat-release SQL (supabase/migrations/20261024_seat_release.sql) if it is not applied yet.',
+      )
+      .catch(() => undefined);
+  }
+
+  if (!order.user_id || !order.loyalty_applied) return;
+  try {
+    if (!(await deps.claimLoyaltyReversal(order.razorpay_order_id))) return;
+    try {
+      const delta = loyaltyDelta(order);
+      if (delta !== 0) await deps.adjustLoyalty(order.user_id, -delta);
+    } catch (e) {
+      // Un-claim so a retry can try again rather than silently skipping the reversal.
+      await deps.updateOrder(order.razorpay_order_id, { loyalty_reversed: false }).catch(() => undefined);
+      throw e;
+    }
+  } catch (e) {
+    deps.log('LOYALTY_REVERSAL_FAILED', { orderId: order.razorpay_order_id, e });
+  }
+}
+
+/**
  * Apply a refund reported by Razorpay. A full refund voids event passes so they
  * no longer scan at the gate; membership/mart access is flagged to the admin
  * rather than revoked automatically.
@@ -317,6 +356,7 @@ export async function applyRefund(paymentId: string, refundedPaise: number, deps
   });
 
   if (full && order.booking_id) await deps.setBookingStatus(order.booking_id, 'REFUNDED');
+  if (full && order.payment_type === 'EVENT_TICKET') await giveBackSeatsAndPoints(order, deps);
   if (full && order.payment_type !== 'EVENT_TICKET' && order.ledger_recorded) {
     await deps.recordLedger(order, paymentId, 'REFUNDED');
   }
