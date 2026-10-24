@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyRefund, fulfilOrder } from '@/lib/payments/fulfil';
+import { handleWebhookEvent } from '@/lib/payments/webhook';
 import { quoteEventCart } from '@/lib/payments/pricing';
 import { seatsInUse, seatsLeft } from '@/lib/payments/seats';
 import { checkCategoryConfig } from '@/lib/payments/category-config';
@@ -182,5 +183,31 @@ describe('everything that counts seats uses seats in use', () => {
       expect(res.deactivate.map((c) => c.id)).toEqual(['c1']);
       expect(res.remove).toEqual([]);
     }
+  });
+});
+
+describe('through the real Razorpay refund notification', () => {
+  const refundEvent = (refunded: number) => ({
+    event: 'refund.processed',
+    payload: {
+      refund: { entity: { id: 'rfnd_1', payment_id: 'pay_1', amount: refunded } },
+      payment: { entity: { id: 'pay_1', order_id: 'order_1', status: 'captured', amount: 122904, amount_refunded: refunded } },
+    },
+  });
+
+  it('buy, part-refund, refund the rest, repeat the notice: seats and points end up exactly where they started', async () => {
+    const w = makeWorld();
+    const deps = { ...w.deps, fulfil: async () => ({ outcome: 'FULFILLED' }) } as never;
+    await buy(w);
+    expect([inUse(w, 'cat_vip'), inUse(w, 'cat_ga'), w.loyalty.user_1]).toEqual([12, 42, 110]);
+
+    await handleWebhookEvent(refundEvent(50000), deps);       // partial: nothing is released
+    expect([inUse(w, 'cat_vip'), inUse(w, 'cat_ga'), w.loyalty.user_1]).toEqual([12, 42, 110]);
+
+    await handleWebhookEvent(refundEvent(122904), deps);      // the rest: everything comes back
+    expect([inUse(w, 'cat_vip'), inUse(w, 'cat_ga'), w.loyalty.user_1]).toEqual([10, 41, 100]);
+
+    await handleWebhookEvent(refundEvent(122904), deps);      // Razorpay repeats itself: no change
+    expect([inUse(w, 'cat_vip'), inUse(w, 'cat_ga'), w.loyalty.user_1]).toEqual([10, 41, 100]);
   });
 });
