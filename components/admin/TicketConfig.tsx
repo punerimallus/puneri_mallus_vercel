@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from 'react';
+import { seatsInUse } from '@/lib/payments/seats';
 import { Loader2, Plus, Save, Trash2, Ticket, Users } from 'lucide-react';
 import { useAlert } from '@/context/AlertContext';
 import { createBrowserClient } from '@supabase/ssr';
@@ -14,6 +15,7 @@ type Category = {
   capacity: number | '';
   active: boolean;
   sold?: number;
+  released?: number;
   /** 1 or missing = ordinary ticket. 2+ = one QR that admits that many people. '' while the admin is still typing. */
   group_size?: number | '';
 };
@@ -135,7 +137,7 @@ export default function TicketConfig({ eventId, eventTitle }: { eventId: string,
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" className="accent-brandRed w-4 h-4" checked={cat.active} onChange={(e) => updateCategory(idx, { active: e.target.checked })} /> On sale
                 </label>
-                {cat.id && <span>{cat.sold || 0} sold</span>}
+                {cat.id && <span>{seatsInUse(cat)} taken</span>}
                 {group && Number(cat.group_size) > 1 && Number(cat.capacity) > 0 && <span>Up to {Number(cat.group_size) * Number(cat.capacity)} people</span>}
                 {group && Number(cat.group_size) > 1 && Number(cat.price) > 0 && <span>₹{(Number(cat.price) / Number(cat.group_size)).toFixed(2)} per person</span>}
               </div>

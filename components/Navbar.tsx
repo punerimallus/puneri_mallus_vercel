@@ -9,6 +9,12 @@ import { createBrowserClient } from '@supabase/ssr';
 
 import MembershipCard from '@/components/Membership'; 
 
+// What the last visit learned, so the bar is right from the first frame instead of waiting on the network.
+const NAV_CACHE_KEY = 'pm_nav_v1';
+type NavCache = { open?: boolean; uid?: string; isMember?: boolean; isAdmin?: boolean; name?: string };
+const readNavCache = (): NavCache => { try { return JSON.parse(localStorage.getItem(NAV_CACHE_KEY) || '{}'); } catch { return {}; } };
+const writeNavCache = (patch: NavCache) => { try { localStorage.setItem(NAV_CACHE_KEY, JSON.stringify({ ...readNavCache(), ...patch })); } catch { /* storage blocked */ } };
+
 export default function Navbar() {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
@@ -27,7 +33,11 @@ export default function Navbar() {
   
   const [showMembershipModal, setShowMembershipModal] = useState(false);
   // Admin → Payments switch. When off there is no Join button (visitors who are logged out still get Login).
-  const [membershipOpen, setMembershipOpen] = useState(true);
+  // null = not known yet. Together with authChecked/statusReady it keeps the Join button invisible (space held) until the
+  // answer is in, so it never flashes up and then vanishes.
+  const [membershipOpen, setMembershipOpen] = useState<boolean | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [statusReady, setStatusReady] = useState(false);
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -49,9 +59,11 @@ export default function Navbar() {
       }
 
       if (adminData) setIsAdmin(true);
-
+      writeNavCache({ uid: userId, isMember: !!profile?.is_member, isAdmin: !!adminData, name: profile?.full_name || undefined });
     } catch (e) {
       // Silent catch
+    } finally {
+      setStatusReady(true);
     }
   };
 
@@ -62,11 +74,21 @@ export default function Navbar() {
     const fetchUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        setUser(session.user);
+        const cached = readNavCache();
+        if (cached.uid === session.user.id) {
+          // Same person as last time: show their last-known state now, then confirm it below.
+          setIsMember(!!cached.isMember);
+          setIsAdmin(!!cached.isAdmin);
+          setUser({ ...session.user, user_metadata: { ...session.user.user_metadata, ...(cached.name ? { full_name: cached.name } : {}) } });
+          setStatusReady(true);
+        } else {
+          setUser(session.user);
+        }
         fetchUserStatus(session.user.id);
       } else {
         setUser(null);
       }
+      setAuthChecked(true);
     };
     
     fetchUser();
@@ -74,6 +96,7 @@ export default function Navbar() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
         setUser(session.user);
+        setAuthChecked(true);
         fetchUserStatus(session.user.id);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
@@ -90,12 +113,16 @@ export default function Navbar() {
   }, [supabase]);
 
   useEffect(() => {
-    const fetchGlobalData = async () => {
+    // Settings (price, benefits, the membership switch) do not wait on the events lookup, which is slower.
+    const cached = readNavCache();
+    if (typeof cached.open === 'boolean') setMembershipOpen(cached.open);
+
+    const fetchSettings = async () => {
       try {
-        const [eventRes, settingsRes] = await Promise.all([fetch('/api/events/manage'), fetch('/api/admin/settings')]);
-        const [eventData, settingsData] = await Promise.all([eventRes.json(), settingsRes.json()]);
-        setHasUpcoming(eventData.hasUpcoming);
-        setMembershipOpen(settingsData?.membershipEnabled !== false);
+        const settingsData = await (await fetch('/api/admin/settings')).json();
+        const open = settingsData?.membershipEnabled !== false;
+        setMembershipOpen(open);
+        writeNavCache({ open });
         if (settingsData?.membershipPrice) {
           setMembershipPrice(settingsData.membershipPrice);
         }
@@ -106,11 +133,28 @@ export default function Navbar() {
           setMembershipBenefits(benefitsArray);
         }
       } catch (e) {
+        setMembershipOpen((prev) => (prev === null ? true : prev));
+      }
+    };
+    const fetchEvents = async () => {
+      try {
+        const eventData = await (await fetch('/api/events/manage')).json();
+        setHasUpcoming(eventData.hasUpcoming);
+      } catch (e) {
         // Silent catch
       }
     };
-    fetchGlobalData();
+    fetchSettings();
+    fetchEvents();
   }, []);
+
+  // Join is offered to non-members who are not admins, while membership is open. Logged-out visitors always keep a Login button.
+  const joinWanted = !isMember && !isAdmin && (membershipOpen !== false || !user);
+  // Until the answer is in, the button holds its place but cannot be seen.
+  const navReady = authChecked && membershipOpen !== null && (!user || statusReady);
+  const joinHide = navReady ? '' : 'invisible';
+  // The name beside the avatar needs room. With no Join button next to it there is plenty from xl up; with one, only on very wide screens.
+  const nameShow = joinWanted ? 'hidden 2xl:flex' : 'hidden xl:flex';
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -185,16 +229,16 @@ export default function Navbar() {
             <div className="hidden lg:flex items-center gap-4">
               
               {/* JOIN TRIBE BUTTON (Hidden for Admins and Members) */}
-              {(!isMember && !isAdmin) && (membershipOpen || !user) && (
+              {joinWanted && (
                 <button 
                   onClick={() => { 
                     if (user) {
                       setShowMembershipModal(true); 
                     }
                   }}
-                  className="px-5 lg:px-6 xl:px-8 py-2.5 xl:py-3 rounded-full bg-brandRed text-white font-black uppercase text-[10px] tracking-widest hover:bg-white hover:text-black transition-all duration-300 shadow-[0_0_20px_rgba(255,0,0,0.3)] active:scale-95 whitespace-nowrap"
+                  className={`px-5 lg:px-6 xl:px-8 py-2.5 xl:py-3 rounded-full bg-brandRed text-white font-black uppercase text-[10px] tracking-widest hover:bg-white hover:text-black transition-all duration-300 shadow-[0_0_20px_rgba(255,0,0,0.3)] active:scale-95 whitespace-nowrap ${joinHide}`}
                 >
-                  {user ? "Join Tribe" : membershipOpen ? "Login / Join" : "Login"}
+                  {user ? "Join Tribe" : membershipOpen !== false ? "Login / Join" : "Login"}
                 </button>
               )}
 
@@ -204,7 +248,7 @@ export default function Navbar() {
                     href={isAdmin ? "/admin" : "/profile"}
                     aria-label={isAdmin ? "Admin dashboard" : "My profile"}
                     title={isAdmin ? "Admin dashboard" : "My profile"}
-                    className={`flex items-center gap-3 backdrop-blur-md border p-1.5 2xl:pr-5 rounded-full transition-all ${
+                    className={`flex items-center gap-3 backdrop-blur-md border p-1.5 ${joinWanted ? '2xl:pr-5' : 'xl:pr-5'} rounded-full transition-all ${
                       isAdmin
                         ? 'bg-brandRed/10 border-brandRed/30 shadow-[0_0_15px_rgba(255,0,0,0.2)]'
                         : isMember 
@@ -232,7 +276,7 @@ export default function Navbar() {
                       )}
                     </div>
                     
-                    <div className="hidden 2xl:flex flex-col text-left">
+                    <div className={`${nameShow} flex-col text-left`}>
                       <div className="flex items-center gap-1.5">
                         <span className={`font-black uppercase tracking-widest leading-none mb-1 ${
                           isAdmin 
@@ -261,12 +305,12 @@ export default function Navbar() {
             </div>
 
            {/* JOIN TRIBE BUTTON (MOBILE) */}
-            {(!isMember && !isAdmin) && (membershipOpen || !user) && (
+            {joinWanted && (
               <button 
                 onClick={() => { 
                   if (user) setShowMembershipModal(true); 
                 }}
-                className="lg:hidden px-4 min-h-[40px] rounded-full bg-brandRed text-white font-black uppercase text-[10px] tracking-widest active:scale-95 whitespace-nowrap"
+                className={`lg:hidden px-4 min-h-[40px] rounded-full bg-brandRed text-white font-black uppercase text-[10px] tracking-widest active:scale-95 whitespace-nowrap ${joinHide}`}
               >
                 {user ? "Join" : "Login"}
               </button>
@@ -332,7 +376,7 @@ export default function Navbar() {
               <div className="pt-6 sm:pt-8 border-t border-white/10 space-y-5">
                 
                {/* MOBILE MENU BUTTONS */}
-                {(!isMember && !isAdmin) && (membershipOpen || !user) && (
+                {joinWanted && (
                   <button 
                     onClick={() => {
                       setIsMobileMenuOpen(false);
@@ -340,9 +384,9 @@ export default function Navbar() {
                         setShowMembershipModal(true);
                       }
                     }}
-                    className="w-full py-4 rounded-full bg-brandRed text-white font-black uppercase text-[11px] tracking-widest shadow-[0_0_20px_rgba(255,0,0,0.3)] mb-4"
+                    className={`w-full py-4 rounded-full bg-brandRed text-white font-black uppercase text-[11px] tracking-widest shadow-[0_0_20px_rgba(255,0,0,0.3)] mb-4 ${joinHide}`}
                   >
-                    {user ? "Join Tribe" : membershipOpen ? "Login / Join" : "Login"}
+                    {user ? "Join Tribe" : membershipOpen !== false ? "Login / Join" : "Login"}
                   </button>
                 )}
 
@@ -415,7 +459,7 @@ export default function Navbar() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {showMembershipModal && membershipOpen && (
+        {showMembershipModal && membershipOpen !== false && (
           <div className="fixed inset-0 z-[200] overflow-y-auto overscroll-contain">
            <div className="relative min-h-full flex items-center justify-center p-4 py-10">
             <motion.div 

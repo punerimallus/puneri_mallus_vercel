@@ -20,17 +20,15 @@ export async function POST(req: Request) {
     const { eventId, categories } = await req.json().catch(() => ({}));
     if (!eventId || typeof eventId !== 'string') return NextResponse.json({ error: 'Event is missing.' }, { status: 400 });
 
-    // Does the database already have the group_size column? (Added by the ticketing SQL script.)
-    let hasGroupColumn = true;
-    let read = await supabaseAdmin.from('event_ticket_categories').select('id, name, sold, group_size').eq('event_id', eventId);
-    if (read.error && isMissingGroupColumn(read.error)) {
-      hasGroupColumn = false;
-      read = (await supabaseAdmin.from('event_ticket_categories').select('id, name, sold').eq('event_id', eventId)) as typeof read;
-    }
+    // Read every column so this works whichever optional columns (group_size, released) the database already has.
+    const read = await supabaseAdmin.from('event_ticket_categories').select('*').eq('event_id', eventId);
     if (read.error) throw read.error;
     const existing = read.data;
+    // Does the database already have the group_size column? (Added by the ticketing SQL script.) With no rows to look at, assume yes:
+    // if it is missing, saving a group ticket below answers with a clear message.
+    const hasGroupColumn = !existing?.length || 'group_size' in existing[0];
 
-    const check = checkCategoryConfig(categories, (existing || []) as { id: string; name: string; sold: number | null }[]);
+    const check = checkCategoryConfig(categories, (existing || []) as { id: string; name: string; sold: number | null; released?: number | null }[]);
     if (!check.ok) return NextResponse.json({ error: check.error }, { status: 400 });
 
     // Without the column, ordinary ticket setups still save exactly as before; only group tickets need it.

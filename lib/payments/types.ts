@@ -47,7 +47,10 @@ export interface IssuedTicket {
 export interface Allocation {
   categoryId: string;
   qty: number;
+  /** The category's sold counter after this order took its seats. Older orders issued numbers as the range ending here. */
   endSold: number;
+  /** The exact ticket numbers issued: the lowest ones nobody holds. Absent on orders from before numbers were reused. */
+  numbers?: number[];
 }
 
 export interface PaymentOrder {
@@ -71,6 +74,10 @@ export interface PaymentOrder {
   allocated_tickets: Allocation[] | null;
   booking_id: string | null;
   loyalty_applied: boolean;
+  /** Set once a full refund has taken the earned points back and returned the redeemed ones. */
+  loyalty_reversed?: boolean;
+  /** Set once a full refund has given the order's seats back to the categories. */
+  seats_released?: boolean;
   ledger_recorded: boolean;
   email_status: 'PENDING' | 'SENT' | 'FAILED' | 'SKIPPED';
   email_attempts: number;

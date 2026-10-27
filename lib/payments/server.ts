@@ -140,8 +140,14 @@ export const fulfilmentDeps: FulfilmentDeps = {
     }
   },
 
-  async allocateTickets(items) {
-    const { data, error } = await supabaseAdmin().rpc('allocate_tickets', { p_items: items });
+  async allocateTickets(items, orderId) {
+    const db = supabaseAdmin();
+    // The current function takes the order id and saves the chosen numbers on the order in the same transaction.
+    let { data, error } = await db.rpc('allocate_tickets', { p_items: items, p_order_id: orderId ?? null });
+    if (error && /p_order_id|could not find the function|PGRST202/i.test(`${error.code} ${error.message}`)) {
+      // The ticket-number SQL (20261025) is not applied yet: use the older one-argument function. Numbers then follow the sold counter.
+      ({ data, error } = await db.rpc('allocate_tickets', { p_items: items }));
+    }
     if (error) {
       const m = /SOLD_OUT:(.*)/.exec(error.message);
       if (m) throw new SoldOutError(m[1].trim());
@@ -182,6 +188,24 @@ export const fulfilmentDeps: FulfilmentDeps = {
       status: status === 'REFUNDED' ? 'REFUNDED' : t.status,
     }));
     await must(db.from('ticket_bookings').update({ status, tickets_data: tickets }).eq('id', bookingId));
+  },
+
+  async releaseSeats(orderId) {
+    const { data, error } = await supabaseAdmin().rpc('release_order_seats', { p_order_id: orderId });
+    if (error) throw new Error(error.message);
+    return Number(data) || 0;
+  },
+
+  async claimLoyaltyReversal(orderId) {
+    const { data, error } = await supabaseAdmin()
+      .from('payment_orders')
+      .update({ loyalty_reversed: true })
+      .eq('razorpay_order_id', orderId)
+      .eq('loyalty_applied', true)
+      .eq('loyalty_reversed', false)
+      .select('razorpay_order_id');
+    if (error) throw new Error(error.message);
+    return !!data && data.length > 0;
   },
 
   async adjustLoyalty(userId, delta) {

@@ -1,6 +1,7 @@
 import { insertBookingWithAmountFallback } from '@/lib/payments/booking-amount';
 import { vi } from 'vitest';
 import { FulfilmentDeps, BookingInsert } from '@/lib/payments/fulfil';
+import { seatsInUse } from '@/lib/payments/seats';
 import { Allocation, GatewayPayment, PaymentOrder, SoldOutError } from '@/lib/payments/types';
 
 export function makeOrder(overrides: Partial<PaymentOrder> = {}): PaymentOrder {
@@ -50,6 +51,8 @@ export function makeWorld(initial: PaymentOrder[] = [makeOrder()], payments: Gat
   const orders = new Map(initial.map((o) => [o.razorpay_order_id, { ...o }]));
   const bookings = new Map<string, BookingInsert & { id: string; status: string }>();
   const sold: Record<string, number> = { cat_vip: 10, cat_ga: 41 };
+  const released: Record<string, number> = { cat_vip: 0, cat_ga: 0 };
+  const allocatedQty: Record<string, number> = { cat_vip: 0, cat_ga: 0 };
   const capacity: Record<string, number> = { cat_vip: 50, cat_ga: 100 };
   const loyalty: Record<string, number> = { user_1: 100 };
   const alerts: string[] = [];
@@ -85,14 +88,32 @@ export function makeWorld(initial: PaymentOrder[] = [makeOrder()], payments: Gat
       p.status = 'captured';
       return { ...p };
     }),
-    allocateTickets: vi.fn(async (items: { categoryId: string; qty: number }[]) => {
+    // Same rules as the allocate_tickets SQL: capacity counts seats in use; each ticket gets the lowest number nobody holds
+    // (numbers held by refunded orders are free); the numbers are saved on the order in the same step.
+    allocateTickets: vi.fn(async (items: { categoryId: string; qty: number }[], orderId?: string) => {
       for (const i of items) {
-        if (sold[i.categoryId] + i.qty > capacity[i.categoryId]) throw new SoldOutError(i.categoryId);
+        if (seatsInUse({ sold: sold[i.categoryId], released: released[i.categoryId] }) + i.qty > capacity[i.categoryId]) throw new SoldOutError(i.categoryId);
       }
-      return items.map((i): Allocation => {
+      const result = items.map((i): Allocation => {
+        const held = new Set<number>();
+        // Tickets sold before this world started (the starting sold counter) hold numbers 1..N.
+        for (let n = 1; n <= sold[i.categoryId] - allocatedQty[i.categoryId]; n++) held.add(n);
+        for (const o of orders.values()) {
+          if (o.seats_released) continue;
+          for (const a of o.allocated_tickets || []) {
+            if (a.categoryId !== i.categoryId) continue;
+            const nums = a.numbers ?? Array.from({ length: a.qty }, (_, k) => a.endSold - a.qty + 1 + k);
+            nums.forEach((n) => held.add(n));
+          }
+        }
+        const numbers: number[] = [];
+        for (let n = 1; numbers.length < i.qty; n++) if (!held.has(n)) numbers.push(n);
         sold[i.categoryId] += i.qty;
-        return { categoryId: i.categoryId, qty: i.qty, endSold: sold[i.categoryId] };
+        allocatedQty[i.categoryId] += i.qty;
+        return { categoryId: i.categoryId, qty: i.qty, endSold: sold[i.categoryId], numbers };
       });
+      if (orderId && orders.has(orderId)) orders.get(orderId)!.allocated_tickets = result;
+      return result;
     }),
     // Behaves like production: ticket_bookings.amount_paid is an INTEGER column, so a fractional amount is
     // rejected exactly as Postgres does ("invalid input syntax for type integer"). Goes through the same
@@ -119,6 +140,25 @@ export function makeWorld(initial: PaymentOrder[] = [makeOrder()], payments: Gat
     adjustLoyalty: vi.fn(async (uid: string, delta: number) => {
       loyalty[uid] = Math.max(0, (loyalty[uid] || 0) + delta);
     }),
+    // Mirrors release_order_seats: exactly once per order, only for seats that were really allocated.
+    releaseSeats: vi.fn(async (orderId: string) => {
+      const o = orders.get(orderId);
+      if (!o || o.seats_released || !o.allocated_tickets?.length) return 0;
+      let n = 0;
+      for (const a of o.allocated_tickets) {
+        const give = Math.min(a.qty, sold[a.categoryId] - released[a.categoryId]);
+        released[a.categoryId] += give;
+        n += give;
+      }
+      o.seats_released = true;
+      return n;
+    }),
+    claimLoyaltyReversal: vi.fn(async (orderId: string) => {
+      const o = orders.get(orderId);
+      if (!o || !o.loyalty_applied || o.loyalty_reversed) return false;
+      o.loyalty_reversed = true;
+      return true;
+    }),
     hasOtherFulfilledMembership: vi.fn(async (uid: string, exclude: string) =>
       [...orders.values()].some((o) => o.user_id === uid && o.payment_type === 'LIFETIME' && o.status === 'FULFILLED' && o.razorpay_order_id !== exclude),
     ),
@@ -137,6 +177,7 @@ export function makeWorld(initial: PaymentOrder[] = [makeOrder()], payments: Gat
     orders,
     bookings,
     sold,
+    released,
     capacity,
     loyalty,
     alerts,

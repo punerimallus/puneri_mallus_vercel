@@ -5,6 +5,7 @@ import { useAlert } from '@/context/AlertContext';
 import { createBrowserClient } from '@supabase/ssr';
 import { useRouter } from 'next/navigation';
 import { waitForOrder, orderRef } from '@/lib/payments/client';
+import { seatsLeft } from '@/lib/payments/seats';
 import MyTickets from '@/components/MyTickets';
 import { maskNumber, normalizeWhatsAppNumber } from '@/lib/whatsapp';
 import { groupSizeOf, isGroup, pricePerPerson } from '@/lib/payments/groups';
@@ -354,7 +355,7 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
                 <div className="space-y-3">
                   {categories.map(cat => {
                     const qty = cart[cat.id] || 0;
-                    const remaining = cat.capacity - cat.sold;
+                    const remaining = seatsLeft(cat) ?? Number.MAX_SAFE_INTEGER;
                     const isSoldOut = remaining <= 0;
                     const isFastFilling = remaining <= 10 && remaining > 0;
                     

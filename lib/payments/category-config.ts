@@ -1,6 +1,7 @@
 // Validation for the admin "Configure Tickets" form, kept pure so every bad input can be tested.
 
 import { MAX_GROUP_SIZE, groupSizeOf } from './groups';
+import { seatsInUse } from './seats';
 
 export interface CategoryInput {
   id?: string;
@@ -16,6 +17,7 @@ export interface ExistingCategory {
   id: string;
   name: string;
   sold: number | null;
+  released?: number | null;
 }
 
 export interface CleanCategory {
@@ -36,7 +38,7 @@ export function checkCategoryConfig(input: unknown, existing: ExistingCategory[]
   if (!Array.isArray(input)) return { ok: false, error: 'Categories are missing.' };
   if (input.length > 30) return { ok: false, error: 'Too many categories (30 is the limit).' };
 
-  const soldById = new Map(existing.map((e) => [e.id, e.sold || 0]));
+  const inUseById = new Map(existing.map((e) => [e.id, seatsInUse(e)]));
   const clean: CleanCategory[] = [];
   const seenNames = new Set<string>();
   const seenPrefixes = new Set<string>();
@@ -58,8 +60,9 @@ export function checkCategoryConfig(input: unknown, existing: ExistingCategory[]
 
     const capacity = Number(raw.capacity);
     if (!Number.isInteger(capacity) || capacity < 1) return { ok: false, error: `"${label}": capacity must be a whole number, at least 1.` };
-    const sold = raw.id ? soldById.get(String(raw.id)) || 0 : 0;
-    if (capacity < sold) return { ok: false, error: `"${label}": ${sold} already sold, so capacity cannot go below ${sold}.` };
+    // Refunded seats are free again, so only seats still held by valid tickets stop capacity from being lowered.
+    const inUse = raw.id ? inUseById.get(String(raw.id)) || 0 : 0;
+    if (capacity < inUse) return { ok: false, error: `"${label}": ${inUse} seats are already taken, so capacity cannot go below ${inUse}.` };
 
     // A blank group size means an ordinary ticket; anything else must be a real group (2 or more).
     const rawGroup = raw.group_size;

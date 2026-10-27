@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAlert } from '@/context/AlertContext';
+import { seatsInUse } from '@/lib/payments/seats';
 
 export default function BoxOfficeDashboard() {
   const [events, setEvents] = useState<any[]>([]);
@@ -152,8 +153,9 @@ export default function BoxOfficeDashboard() {
                     
                     <div className="flex justify-between items-end border-t border-white/5 pt-4">
                       <div>
-                        <p className="text-[9px] text-zinc-600 font-black uppercase tracking-widest mb-1">Passes Sold</p>
-                        <p className="text-2xl font-black text-white">{cat.sold} <span className="text-sm text-zinc-600">/ {cat.capacity}</span></p>
+                        <p className="text-[9px] text-zinc-600 font-black uppercase tracking-widest mb-1">Seats Taken</p>
+                        <p className="text-2xl font-black text-white">{seatsInUse(cat)} <span className="text-sm text-zinc-600">/ {cat.capacity}</span></p>
+                        {(cat.released || 0) > 0 && <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest mt-1">{Math.min(cat.released, cat.sold)} refunded, seats freed</p>}
                       </div>
                       <div className={`text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-full ${cat.active ? 'bg-white/5 text-zinc-400' : 'bg-brandRed text-white animate-pulse'}`}>
                         {cat.active ? 'Live' : 'Paused'}
