@@ -16,8 +16,22 @@ export interface CategoryInput {
 export interface ExistingCategory {
   id: string;
   name: string;
+  /** Seats currently in use. */
   sold: number | null;
   released?: number | null;
+  /** Passes ever issued for this category, which only goes up. Absent on older databases. */
+  issued_total?: number | null;
+}
+
+/**
+ * Has this category ever issued a pass? `sold` now reports seats in USE, so a category whose
+ * every pass was refunded reads zero — and deleting it would strip the category name off those
+ * refunded passes. `issued_total` is the monotonic count that answers this properly.
+ */
+export function everIssued(e: ExistingCategory): boolean {
+  const ever = Number(e.issued_total);
+  if (Number.isFinite(ever) && ever > 0) return true;
+  return (e.sold || 0) > 0;
 }
 
 export interface CleanCategory {
@@ -88,7 +102,7 @@ export function checkCategoryConfig(input: unknown, existing: ExistingCategory[]
   return {
     ok: true,
     categories: clean,
-    remove: dropped.filter((e) => !(e.sold || 0)),
-    deactivate: dropped.filter((e) => (e.sold || 0) > 0),
+    remove: dropped.filter((e) => !everIssued(e)),
+    deactivate: dropped.filter((e) => everIssued(e)),
   };
 }

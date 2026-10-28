@@ -2,6 +2,16 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function proxy(request: NextRequest) {
+  // Keeps already-printed passes working. Every QR issued before the gate was split out of the
+  // admin area points at /admin/scanner, which sits under the admin-only layout — a volunteer
+  // scanning one would be redirected to the home page before the page ever ran. This runs
+  // before layouts do, so they land on /gate with their bid/tno/sig intact.
+  if (request.nextUrl.pathname === '/admin/scanner' || request.nextUrl.pathname.startsWith('/admin/scanner/')) {
+    const gate = request.nextUrl.clone()
+    gate.pathname = '/gate'
+    return NextResponse.redirect(gate)
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   })

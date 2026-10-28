@@ -14,6 +14,13 @@ export interface TicketPdfInput {
   baseUrl: string;
   /** Known payment details make the receipt exact. Optional: without them the receipt is derived from the passes. */
   payment?: { orderId?: string | null; paymentId?: string | null; totalPaidPaise?: number | null; paidAt?: Date | string | null };
+  /**
+   * Signs each pass QR so a hand-made one is refused at the gate. Injected rather than imported
+   * so this module stays free of secrets and testable on its own; the server passes
+   * `signTicket` from ticket-signature.ts. Without it the QR is unsigned, which is what
+   * already-printed passes look like.
+   */
+  signTicket?: (bookingId: string, ticketNumber: string) => string;
 }
 
 export async function fetchLogoBase64(baseUrl: string): Promise<string | null> {
@@ -111,7 +118,7 @@ const wrap = (doc: Doc, text: string, width: number, maxLines: number): string[]
 
 /** Builds the e-ticket PDF: one page per pass, then a payment summary. */
 export async function buildTicketPdf(input: TicketPdfInput): Promise<jsPDF> {
-  const { bookingId, purchaserEmail, event, tickets, pointsApplied, logoBase64, baseUrl, payment } = input;
+  const { bookingId, purchaserEmail, event, tickets, pointsApplied, logoBase64, baseUrl, payment, signTicket } = input;
   const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
   const ref = bookingId.split('-')[0].toUpperCase();
   const issued = payment?.paidAt ? formatIst(payment.paidAt) : formatIst(new Date());
@@ -222,7 +229,7 @@ export async function buildTicketPdf(input: TicketPdfInput): Promise<jsPDF> {
     doc.setCharSpace(0);
 
     // QR
-    const scanUrl = buildScanUrl(baseUrl, bookingId, ticket.ticketNumber);
+    const scanUrl = buildScanUrl(baseUrl, bookingId, ticket.ticketNumber, signTicket?.(bookingId, ticket.ticketNumber));
     const qr = await QRCode.toDataURL(scanUrl, { margin: 1, width: 480, errorCorrectionLevel: 'M', color: { dark: '#000000', light: '#ffffff' } });
     const qrSize = 46;
     const qrX = perfX + (M + CW - perfX - qrSize) / 2;

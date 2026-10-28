@@ -2,6 +2,7 @@ import { getRequestUser } from '@/lib/admin';
 import { NextResponse, after } from 'next/server';
 import { isValidCheckoutSignature } from '@/lib/payments/signature';
 import { fulfilAndDeliver } from '@/lib/payments/server';
+import { RATE_RULES, rateKey, rateLimit } from '@/lib/rate-limit';
 
 // Called by the browser's Razorpay handler for membership and Mallu Mart payments.
 // The browser only tells us WHICH order was paid; what it was for and whether it
@@ -12,6 +13,11 @@ export async function POST(req: Request) {
     const user = await getRequestUser();
     if (!user) {
       return NextResponse.json({ error: "Unauthorized: Invalid Session" }, { status: 401 });
+    }
+
+    const limit = rateLimit(rateKey('verifyPayment', user.id, req), RATE_RULES.verifyPayment);
+    if (!limit.ok) {
+      return NextResponse.json({ error: 'Too many attempts. Please wait a moment.' }, { status: 429, headers: { 'Retry-After': String(limit.retryAfter) } });
     }
 
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = await req.json();

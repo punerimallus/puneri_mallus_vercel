@@ -11,6 +11,7 @@ export type OrderStatus =
   | 'PAID'               // payment confirmed but a fulfilment step errored; retried automatically
   | 'FULFILLED'          // tickets / membership / mart access delivered
   | 'NEEDS_ATTENTION'    // money taken but we could not deliver (sold out, amount mismatch, duplicate)
+  | 'REFUND_INITIATED'   // undeliverable, so we asked Razorpay to refund it automatically
   | 'REFUNDED'
   | 'PARTIALLY_REFUNDED';
 
@@ -37,6 +38,9 @@ export interface EventSnapshot {
 }
 
 export interface IssuedTicket {
+  /** Which category this pass came from. Prices and voiding key off this rather than the name,
+   *  so renaming a category can no longer orphan a pass. Absent on older passes. */
+  categoryId?: string;
   categoryName: string;
   ticketNumber: string;
   status: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED';
@@ -78,6 +82,11 @@ export interface PaymentOrder {
   loyalty_reversed?: boolean;
   /** Set once a full refund has given the order's seats back to the categories. */
   seats_released?: boolean;
+  /** The inventory reservation owning this order's seats, numbers and redeemed points. */
+  reservation_id?: string | null;
+  /** Razorpay refund id, set when we refunded automatically because we could not deliver. */
+  auto_refund_id?: string | null;
+  auto_refund_at?: string | null;
   ledger_recorded: boolean;
   email_status: 'PENDING' | 'SENT' | 'FAILED' | 'SKIPPED';
   email_attempts: number;
@@ -111,6 +120,30 @@ export class SoldOutError extends Error {
   constructor(public categoryName: string) {
     super(`SOLD_OUT:${categoryName}`);
     this.name = 'SoldOutError';
+  }
+}
+
+/** A reservation that should have been ours has gone (expired, swept or released). */
+export class ReservationLostError extends Error {
+  constructor(public reservationId: string) {
+    super(`RESERVATION_LOST:${reservationId}`);
+    this.name = 'ReservationLostError';
+  }
+}
+
+/** The buyer already holds as many passes for this event as the rules allow. */
+export class TicketLimitError extends Error {
+  constructor(public kind: 'SINGLE' | 'GROUP', public max: number) {
+    super(`LIMIT_${kind}:${max}`);
+    this.name = 'TicketLimitError';
+  }
+}
+
+/** Fewer loyalty points are available than the buyer asked to redeem. */
+export class PointsUnavailableError extends Error {
+  constructor(public available: number) {
+    super(`POINTS_UNAVAILABLE:${available}`);
+    this.name = 'PointsUnavailableError';
   }
 }
 

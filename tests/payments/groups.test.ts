@@ -58,9 +58,9 @@ describe('group tickets at checkout', () => {
     const order: any = { cart: [{ categoryId: 'grp5', name: 'GROUP OF 5 - GENERAL', prefix: 'G5-', qty: 2, unitPrice: 2000, groupSize: 5 }, { categoryId: 'single', name: 'GENERAL', prefix: 'GEN-', qty: 1, unitPrice: 500 }] };
     const t = buildIssuedTickets(order, [{ categoryId: 'grp5', qty: 2, endSold: 4 }, { categoryId: 'single', qty: 1, endSold: 10 }]);
     expect(t).toEqual([
-      { categoryName: 'GROUP OF 5 - GENERAL', ticketNumber: 'G5-003', status: 'ISSUED', groupSize: 5 },
-      { categoryName: 'GROUP OF 5 - GENERAL', ticketNumber: 'G5-004', status: 'ISSUED', groupSize: 5 },
-      { categoryName: 'GENERAL', ticketNumber: 'GEN-010', status: 'ISSUED' },
+      { categoryId: 'grp5', categoryName: 'GROUP OF 5 - GENERAL', ticketNumber: 'G5-003', status: 'ISSUED', groupSize: 5 },
+      { categoryId: 'grp5', categoryName: 'GROUP OF 5 - GENERAL', ticketNumber: 'G5-004', status: 'ISSUED', groupSize: 5 },
+      { categoryId: 'single', categoryName: 'GENERAL', ticketNumber: 'GEN-010', status: 'ISSUED' },
     ]);
   });
 });

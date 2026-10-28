@@ -19,8 +19,10 @@ export async function GET(req: Request) {
     if (new URL(req.url).searchParams.get('view') === 'orders') {
       const { data: orders, error } = await supabaseAdmin
         .from('payment_orders')
-        .select('razorpay_order_id, razorpay_payment_id, payment_type, plan, receipt_email, amount_paise, status, status_reason, email_status, email_error, booking_id, created_at, fulfilled_via')
-        .or('status.in.(PAID,PROCESSING,NEEDS_ATTENTION,PARTIALLY_REFUNDED),email_status.eq.FAILED')
+        .select('razorpay_order_id, razorpay_payment_id, payment_type, plan, receipt_email, amount_paise, status, status_reason, email_status, email_error, booking_id, created_at, fulfilled_via, auto_refund_id, auto_refund_at')
+        // REFUND_INITIATED is included so an admin can see what we refunded on their behalf; it
+        // clears to REFUNDED once Razorpay confirms the refund.
+        .or('status.in.(PAID,PROCESSING,NEEDS_ATTENTION,REFUND_INITIATED,PARTIALLY_REFUNDED),email_status.eq.FAILED')
         .order('created_at', { ascending: false })
         .limit(100);
       if (error) throw error;

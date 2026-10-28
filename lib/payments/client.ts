@@ -1,14 +1,14 @@
 // Browser helpers shared by every checkout page.
 
 export interface OrderStatusResponse {
-  status: 'CREATED' | 'FAILED' | 'PROCESSING' | 'PAID' | 'FULFILLED' | 'NEEDS_ATTENTION' | 'REFUNDED' | 'PARTIALLY_REFUNDED' | 'UNKNOWN';
+  status: 'CREATED' | 'FAILED' | 'PROCESSING' | 'PAID' | 'FULFILLED' | 'NEEDS_ATTENTION' | 'REFUND_INITIATED' | 'REFUNDED' | 'PARTIALLY_REFUNDED' | 'UNKNOWN';
   paymentType?: string;
   bookingId?: string | null;
   emailStatus?: string;
   reason?: string | null;
 }
 
-const FINAL = new Set(['FULFILLED', 'NEEDS_ATTENTION', 'REFUNDED', 'PARTIALLY_REFUNDED']);
+const FINAL = new Set(['FULFILLED', 'NEEDS_ATTENTION', 'REFUND_INITIATED', 'REFUNDED', 'PARTIALLY_REFUNDED']);
 
 /**
  * Ask the server what happened to an order until it settles or we give up.

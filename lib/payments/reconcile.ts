@@ -1,6 +1,7 @@
 import { MAX_EMAIL_ATTEMPTS, STALE_PROCESSING_MS } from './fulfil';
 import { deliverOrderEmail } from './delivery';
 import { deliveryDeps, fulfilAndDeliver, supabaseAdmin } from './server';
+import { expireStaleHolds } from './inventory';
 
 // Orders younger than this are left alone: the browser handler or webhook is probably still on it.
 const MIN_AGE_MS = 2 * 60 * 1000;
@@ -11,6 +12,8 @@ export interface ReconcileSummary {
   needsAttention: string[];
   errors: { orderId: string; error: string }[];
   emailsRetried: number;
+  /** Abandoned checkout holds whose seats and points were given back. */
+  holdsExpired: number;
   emailsSent: number;
 }
 
@@ -23,7 +26,11 @@ export async function reconcilePayments(opts: { maxAgeDays?: number; limit?: num
   const limit = opts.limit ?? 200;
   const now = Date.now();
   const db = supabaseAdmin();
-  const summary: ReconcileSummary = { checked: 0, fulfilled: [], needsAttention: [], errors: [], emailsRetried: 0, emailsSent: 0 };
+  const summary: ReconcileSummary = { checked: 0, fulfilled: [], needsAttention: [], errors: [], emailsRetried: 0, emailsSent: 0, holdsExpired: 0 };
+
+  // Seats and points held by checkouts nobody finished. Cheap, and the only thing that keeps an
+  // abandoned cart from sitting on inventory indefinitely.
+  summary.holdsExpired = await expireStaleHolds({ rpc: (fn, args) => db.rpc(fn, args) }).catch(() => 0);
 
   const staleIso = new Date(now - STALE_PROCESSING_MS).toISOString();
   const { data: pending, error } = await db

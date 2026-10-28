@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { checkAdminAccess, getRequestUser } from '@/lib/admin';
 import { resendBooking, supabaseAdmin } from '@/lib/payments/server';
+import { RATE_RULES, rateKey, rateLimit } from '@/lib/rate-limit';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -14,6 +15,16 @@ export async function POST(req: Request) {
 
   const user = await getRequestUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  // On top of the per-booking interval below: stops someone looping this to send a stream of
+  // PDFs (and burn Resend quota) across several of their bookings at once.
+  const limit = rateLimit(rateKey('resendEmail', user.id, req), RATE_RULES.resendEmail);
+  if (!limit.ok) {
+    return NextResponse.json(
+      { error: 'Too many resend requests. Please wait a few minutes.' },
+      { status: 429, headers: { 'Retry-After': String(limit.retryAfter) } },
+    );
+  }
 
   const { data: booking } = await supabaseAdmin().from('ticket_bookings').select('id, user_id').eq('id', bookingId).maybeSingle();
   if (!booking) return NextResponse.json({ error: 'Booking not found' }, { status: 404 });

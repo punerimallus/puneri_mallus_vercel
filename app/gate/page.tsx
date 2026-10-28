@@ -1,25 +1,31 @@
 "use client";
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { CheckCircle2, XCircle, AlertTriangle, Loader2, Minus, Plus, Users } from 'lucide-react';
+import { CheckCircle2, XCircle, AlertTriangle, Loader2, Minus, Plus, Users, ShieldCheck, ShieldAlert, Clock } from 'lucide-react';
 import { formatEventDate } from '@/lib/payments/format';
 
 type Details = { ticketNumber: string; categoryName: string; groupSize: number; admitted: number; remaining: number };
 type EventInfo = { title?: string; date?: string; time?: string; location?: string } | null;
-type Phase = 'loading' | 'ready' | 'admitting' | 'success' | 'used' | 'error';
+type Gate = { window: 'OPEN' | 'EARLY' | 'CLOSED' | 'UNKNOWN'; eventDay: string; signed: boolean };
+type Actor = { role: 'ADMIN' | 'SCANNER'; email: string };
+type Phase = 'loading' | 'ready' | 'admitting' | 'success' | 'used' | 'error' | 'blocked';
 
-function ScannerContent() {
+function GateContent() {
   const searchParams = useSearchParams();
   const bid = searchParams.get('bid');
   const tno = searchParams.get('tno');
+  const sig = searchParams.get('sig');
 
   const [phase, setPhase] = useState<Phase>('loading');
   const [message, setMessage] = useState('');
   const [details, setDetails] = useState<Details | null>(null);
   const [event, setEvent] = useState<EventInfo>(null);
-  const [day, setDay] = useState<string>('UNKNOWN');
+  const [gate, setGate] = useState<Gate | null>(null);
+  const [actor, setActor] = useState<Actor | null>(null);
   const [count, setCount] = useState(1);
   const [justAdmitted, setJustAdmitted] = useState(0);
+  // An admin can admit outside the event's gate window, but only after confirming it.
+  const [needsOverride, setNeedsOverride] = useState(false);
   // For a group with several people still outside: first ask "is everyone here?", and only if not, how many are.
   const [mode, setMode] = useState<'ask' | 'partial'>('ask');
   // Blocks a double submit (Enter pressed while a button is focused fires both the key handler and the click).
@@ -30,23 +36,31 @@ function ScannerContent() {
   };
 
   const post = (payload: Record<string, unknown>) =>
-    fetch('/api/admin/tickets/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bookingId: bid, ticketNumber: tno, ...payload }) });
+    fetch('/api/gate/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bookingId: bid, ticketNumber: tno, sig, ...payload }),
+    });
 
   const lookup = useCallback(async () => {
     if (!bid || !tno) return;
     setPhase('loading');
+    setNeedsOverride(false);
     try {
       const res = await post({ action: 'lookup' });
       const data = await res.json();
       if (!res.ok) {
         setMessage(data.error || 'Verification failed.');
-        setPhase('error');
+        // A forged QR, the wrong event or a closed gate is not "try again", it is "do not admit".
+        setPhase(['BAD_SIGNATURE', 'WRONG_EVENT', 'UNSIGNED'].includes(data.code) ? 'blocked' : 'error');
+        if (data.gate) setGate(data.gate);
         vibrate('error');
         return;
       }
       setDetails(data.ticketDetails);
       setEvent(data.event);
-      setDay(data.eventDay || 'UNKNOWN');
+      setGate(data.gate || null);
+      setActor(data.actor || null);
       setCount(Math.max(1, data.ticketDetails.remaining));
       setMode('ask');
       setPhase(data.ticketDetails.remaining === 0 ? 'used' : 'ready');
@@ -56,23 +70,34 @@ function ScannerContent() {
       setPhase('error');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bid, tno]);
+  }, [bid, tno, sig]);
 
   useEffect(() => { lookup(); }, [lookup]);
 
-  const admit = useCallback(async (howMany?: number) => {
+  const admit = useCallback(async (howMany?: number, override = false) => {
     if (!details || phase !== 'ready' || submitting.current) return;
     submitting.current = true;
     const admitCount = howMany ?? count;
     setPhase('admitting');
     try {
-      const res = await post({ action: 'admit', count: admitCount });
+      const res = await post({ action: 'admit', count: admitCount, override });
       const data = await res.json();
       if (res.ok) {
         setDetails(data.ticketDetails);
         setJustAdmitted(data.admittedNow);
+        setNeedsOverride(false);
         setPhase('success');
         vibrate('success');
+      } else if (data.needsOverride) {
+        // Admin, outside the gate window: show what is wrong and make them confirm.
+        setMessage(data.error);
+        setNeedsOverride(true);
+        setPhase('ready');
+        vibrate('error');
+      } else if (data.code?.startsWith('GATE_')) {
+        setMessage(data.error);
+        setPhase('blocked');
+        vibrate('error');
       } else if (res.status === 409) {
         setMessage(data.error);
         setPhase('used');
@@ -105,16 +130,16 @@ function ScannerContent() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Enter' || phase !== 'ready' || !details) return;
       e.preventDefault();
-      // On the question screen Enter means "yes, everyone is here".
+      if (needsOverride) return; // never let Enter silently override the gate window
       if (askFirst && mode === 'ask') admit(details.remaining); else admit();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [phase, admit, askFirst, mode, details]);
+  }, [phase, admit, askFirst, mode, details, needsOverride]);
 
   if (!bid || !tno) {
     return (
-      <div className="flex flex-col items-center justify-center h-[80vh] text-center space-y-4">
+      <div className="flex flex-col items-center justify-center h-[80vh] text-center space-y-4 px-6">
         <AlertTriangle size={64} className="text-brandRed" />
         <h1 className="text-2xl font-black uppercase tracking-widest text-white">Invalid QR</h1>
         <p className="text-zinc-500">Please scan a valid Puneri Mallus ticket.</p>
@@ -124,15 +149,42 @@ function ScannerContent() {
 
   const isGroup = (details?.groupSize || 1) > 1;
 
+  const WhoIsScanning = () => actor ? (
+    <div className="w-full flex items-center justify-between gap-3 text-[10px] font-bold uppercase tracking-widest text-zinc-500">
+      <span className="truncate">{actor.email}</span>
+      <span className={`shrink-0 px-2 py-1 rounded-md border ${actor.role === 'ADMIN' ? 'text-brandRed border-brandRed/30 bg-brandRed/10' : 'text-sky-400 border-sky-400/30 bg-sky-400/10'}`}>
+        {actor.role === 'ADMIN' ? 'Admin' : 'Gate volunteer'}
+      </span>
+    </div>
+  ) : null;
+
+  const GateBanner = () => {
+    if (!gate) return null;
+    if (gate.window === 'OPEN' && gate.signed) return null;
+    const tone = gate.window === 'OPEN' ? 'amber' : gate.window === 'CLOSED' ? 'red' : 'amber';
+    const text =
+      gate.window === 'EARLY' ? 'The gate for this event is not open yet.'
+      : gate.window === 'CLOSED' ? 'This event is over.'
+      : gate.window === 'UNKNOWN' ? 'This event has no readable date.'
+      : 'Unsigned pass (issued before signed QR codes).';
+    return (
+      <div className={`w-full flex items-start gap-2 text-left rounded-xl px-3 py-2.5 border text-[11px] font-bold uppercase tracking-widest ${
+        tone === 'red' ? 'text-red-400 bg-red-500/10 border-red-500/30' : 'text-amber-400 bg-amber-500/10 border-amber-500/30'
+      }`}>
+        {gate.window === 'OPEN' ? <ShieldAlert size={14} className="mt-px shrink-0" /> : <Clock size={14} className="mt-px shrink-0" />}
+        <span>{text}</span>
+      </div>
+    );
+  };
+
   const EventCard = () => (
-    <div className="w-full text-left bg-black/40 border border-white/10 rounded-2xl p-4 space-y-1">
+    <div className="w-full text-left bg-black/40 border border-white/10 rounded-2xl p-4 space-y-2">
       <p className="text-sm font-black uppercase tracking-widest text-white">{event?.title || 'Event'}</p>
-      <p className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">{formatEventDate(event?.date)}{event?.time ? ` · ${event.time}` : ''}</p>
-      {day !== 'TODAY' && day !== 'UNKNOWN' && (
-        <p className={`mt-2 text-[11px] font-black uppercase tracking-widest rounded-lg px-3 py-2 border ${day === 'PAST' ? 'text-red-400 bg-red-500/10 border-red-500/30' : 'text-amber-400 bg-amber-500/10 border-amber-500/30'}`}>
-          {day === 'PAST' ? 'This pass is for a past date. Event is over.' : 'This pass is for a later date, not today.'}
-        </p>
-      )}
+      <p className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">
+        {formatEventDate(event?.date)}{event?.time ? ` · ${event.time}` : ''}
+      </p>
+      {event?.location && <p className="text-[11px] font-bold uppercase tracking-widest text-zinc-600">{event.location}</p>}
+      <GateBanner />
     </div>
   );
 
@@ -149,13 +201,14 @@ function ScannerContent() {
   ) : null;
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[80vh] max-w-md mx-auto space-y-8">
+    <div className="flex flex-col items-center justify-center min-h-[80vh] max-w-md mx-auto space-y-6">
       <div className="text-center space-y-2">
         <h1 className="text-3xl font-black uppercase italic tracking-tighter">Access <span className="text-brandRed">Control</span></h1>
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-500">Ticket Verification Terminal</p>
       </div>
 
       <div className="w-full bg-zinc-950/80 backdrop-blur-xl border border-white/10 rounded-[40px] p-6 sm:p-8 shadow-2xl flex flex-col items-center text-center relative overflow-hidden gap-5">
+        <WhoIsScanning />
 
         {phase === 'loading' && (
           <div className="py-12 flex flex-col items-center space-y-6">
@@ -173,9 +226,26 @@ function ScannerContent() {
               <p className="text-sm font-black text-brandRed uppercase tracking-widest mt-1">{details.categoryName}</p>
             </div>
             <Progress />
-            {message && <p className="text-xs font-bold text-amber-400">{message}</p>}
 
-            {askFirst && mode === 'ask' ? (
+            {needsOverride ? (
+              <div className="w-full space-y-3">
+                <p className="text-sm font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-4 py-3 rounded-xl">{message}</p>
+                <button
+                  onClick={() => admit(askFirst ? details.remaining : undefined, true)}
+                  disabled={phase === 'admitting'}
+                  className="w-full bg-amber-600 text-white py-5 rounded-2xl font-black uppercase tracking-widest text-sm active:scale-95 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  {phase === 'admitting' ? <Loader2 className="animate-spin" size={18} /> : 'Admit anyway (admin override)'}
+                </button>
+                <button onClick={() => { setNeedsOverride(false); setMessage(''); }} className="text-xs font-bold uppercase tracking-widest text-zinc-500 hover:text-white underline">
+                  Cancel
+                </button>
+              </div>
+            ) : message ? (
+              <p className="text-xs font-bold text-amber-400">{message}</p>
+            ) : null}
+
+            {!needsOverride && (askFirst && mode === 'ask' ? (
               <div className="w-full space-y-3">
                 <p className="text-lg font-black uppercase tracking-widest text-white">Is the whole group here?</p>
                 <p className="text-[11px] font-bold uppercase tracking-widest text-zinc-500">{details.remaining} of {details.groupSize} still to enter</p>
@@ -204,7 +274,7 @@ function ScannerContent() {
               <button onClick={() => admit()} disabled={phase === 'admitting'} className="w-full bg-brandRed text-white py-5 rounded-2xl font-black uppercase tracking-widest text-sm active:scale-95 transition-all shadow-[0_0_30px_rgba(255,0,0,0.3)] disabled:opacity-60 flex items-center justify-center gap-2">
                 {phase === 'admitting' ? <Loader2 className="animate-spin" size={18} /> : isGroup ? `Admit last ${details.remaining === 1 ? 'person' : details.remaining + ' people'}` : 'Verify Entry Now'}
               </button>
-            )}
+            ))}
           </>
         )}
 
@@ -213,6 +283,11 @@ function ScannerContent() {
             <div className="absolute inset-0 bg-green-500/10 blur-[50px] pointer-events-none" />
             <CheckCircle2 size={80} className="text-green-500 drop-shadow-[0_0_15px_rgba(34,197,94,0.5)]" />
             <h2 className="text-3xl font-black uppercase tracking-widest text-green-500">ACCESS GRANTED</h2>
+            {gate?.signed && (
+              <p className="text-[10px] font-bold uppercase tracking-widest text-green-500/70 flex items-center gap-1.5">
+                <ShieldCheck size={12} /> Signed pass verified
+              </p>
+            )}
             <div className="w-full bg-black/50 border border-green-500/20 rounded-2xl p-5 text-left space-y-3">
               {isGroup && (
                 <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 text-center">
@@ -257,6 +332,16 @@ function ScannerContent() {
           </>
         )}
 
+        {phase === 'blocked' && (
+          <>
+            <div className="absolute inset-0 bg-red-600/10 blur-[50px] pointer-events-none" />
+            <ShieldAlert size={80} className="text-red-600 drop-shadow-[0_0_15px_rgba(220,38,38,0.5)]" />
+            <h2 className="text-2xl font-black uppercase tracking-widest text-red-600">Do not admit</h2>
+            <p className="text-sm font-bold text-zinc-300 bg-red-600/15 border border-red-600/30 px-4 py-3 rounded-xl">{message}</p>
+            <p className="text-xs text-zinc-500 uppercase tracking-widest">Send them to the organisers&apos; desk.</p>
+          </>
+        )}
+
         {phase === 'error' && (
           <>
             <div className="absolute inset-0 bg-red-600/10 blur-[50px] pointer-events-none" />
@@ -271,12 +356,12 @@ function ScannerContent() {
   );
 }
 
-export default function TicketScannerPage() {
+export default function GatePage() {
   return (
-    <div className="min-h-screen bg-[#030303] pt-24 pb-40 px-4 text-white">
+    <div className="min-h-screen bg-[#030303] pt-16 pb-24 px-4 text-white">
       {/* Suspense boundary is required by Next.js when using useSearchParams */}
       <Suspense fallback={<div className="flex justify-center pt-32"><Loader2 className="animate-spin text-brandRed" size={32} /></div>}>
-        <ScannerContent />
+        <GateContent />
       </Suspense>
     </div>
   );

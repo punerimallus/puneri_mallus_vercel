@@ -1,8 +1,17 @@
 import { insertBookingWithAmountFallback } from '@/lib/payments/booking-amount';
 import { vi } from 'vitest';
 import { FulfilmentDeps, BookingInsert } from '@/lib/payments/fulfil';
-import { seatsInUse } from '@/lib/payments/seats';
-import { Allocation, GatewayPayment, PaymentOrder, SoldOutError } from '@/lib/payments/types';
+import { ReserveRequest } from '@/lib/payments/inventory';
+import {
+  Allocation,
+  GatewayPayment,
+  OrderStatus,
+  PaymentOrder,
+  PointsUnavailableError,
+  ReservationLostError,
+  SoldOutError,
+  TicketLimitError,
+} from '@/lib/payments/types';
 
 export function makeOrder(overrides: Partial<PaymentOrder> = {}): PaymentOrder {
   return {
@@ -46,18 +55,191 @@ export function payment(overrides: Partial<GatewayPayment> = {}): GatewayPayment
   return { id: 'pay_1', order_id: 'order_1', status: 'captured', amount: 122904, currency: 'INR', ...overrides };
 }
 
-/** In-memory stand-in for Supabase + Razorpay with the same concurrency semantics as the real claim. */
-export function makeWorld(initial: PaymentOrder[] = [makeOrder()], payments: GatewayPayment[] = [payment()]) {
+interface Reservation {
+  reservationId: string;
+  userId: string | null;
+  eventId: string | null;
+  pointsHeld: number;
+  state: 'HELD' | 'CONFIRMED' | 'RELEASED';
+  expiresAt: number;
+}
+
+export interface WorldCategory {
+  capacity: number | null;
+  groupSize: number;
+  eventId: string;
+  /** Numbers already printed on passes before this world started. */
+  preHeld?: number;
+}
+
+/**
+ * In-memory stand-in for Supabase + Razorpay.
+ *
+ * It mirrors the real system's concurrency semantics on purpose: every reservation body runs to
+ * completion without awaiting, exactly like the single Postgres transaction it stands for, so a
+ * test that interleaves a hundred buyers exercises the application-level races (claim, confirm,
+ * refund-vs-fulfil) rather than races the database would never allow.
+ */
+export function makeWorld(
+  initial: PaymentOrder[] = [makeOrder()],
+  payments: GatewayPayment[] = [payment()],
+  categories: Record<string, WorldCategory> = {
+    cat_vip: { capacity: 50, groupSize: 1, eventId: 'evt_1', preHeld: 10 },
+    cat_ga: { capacity: 100, groupSize: 1, eventId: 'evt_1', preHeld: 41 },
+  },
+) {
   const orders = new Map(initial.map((o) => [o.razorpay_order_id, { ...o }]));
   const bookings = new Map<string, BookingInsert & { id: string; status: string }>();
-  const sold: Record<string, number> = { cat_vip: 10, cat_ga: 41 };
-  const released: Record<string, number> = { cat_vip: 0, cat_ga: 0 };
-  const allocatedQty: Record<string, number> = { cat_vip: 0, cat_ga: 0 };
-  const capacity: Record<string, number> = { cat_vip: 50, cat_ga: 100 };
+  const reservations = new Map<string, Reservation>();
+  /** categoryId -> number -> reservationId that holds it. The unique key of the real table. */
+  const numbers = new Map<string, Map<number, string>>();
   const loyalty: Record<string, number> = { user_1: 100 };
+  const loyaltyHeld: Record<string, number> = {};
   const alerts: string[] = [];
+  const refunds: { paymentId: string; amount: number; reason: string }[] = [];
   let now = new Date('2026-09-30T10:05:00.000Z');
   let nextBookingId = 1;
+  let refundShouldFail = false;
+
+  for (const [id, cat] of Object.entries(categories)) {
+    const m = new Map<number, string>();
+    for (let n = 1; n <= (cat.preHeld || 0); n++) m.set(n, `legacy-${id}`);
+    numbers.set(id, m);
+    if (cat.preHeld) {
+      reservations.set(`legacy-${id}`, {
+        reservationId: `legacy-${id}`,
+        userId: null,
+        eventId: cat.eventId,
+        pointsHeld: 0,
+        state: 'CONFIRMED',
+        expiresAt: Infinity,
+      });
+    }
+  }
+
+  const held = (categoryId: string) => numbers.get(categoryId) ?? new Map<number, string>();
+  /** Seats in use, which is what the `sold` column now reports. */
+  const inUse = (categoryId: string) => held(categoryId).size;
+
+  const sweepExpired = () => {
+    let n = 0;
+    for (const r of [...reservations.values()]) {
+      if (r.state === 'HELD' && r.expiresAt < now.getTime()) {
+        releaseReservation(r.reservationId);
+        n++;
+      }
+    }
+    return n;
+  };
+
+  /** Mirrors reserve_order_inventory: one indivisible step, or it throws and changes nothing. */
+  function reserve(req: ReserveRequest): Allocation[] {
+    if (reservations.has(req.reservationId)) {
+      const mine: Allocation[] = [];
+      for (const [categoryId, m] of numbers) {
+        const ns = [...m.entries()].filter(([, r]) => r === req.reservationId).map(([n]) => n).sort((a, b) => a - b);
+        if (ns.length) mine.push({ categoryId, qty: ns.length, endSold: inUse(categoryId), numbers: ns });
+      }
+      return mine;
+    }
+
+    const items = req.items.filter((i) => i.qty > 0);
+    if (items.length === 0) throw new Error('EMPTY_CART');
+    const eventId = categories[items[0].categoryId]?.eventId ?? null;
+
+    // Everything below must either all happen or none of it; build up and only then commit.
+    const take: { categoryId: string; ns: number[] }[] = [];
+    for (const i of [...items].sort((a, b) => a.categoryId.localeCompare(b.categoryId))) {
+      const cat = categories[i.categoryId];
+      if (!cat) throw new Error(`UNKNOWN_CATEGORY:${i.categoryId}`);
+      if (cat.eventId !== eventId) throw new Error('MIXED_EVENT_CART');
+      const m = held(i.categoryId);
+      if (cat.capacity != null && m.size + i.qty > cat.capacity) throw new SoldOutError(i.categoryId);
+      const ns: number[] = [];
+      for (let n = 1; ns.length < i.qty; n++) if (!m.has(n)) ns.push(n);
+      take.push({ categoryId: i.categoryId, ns });
+    }
+
+    // Per-account limits, counted over held AND issued, exactly like the SQL.
+    if (req.userId && eventId) {
+      let singles = 0;
+      let groups = 0;
+      const countFor = (categoryId: string, count: number) => {
+        if ((categories[categoryId]?.groupSize ?? 1) > 1) groups += count;
+        else singles += count;
+      };
+      for (const [categoryId, m] of numbers) {
+        if (categories[categoryId]?.eventId !== eventId) continue;
+        for (const [, resId] of m) {
+          const r = reservations.get(resId);
+          if (r?.userId === req.userId) countFor(categoryId, 1);
+        }
+      }
+      for (const t of take) countFor(t.categoryId, t.ns.length);
+      if (singles > req.maxSingle) throw new TicketLimitError('SINGLE', req.maxSingle);
+      if (groups > req.maxGroup) throw new TicketLimitError('GROUP', req.maxGroup);
+    }
+
+    const points = Math.max(0, Math.floor(req.points || 0));
+    if (points > 0) {
+      if (!req.userId) throw new PointsUnavailableError(0);
+      const available = Math.max(0, (loyalty[req.userId] || 0) - (loyaltyHeld[req.userId] || 0));
+      if (available < points) throw new PointsUnavailableError(available);
+    }
+
+    // Commit.
+    reservations.set(req.reservationId, {
+      reservationId: req.reservationId,
+      userId: req.userId,
+      eventId,
+      pointsHeld: points,
+      state: 'HELD',
+      expiresAt: now.getTime() + (req.ttlSeconds ?? 900) * 1000,
+    });
+    if (points > 0 && req.userId) loyaltyHeld[req.userId] = (loyaltyHeld[req.userId] || 0) + points;
+
+    const out: Allocation[] = [];
+    for (const t of take) {
+      const m = held(t.categoryId);
+      t.ns.forEach((n) => m.set(n, req.reservationId));
+      numbers.set(t.categoryId, m);
+      out.push({ categoryId: t.categoryId, qty: t.ns.length, endSold: m.size, numbers: t.ns });
+    }
+    return out;
+  }
+
+  function confirmReservation(reservationId: string) {
+    const r = reservations.get(reservationId);
+    if (!r) throw new ReservationLostError(reservationId);
+    if (r.state === 'CONFIRMED') return { alreadyConfirmed: true, pointsSpent: r.pointsHeld };
+    if (r.state === 'RELEASED') throw new ReservationLostError(reservationId);
+    r.state = 'CONFIRMED';
+    if (r.pointsHeld > 0 && r.userId) {
+      loyalty[r.userId] = Math.max(0, (loyalty[r.userId] || 0) - r.pointsHeld);
+      loyaltyHeld[r.userId] = Math.max(0, (loyaltyHeld[r.userId] || 0) - r.pointsHeld);
+    }
+    return { alreadyConfirmed: false, pointsSpent: r.pointsHeld };
+  }
+
+  function releaseReservation(reservationId: string): number {
+    const r = reservations.get(reservationId);
+    if (!r || r.state === 'RELEASED') return 0;
+    let freed = 0;
+    for (const [, m] of numbers) {
+      for (const [n, resId] of [...m.entries()]) {
+        if (resId === reservationId) {
+          m.delete(n);
+          freed++;
+        }
+      }
+    }
+    if (r.pointsHeld > 0 && r.userId) {
+      if (r.state === 'CONFIRMED') loyalty[r.userId] = (loyalty[r.userId] || 0) + r.pointsHeld;
+      else loyaltyHeld[r.userId] = Math.max(0, (loyaltyHeld[r.userId] || 0) - r.pointsHeld);
+    }
+    r.state = 'RELEASED';
+    return freed;
+  }
 
   const deps: FulfilmentDeps = {
     getOrder: vi.fn(async (id: string) => (orders.has(id) ? { ...orders.get(id)! } : null)),
@@ -77,6 +259,12 @@ export function makeWorld(initial: PaymentOrder[] = [makeOrder()], payments: Gat
     updateOrder: vi.fn(async (id: string, patch: Partial<PaymentOrder>) => {
       Object.assign(orders.get(id)!, patch);
     }),
+    updateOrderIfStatus: vi.fn(async (id: string, expected: OrderStatus[], patch: Partial<PaymentOrder>) => {
+      const o = orders.get(id);
+      if (!o || !expected.includes(o.status)) return false;
+      Object.assign(o, patch);
+      return true;
+    }),
     fetchPayment: vi.fn(async (pid: string) => {
       const p = payments.find((x) => x.id === pid);
       if (!p) throw new Error('payment not found');
@@ -88,33 +276,16 @@ export function makeWorld(initial: PaymentOrder[] = [makeOrder()], payments: Gat
       p.status = 'captured';
       return { ...p };
     }),
-    // Same rules as the allocate_tickets SQL: capacity counts seats in use; each ticket gets the lowest number nobody holds
-    // (numbers held by refunded orders are free); the numbers are saved on the order in the same step.
-    allocateTickets: vi.fn(async (items: { categoryId: string; qty: number }[], orderId?: string) => {
-      for (const i of items) {
-        if (seatsInUse({ sold: sold[i.categoryId], released: released[i.categoryId] }) + i.qty > capacity[i.categoryId]) throw new SoldOutError(i.categoryId);
-      }
-      const result = items.map((i): Allocation => {
-        const held = new Set<number>();
-        // Tickets sold before this world started (the starting sold counter) hold numbers 1..N.
-        for (let n = 1; n <= sold[i.categoryId] - allocatedQty[i.categoryId]; n++) held.add(n);
-        for (const o of orders.values()) {
-          if (o.seats_released) continue;
-          for (const a of o.allocated_tickets || []) {
-            if (a.categoryId !== i.categoryId) continue;
-            const nums = a.numbers ?? Array.from({ length: a.qty }, (_, k) => a.endSold - a.qty + 1 + k);
-            nums.forEach((n) => held.add(n));
-          }
-        }
-        const numbers: number[] = [];
-        for (let n = 1; numbers.length < i.qty; n++) if (!held.has(n)) numbers.push(n);
-        sold[i.categoryId] += i.qty;
-        allocatedQty[i.categoryId] += i.qty;
-        return { categoryId: i.categoryId, qty: i.qty, endSold: sold[i.categoryId], numbers };
-      });
-      if (orderId && orders.has(orderId)) orders.get(orderId)!.allocated_tickets = result;
-      return result;
+    refundPayment: vi.fn(async (paymentId: string, amount: number, reason: string) => {
+      if (refundShouldFail) throw new Error('razorpay refund unavailable');
+      // Idempotent per payment, like a receipt-keyed refund.
+      const existing = refunds.find((r) => r.paymentId === paymentId);
+      if (existing) return { id: `rfnd_${paymentId}` };
+      refunds.push({ paymentId, amount, reason });
+      return { id: `rfnd_${paymentId}` };
     }),
+    confirmReservation: vi.fn(async (reservationId: string) => confirmReservation(reservationId)),
+    releaseReservation: vi.fn(async (reservationId: string) => releaseReservation(reservationId)),
     // Behaves like production: ticket_bookings.amount_paid is an INTEGER column, so a fractional amount is
     // rejected exactly as Postgres does ("invalid input syntax for type integer"). Goes through the same
     // fallback the real wiring uses, so a regression to a plain insert fails the tests.
@@ -140,19 +311,6 @@ export function makeWorld(initial: PaymentOrder[] = [makeOrder()], payments: Gat
     adjustLoyalty: vi.fn(async (uid: string, delta: number) => {
       loyalty[uid] = Math.max(0, (loyalty[uid] || 0) + delta);
     }),
-    // Mirrors release_order_seats: exactly once per order, only for seats that were really allocated.
-    releaseSeats: vi.fn(async (orderId: string) => {
-      const o = orders.get(orderId);
-      if (!o || o.seats_released || !o.allocated_tickets?.length) return 0;
-      let n = 0;
-      for (const a of o.allocated_tickets) {
-        const give = Math.min(a.qty, sold[a.categoryId] - released[a.categoryId]);
-        released[a.categoryId] += give;
-        n += give;
-      }
-      o.seats_released = true;
-      return n;
-    }),
     claimLoyaltyReversal: vi.fn(async (orderId: string) => {
       const o = orders.get(orderId);
       if (!o || !o.loyalty_applied || o.loyalty_reversed) return false;
@@ -176,14 +334,52 @@ export function makeWorld(initial: PaymentOrder[] = [makeOrder()], payments: Gat
     deps,
     orders,
     bookings,
-    sold,
-    released,
-    capacity,
+    reservations,
+    numbers,
     loyalty,
+    loyaltyHeld,
     alerts,
+    refunds,
     payments,
+    categories,
+    inUse,
+    /** The checkout-time reservation, as /api/razorpay/order performs it. */
+    reserve,
+    releaseReservation,
+    sweepExpired,
+    /** Make the next automatic refund fail, to test the fallback to "a human must look". */
+    breakRefunds(broken = true) {
+      refundShouldFail = broken;
+    },
     advance(ms: number) {
       now = new Date(now.getTime() + ms);
     },
   };
+}
+
+/**
+ * Set up an order the way checkout now does: reserve first, then record what was reserved on
+ * the order. Returns the reservation id.
+ */
+export function checkout(
+  world: ReturnType<typeof makeWorld>,
+  order: PaymentOrder,
+  opts: { points?: number; maxSingle?: number; maxGroup?: number; ttlSeconds?: number } = {},
+): string {
+  const reservationId = `res_${order.razorpay_order_id}`;
+  const allocations = world.reserve({
+    reservationId,
+    userId: order.user_id,
+    items: (order.cart || []).map((l) => ({ categoryId: l.categoryId, qty: l.qty })),
+    points: opts.points ?? order.points_to_redeem ?? 0,
+    ttlSeconds: opts.ttlSeconds,
+    maxSingle: opts.maxSingle ?? 7,
+    maxGroup: opts.maxGroup ?? 2,
+  });
+  const stored = world.orders.get(order.razorpay_order_id);
+  if (stored) {
+    stored.reservation_id = reservationId;
+    stored.allocated_tickets = allocations;
+  }
+  return reservationId;
 }

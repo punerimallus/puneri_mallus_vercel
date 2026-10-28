@@ -28,7 +28,9 @@ export async function GET(req: Request) {
       paymentType: order.payment_type,
       bookingId: order.booking_id,
       emailStatus: order.email_status,
-      reason: order.status === 'FAILED' || order.status === 'NEEDS_ATTENTION' ? order.status_reason : undefined,
+      reason: ['FAILED', 'NEEDS_ATTENTION', 'REFUND_INITIATED'].includes(order.status) ? order.status_reason : undefined,
+      /** Set when we refunded automatically because we could not deliver. */
+      autoRefundId: order.auto_refund_id ?? undefined,
     });
   } catch (e) {
     console.error('[payments] status check failed', orderId, e);

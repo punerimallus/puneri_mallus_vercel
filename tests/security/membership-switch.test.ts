@@ -18,7 +18,15 @@ vi.mock('@/lib/payments/server', () => ({
     from: (table: string) => {
       const q: any = {
         select: () => q, eq: () => q, limit: () => q,
-        maybeSingle: async () => ({ data: table === 'profiles' ? profileRow : null }),
+        maybeSingle: async () => ({
+          data:
+            table === 'profiles' ? profileRow
+            // The ticketing migration is applied in this world; checkout refuses to take money
+            // without it, which is covered on its own in schema-check.test.ts.
+            : table === 'app_schema_markers' ? { applied_at: '2026-10-28T00:00:00.000Z' }
+            : null,
+          error: null,
+        }),
         single: async () => ({ data: table === 'app_settings' ? settingsRow : null, error: null }),
         insert: async (row: unknown) => { inserted.push(row); return { error: null }; },
       };

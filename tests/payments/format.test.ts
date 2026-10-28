@@ -33,7 +33,11 @@ describe('formatIst', () => {
 
 describe('buildScanUrl', () => {
   it('matches the link the gate scanner reads and tolerates a trailing slash', () => {
-    expect(buildScanUrl('https://punerimallus.com/', 'abc-123', 'VIP011')).toBe('https://punerimallus.com/admin/scanner?bid=abc-123&tno=VIP011');
+    expect(buildScanUrl('https://punerimallus.com/', 'abc-123', 'VIP011')).toBe('https://punerimallus.com/gate?bid=abc-123&tno=VIP011');
+    // With the server's signature, which is what newly issued passes carry.
+    expect(buildScanUrl('https://punerimallus.com', 'abc-123', 'VIP011', 'deadbeefdeadbeef')).toBe(
+      'https://punerimallus.com/gate?bid=abc-123&tno=VIP011&sig=deadbeefdeadbeef',
+    );
   });
 });
 

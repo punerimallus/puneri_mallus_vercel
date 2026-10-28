@@ -2,6 +2,11 @@
 
 Test this in Razorpay **Test Mode** first. Nothing here needs live keys.
 
+> **Newer than this document:** ticketing now reserves seats *before* payment, keeps ticket
+> numbers in their own table, and gives gate volunteers a scanner-only role. That change has its
+> own required migration and its own notes — see **[TICKETING_INTEGRITY.md](./TICKETING_INTEGRITY.md)**.
+> Do the steps below first, then that one.
+
 ## 1. Run the database migration
 
 Supabase dashboard > SQL editor > paste and run `supabase/migrations/20260930_payment_reliability.sql`.

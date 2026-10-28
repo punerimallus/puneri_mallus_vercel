@@ -89,6 +89,43 @@ export default function BoxOfficeDashboard() {
     return Object.entries(counts).map(([name, qty]) => `${qty}x ${name}`).join(' | ');
   };
 
+  /**
+   * Void a single pass: it stops scanning and its seat goes back on sale. Deliberately separate
+   * from refunding — an admin may want one without the other — so the confirmation says so.
+   */
+  const [voiding, setVoiding] = useState<string | null>(null);
+  const voidPass = async (booking: any, ticketNumber: string) => {
+    const confirmed = confirm(
+      `Void pass ${ticketNumber}?\n\n` +
+        `It will stop working at the gate and its seat goes back on sale immediately.\n\n` +
+        `This does NOT refund any money — do that in Razorpay separately if you mean to.`,
+    );
+    if (!confirmed) return;
+    setVoiding(ticketNumber);
+    try {
+      const res = await fetch('/api/admin/tickets/void', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId: booking.id, ticketNumber }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showAlert(data.error || 'Could not void that pass.', 'error');
+        return;
+      }
+      showAlert(data.note || `${ticketNumber} voided.`, 'success');
+      // Reflect it immediately rather than making them reload.
+      booking.tickets_data = (booking.tickets_data || []).map((t: any) =>
+        t.ticketNumber === ticketNumber ? { ...t, status: 'REFUNDED' } : t,
+      );
+      setDashboardData((prev: any) => (prev ? { ...prev } : prev));
+    } catch {
+      showAlert('Could not void that pass.', 'error');
+    } finally {
+      setVoiding(null);
+    }
+  };
+
   const filteredBookings = dashboardData?.bookings.filter(b => 
     b.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     b.email?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -204,6 +241,36 @@ export default function BoxOfficeDashboard() {
                           <span className="bg-brandRed/10 text-brandRed border border-brandRed/20 px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-widest inline-block">
                             {formatTickets(booking.tickets_data)}
                           </span>
+                          {/* Each pass individually, so one can be killed without touching the rest. */}
+                          {booking.status !== 'REFUNDED' && (booking.tickets_data || []).length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {(booking.tickets_data || []).map((t: any) => (
+                                <span key={t.ticketNumber} className="inline-flex items-center gap-1">
+                                  <span
+                                    className={`font-mono text-[9px] tracking-widest px-1.5 py-1 rounded border ${
+                                      t.status === 'REFUNDED'
+                                        ? 'text-zinc-600 border-white/5 line-through'
+                                        : t.status === 'CHECKED_IN'
+                                          ? 'text-amber-400 border-amber-500/25'
+                                          : 'text-zinc-300 border-white/10'
+                                    }`}
+                                  >
+                                    {t.ticketNumber}
+                                  </span>
+                                  {t.status !== 'REFUNDED' && (
+                                    <button
+                                      onClick={() => voidPass(booking, t.ticketNumber)}
+                                      disabled={voiding === t.ticketNumber}
+                                      title={`Void ${t.ticketNumber} (no refund)`}
+                                      className="text-[9px] text-zinc-600 hover:text-brandRed disabled:opacity-40 transition-colors"
+                                    >
+                                      {voiding === t.ticketNumber ? '...' : '×'}
+                                    </button>
+                                  )}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </td>
                         <td className="p-6 font-mono text-zinc-300">
                           <div className="flex items-center gap-1"><IndianRupee size={12}/>{booking.amount_paid}</div>

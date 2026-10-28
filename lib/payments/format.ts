@@ -41,10 +41,18 @@ export function formatIst(value: Date | string | number): string {
   return d.toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
 }
 
-/** The link encoded in every pass QR code. The gate scanner (/admin/scanner) reads exactly this. */
-export function buildScanUrl(baseUrl: string, bookingId: string, ticketNumber: string): string {
+/**
+ * The link encoded in every pass QR code, read by the gate scanner at /gate.
+ *
+ * `signature` is an HMAC the server adds (see ticket-signature.ts) so a hand-made QR is
+ * refused at the gate; it is optional here only because passes printed before signing existed
+ * still have to scan. This function stays free of the secret itself so it can run in the
+ * browser — the signature is handed to it, never computed here.
+ */
+export function buildScanUrl(baseUrl: string, bookingId: string, ticketNumber: string, signature?: string | null): string {
   const base = baseUrl.replace(/\/+$/, '');
-  return `${base}/admin/scanner?bid=${encodeURIComponent(bookingId)}&tno=${encodeURIComponent(ticketNumber)}`;
+  const sig = signature ? `&sig=${encodeURIComponent(signature)}` : '';
+  return `${base}/gate?bid=${encodeURIComponent(bookingId)}&tno=${encodeURIComponent(ticketNumber)}${sig}`;
 }
 
 export interface ReceiptLine {

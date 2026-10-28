@@ -4,9 +4,14 @@ import { CheckCircle2, MapPin, Calendar, Clock, Mail, Smartphone, Loader2, Arrow
 import Link from 'next/link';
 import QRCode from 'qrcode';
 import { admitsLabel, isGroup } from '@/lib/payments/groups';
-import { buildReceipt, buildScanUrl, formatEventDate, formatEventTime, formatIst, formatRupees } from '@/lib/payments/format';
+import { buildReceipt, formatEventDate, formatEventTime, formatIst, formatRupees } from '@/lib/payments/format';
 
-type Pass = { categoryName: string; ticketNumber: string; unitPrice: number; status: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED'; groupSize: number; admitted: number };
+type Pass = {
+  categoryName: string; ticketNumber: string; unitPrice: number;
+  status: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED'; groupSize: number; admitted: number;
+  /** Built and signed by the server — the browser cannot sign, and must not try. */
+  scanUrl: string;
+};
 type View = {
   id: string; email: string | null; status: string; createdAt: string | null;
   tickets: Pass[];
@@ -44,10 +49,11 @@ export default function TicketSuccessPage({ params }: { params: Promise<{ bookin
         const v: View = result.booking;
         setView(v);
         setImage(result.image || null);
-        const origin = result.baseUrl || window.location.origin;
-        // QR codes are drawn in the browser (no third-party service) and carry the same link as the PDF.
+        // QR codes are drawn in the browser (no third-party service) from the signed link the
+        // server built. Signing needs a server secret, so the browser can only ever render what
+        // it is given — it cannot mint a QR for a pass.
         setQrs(await Promise.all(v.tickets.map((t) =>
-          QRCode.toDataURL(buildScanUrl(origin, v.id, t.ticketNumber), { margin: 1, width: 360, errorCorrectionLevel: 'M' }))));
+          QRCode.toDataURL(t.scanUrl, { margin: 1, width: 360, errorCorrectionLevel: 'M' }))));
       } catch (err) {
         console.error(err);
         setProblem('error');

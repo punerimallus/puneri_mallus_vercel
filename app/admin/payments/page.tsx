@@ -36,6 +36,8 @@ export default function AdminPaymentSettings() {
 
   // Payment health: orders that are stuck, need a refund, or whose email failed
   const [problemOrders, setProblemOrders] = useState<any[]>([]);
+  // Configuration that used to fail silently: the ticketing migration and the webhook secret.
+  const [health, setHealth] = useState<any>(null);
   const [reconciling, setReconciling] = useState(false);
 
   const loadProblemOrders = async () => {
@@ -45,6 +47,15 @@ export default function AdminPaymentSettings() {
       if (Array.isArray(data)) setProblemOrders(data);
     } catch {
       // The rest of the page still works without this panel.
+    }
+  };
+
+  const loadHealth = async () => {
+    try {
+      const res = await fetch('/api/admin/health');
+      if (res.ok) setHealth(await res.json());
+    } catch {
+      // A missing health panel must never take the page down.
     }
   };
 
@@ -92,6 +103,7 @@ export default function AdminPaymentSettings() {
     }
     fetchAdminData();
     loadProblemOrders();
+    loadHealth();
   }, []);
 
   // The membership switch saves on its own, straight away: it is a kill switch, not a field to remember to "deploy".
@@ -162,6 +174,35 @@ export default function AdminPaymentSettings() {
     <div className="min-h-screen bg-black pt-40 pb-20 px-6 text-white">
       <div className="max-w-6xl mx-auto space-y-16">
         
+        {/* Configuration that must be right before an event goes on sale. Each of these used to
+            fail silently; now they are stated plainly, with what the consequence is. */}
+        {health && (health.schema?.ok === false || health.webhookSecret?.ok === false || health.cronSecret?.ok === false) && (
+          <div className="space-y-3">
+            {health.schema?.ok === false && (
+              <div className="rounded-2xl border border-brandRed/40 bg-brandRed/10 p-5 space-y-1">
+                <p className="text-sm font-black uppercase tracking-widest text-brandRed">Ticket checkout is paused</p>
+                <p className="text-xs text-red-200/80 leading-relaxed">{health.schema.error}</p>
+                <p className="text-[11px] text-red-200/60 leading-relaxed">
+                  Run <span className="font-mono">{health.schema.migration}</span> in the Supabase SQL editor.
+                  Until then the server refuses new ticket orders rather than taking money it cannot honour.
+                </p>
+              </div>
+            )}
+            {health.webhookSecret?.ok === false && (
+              <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5 space-y-1">
+                <p className="text-sm font-black uppercase tracking-widest text-amber-400">RAZORPAY_WEBHOOK_SECRET is not set</p>
+                <p className="text-xs text-amber-200/80 leading-relaxed">{health.webhookSecret.why}</p>
+              </div>
+            )}
+            {health.cronSecret?.ok === false && (
+              <div className="rounded-2xl border border-white/15 bg-white/5 p-5 space-y-1">
+                <p className="text-sm font-black uppercase tracking-widest text-zinc-300">CRON_SECRET is not set</p>
+                <p className="text-xs text-zinc-400 leading-relaxed">{health.cronSecret.why}</p>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* HEADER */}
         <div className="space-y-4 border-b border-white/5 pb-10">
           <h1 className="text-5xl md:text-7xl font-black italic uppercase tracking-tighter leading-none">
@@ -357,8 +398,25 @@ export default function AdminPaymentSettings() {
                     <td className="p-5 text-zinc-300">{o.receipt_email || '-'}</td>
                     <td className="p-5">₹{((o.amount_paise || 0) / 100).toFixed(2)}</td>
                     <td className="p-5">
-                      <span className={`uppercase ${o.status === 'NEEDS_ATTENTION' ? 'text-brandRed' : 'text-yellow-500'}`}>{o.status === 'FULFILLED' ? `Email ${o.email_status}` : o.status}</span>
+                      <span
+                        className={`uppercase ${
+                          o.status === 'NEEDS_ATTENTION' ? 'text-brandRed'
+                          // Already refunded by us: money is on its way back, nothing to do.
+                          : o.status === 'REFUND_INITIATED' ? 'text-sky-400'
+                          : 'text-yellow-500'
+                        }`}
+                      >
+                        {o.status === 'FULFILLED' ? `Email ${o.email_status}` : o.status === 'REFUND_INITIATED' ? 'Auto-refunded' : o.status}
+                      </span>
                       <span className="block text-[10px] text-zinc-500 font-normal">{o.status_reason || o.email_error || ''}</span>
+                      {o.auto_refund_id && (
+                        <span className="block text-[9px] text-sky-500/80 font-mono">refund {o.auto_refund_id}</span>
+                      )}
+                      {o.status === 'NEEDS_ATTENTION' && (
+                        <span className="block text-[9px] text-brandRed/80 font-normal">
+                          Automatic refund failed — refund this in the Razorpay dashboard.
+                        </span>
+                      )}
                       <span className="block text-[9px] text-zinc-600">{formatDate(o.created_at)}</span>
                     </td>
                   </tr>

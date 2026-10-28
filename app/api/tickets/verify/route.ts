@@ -2,6 +2,7 @@ import { getRequestUser } from '@/lib/admin';
 import { NextResponse, after } from 'next/server';
 import { isValidCheckoutSignature } from '@/lib/payments/signature';
 import { fulfilAndDeliver } from '@/lib/payments/server';
+import { RATE_RULES, rateKey, rateLimit } from '@/lib/rate-limit';
 
 // Called by the event booking page's Razorpay handler. The cart, email, event and
 // points the browser used to send are ignored: they were fixed on the server when
@@ -9,6 +10,16 @@ import { fulfilAndDeliver } from '@/lib/payments/server';
 // the webhook arriving first) never issues a second set of passes.
 export async function POST(req: Request) {
   try {
+    // Keyed by address as well as account: this endpoint is reachable without a session, since
+    // the Razorpay signature is what proves the payment.
+    const limit = rateLimit(rateKey('verifyPayment', null, req), RATE_RULES.verifyPayment);
+    if (!limit.ok) {
+      return NextResponse.json(
+        { success: false, error: 'Too many attempts. Please wait a moment.' },
+        { status: 429, headers: { 'Retry-After': String(limit.retryAfter) } },
+      );
+    }
+
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = await req.json();
 
     if (!isValidCheckoutSignature(razorpay_order_id, razorpay_payment_id, razorpay_signature, process.env.RAZORPAY_KEY_SECRET!)) {

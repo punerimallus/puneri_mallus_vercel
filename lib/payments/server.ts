@@ -21,7 +21,10 @@ import { whatsappConfig, whatsappEnabled, sendTicketOnWhatsApp, maskNumber } fro
 import { formatEventDate } from './format';
 import { progressOf } from './scan';
 import { fetchLogoBase64, generateTicketPdf } from './ticket-pdf';
-import { EventSnapshot, FulfilmentSource, GatewayPayment, PaymentOrder, SoldOutError } from './types';
+import { EventSnapshot, FulfilmentSource, GatewayPayment, OrderStatus, PaymentOrder } from './types';
+import { confirmInventory, expireStaleHolds, releaseInventory, reserveInventory, ReserveRequest } from './inventory';
+import { signTicket } from './ticket-signature';
+import { buildScanUrl } from './format';
 
 let _supabase: SupabaseClient | null = null;
 export function supabaseAdmin(): SupabaseClient {
@@ -77,6 +80,27 @@ export async function updateOrder(orderId: string, patch: Partial<PaymentOrder>)
   );
 }
 
+/**
+ * A conditional write: it only lands while the order is still in one of `expected`, and reports
+ * whether it did. Every status transition that matters goes through this, so a refund arriving
+ * mid-fulfilment can no longer be overwritten by a blind "set FULFILLED".
+ */
+export async function updateOrderIfStatus(
+  orderId: string,
+  expected: OrderStatus[],
+  patch: Partial<PaymentOrder>,
+): Promise<boolean> {
+  const rows = await must(
+    supabaseAdmin()
+      .from('payment_orders')
+      .update({ ...patch, updated_at: new Date().toISOString() })
+      .eq('razorpay_order_id', orderId)
+      .in('status', expected)
+      .select('razorpay_order_id'),
+  );
+  return !!rows && (rows as unknown[]).length > 0;
+}
+
 export async function getEventSnapshot(eventId: string): Promise<EventSnapshot | null> {
   if (!ObjectId.isValid(eventId)) return null;
   const client = await clientPromise;
@@ -95,9 +119,24 @@ export async function getEventSnapshot(eventId: string): Promise<EventSnapshot |
 
 const log = (message: string, extra?: unknown) => console.error(`[payments] ${message}`, extra ?? '');
 
+/** Reserve seats, numbers and points for a checkout. Sweeps expired holds first, in its own transaction. */
+export async function reserveForCheckout(req: ReserveRequest) {
+  const rpc = { rpc: (fn: string, args: Record<string, unknown>) => supabaseAdmin().rpc(fn, args) };
+  // Deliberately a separate call: sweeping inside the reservation could deadlock against a
+  // concurrent one holding the same category.
+  await expireStaleHolds(rpc).catch((e) => log('HOLD_SWEEP_FAILED', e));
+  return reserveInventory(rpc, req);
+}
+
+/** Give a checkout's seats and points back (abandoned, failed, or the order never got created). */
+export async function releaseReservation(reservationId: string) {
+  return releaseInventory({ rpc: (fn, args) => supabaseAdmin().rpc(fn, args) }, reservationId);
+}
+
 export const fulfilmentDeps: FulfilmentDeps = {
   getOrder,
   updateOrder,
+  updateOrderIfStatus,
 
   async getOrderByPaymentId(paymentId) {
     return must(
@@ -140,20 +179,25 @@ export const fulfilmentDeps: FulfilmentDeps = {
     }
   },
 
-  async allocateTickets(items, orderId) {
-    const db = supabaseAdmin();
-    // The current function takes the order id and saves the chosen numbers on the order in the same transaction.
-    let { data, error } = await db.rpc('allocate_tickets', { p_items: items, p_order_id: orderId ?? null });
-    if (error && /p_order_id|could not find the function|PGRST202/i.test(`${error.code} ${error.message}`)) {
-      // The ticket-number SQL (20261025) is not applied yet: use the older one-argument function. Numbers then follow the sold counter.
-      ({ data, error } = await db.rpc('allocate_tickets', { p_items: items }));
-    }
-    if (error) {
-      const m = /SOLD_OUT:(.*)/.exec(error.message);
-      if (m) throw new SoldOutError(m[1].trim());
-      throw new Error(error.message);
-    }
-    return data;
+  async refundPayment(paymentId, amountPaise, reason) {
+    // `speed: 'optimum'` lets Razorpay use the instant rail where the bank supports it.
+    // The receipt makes the call idempotent: asking twice for the same order's refund returns
+    // the existing one instead of refunding the buyer a second time.
+    const res = (await razorpay().payments.refund(paymentId, {
+      amount: amountPaise,
+      speed: 'optimum',
+      receipt: `auto_${paymentId}`.slice(0, 40),
+      notes: { reason: reason.slice(0, 200), source: 'auto-undeliverable' },
+    } as never)) as unknown as { id?: string };
+    return res?.id ? { id: String(res.id) } : null;
+  },
+
+  async confirmReservation(reservationId) {
+    return confirmInventory({ rpc: (fn, args) => supabaseAdmin().rpc(fn, args) }, reservationId);
+  },
+
+  async releaseReservation(reservationId) {
+    return releaseInventory({ rpc: (fn, args) => supabaseAdmin().rpc(fn, args) }, reservationId);
   },
 
   async upsertBooking(row: BookingInsert) {
@@ -188,12 +232,6 @@ export const fulfilmentDeps: FulfilmentDeps = {
       status: status === 'REFUNDED' ? 'REFUNDED' : t.status,
     }));
     await must(db.from('ticket_bookings').update({ status, tickets_data: tickets }).eq('id', bookingId));
-  },
-
-  async releaseSeats(orderId) {
-    const { data, error } = await supabaseAdmin().rpc('release_order_seats', { p_order_id: orderId });
-    if (error) throw new Error(error.message);
-    return Number(data) || 0;
   },
 
   async claimLoyaltyReversal(orderId) {
@@ -319,6 +357,7 @@ async function buildAndSendTickets(
     logoBase64: logo,
     baseUrl: baseUrl(),
     payment,
+    signTicket,
   });
   // The email states what was actually charged (including the gateway fee) when we know it.
   const paid = payment?.totalPaidPaise ? payment.totalPaidPaise / 100 : totalAmount;
@@ -332,9 +371,14 @@ export const deliveryDeps: DeliveryDeps = {
   async sendTicketEmail(order, to) {
     const booking = (await must(
       supabaseAdmin().from('ticket_bookings').select('id, tickets_data').eq('id', order.booking_id).single(),
-    )) as { id: string; tickets_data: { categoryName: string; ticketNumber: string; groupSize?: number }[] };
-    const priceByName = new Map((order.cart || []).map((l) => [l.name, l.unitPrice]));
-    const tickets = (booking.tickets_data || []).map((t) => ({ ...t, unitPrice: priceByName.get(t.categoryName) ?? 0 }));
+    )) as { id: string; tickets_data: { categoryId?: string; categoryName: string; ticketNumber: string; groupSize?: number }[] };
+    // By category id first, name only as a fallback, so a renamed category cannot zero a price.
+    const byId = new Map((order.cart || []).map((l) => [l.categoryId, l.unitPrice]));
+    const byName = new Map((order.cart || []).map((l) => [l.name, l.unitPrice]));
+    const tickets = (booking.tickets_data || []).map((t) => ({
+      ...t,
+      unitPrice: (t.categoryId !== undefined ? byId.get(t.categoryId) : undefined) ?? byName.get(t.categoryName) ?? 0,
+    }));
     await buildAndSendTickets(booking.id, to, tickets, order.event_snapshot, order.points_to_redeem, order.base_amount, {
       orderId: order.razorpay_order_id,
       paymentId: order.razorpay_payment_id,
@@ -444,7 +488,7 @@ export async function resendBooking(bookingId: string, opts: { overrideEmail?: s
     status?: string;
     last_emailed_at?: string | null;
     email_attempts?: number;
-    tickets_data: { categoryName: string; ticketNumber: string; groupSize?: number }[];
+    tickets_data: { categoryId?: string; categoryName: string; ticketNumber: string; groupSize?: number }[];
   } | null;
   if (!booking) return { status: 'NOT_READY' as const };
   if (booking.status === 'REFUNDED') return { status: 'NOT_READY' as const, error: 'Booking was refunded' };
@@ -454,10 +498,14 @@ export async function resendBooking(bookingId: string, opts: { overrideEmail?: s
   const to = (opts.overrideEmail || booking.email || '').trim();
   if (!to) return { status: 'SKIPPED' as const };
 
-  const categories = ((await must(db.from('event_ticket_categories').select('name, price').eq('event_id', booking.event_id))) ||
-    []) as { name: string; price: number }[];
-  const priceByName = new Map(categories.map((c) => [c.name, c.price]));
-  const tickets = (booking.tickets_data || []).map((t) => ({ ...t, unitPrice: priceByName.get(t.categoryName) ?? 0 }));
+  const categories = ((await must(db.from('event_ticket_categories').select('id, name, price').eq('event_id', booking.event_id))) ||
+    []) as { id: string; name: string; price: number }[];
+  const byId = new Map(categories.map((c) => [c.id, c.price]));
+  const byName = new Map(categories.map((c) => [c.name, c.price]));
+  const tickets = (booking.tickets_data || []).map((t) => ({
+    ...t,
+    unitPrice: (t.categoryId !== undefined ? byId.get(t.categoryId) : undefined) ?? byName.get(t.categoryName) ?? 0,
+  }));
   const attempts = (booking.email_attempts || 0) + 1;
   const at = new Date().toISOString();
   try {
@@ -477,7 +525,17 @@ export interface BookingView {
   status: string;
   createdAt: string | null;
   eventId: string;
-  tickets: { categoryName: string; ticketNumber: string; unitPrice: number; status: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED'; groupSize: number; admitted: number }[];
+  tickets: {
+    categoryId?: string;
+    categoryName: string;
+    ticketNumber: string;
+    unitPrice: number;
+    status: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED';
+    groupSize: number;
+    admitted: number;
+    /** The signed link this pass's QR encodes. Built here because signing needs a server secret. */
+    scanUrl: string;
+  }[];
   event: EventSnapshot | null;
   pointsApplied: number;
   /** Rupees actually charged including the gateway fee, when known (otherwise derived from the passes). */
@@ -497,7 +555,7 @@ export async function loadBookingView(bookingId: string): Promise<(BookingView &
     event_id: string;
     status?: string;
     created_at?: string | null;
-    tickets_data: { categoryName: string; ticketNumber: string; status?: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED'; groupSize?: number; admitted?: number }[] | null;
+    tickets_data: { categoryId?: string; categoryName: string; ticketNumber: string; status?: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED'; groupSize?: number; admitted?: number }[] | null;
   } | null;
   if (!booking) return null;
 
@@ -505,13 +563,25 @@ export async function loadBookingView(bookingId: string): Promise<(BookingView &
     db.from('payment_orders').select('*').eq('booking_id', bookingId).limit(1).maybeSingle(),
   )) as PaymentOrder | null;
 
-  let prices = new Map<string, number>();
-  if (order?.cart?.length) prices = new Map(order.cart.map((l) => [l.name, l.unitPrice]));
-  else {
-    const categories = ((await must(db.from('event_ticket_categories').select('name, price').eq('event_id', booking.event_id))) ||
-      []) as { name: string; price: number }[];
-    prices = new Map(categories.map((c) => [c.name, c.price]));
+  // Prices are looked up by category ID first and only fall back to the name. Matching on the
+  // name alone meant renaming a category silently printed every reissued pass at zero.
+  const priceById = new Map<string, number>();
+  const priceByName = new Map<string, number>();
+  if (order?.cart?.length) {
+    for (const l of order.cart) {
+      priceById.set(l.categoryId, l.unitPrice);
+      priceByName.set(l.name, l.unitPrice);
+    }
+  } else {
+    const categories = ((await must(db.from('event_ticket_categories').select('id, name, price').eq('event_id', booking.event_id))) ||
+      []) as { id: string; name: string; price: number }[];
+    for (const c of categories) {
+      priceById.set(c.id, c.price);
+      priceByName.set(c.name, c.price);
+    }
   }
+  const priceOf = (t: { categoryId?: string; categoryName: string }) =>
+    (t.categoryId !== undefined ? priceById.get(t.categoryId) : undefined) ?? priceByName.get(t.categoryName) ?? 0;
 
   return {
     id: booking.id,
@@ -521,12 +591,14 @@ export async function loadBookingView(bookingId: string): Promise<(BookingView &
     createdAt: booking.created_at ?? null,
     eventId: booking.event_id,
     tickets: (booking.tickets_data || []).map((t) => ({
+      categoryId: t.categoryId,
       categoryName: t.categoryName,
       ticketNumber: t.ticketNumber,
-      unitPrice: prices.get(t.categoryName) ?? 0,
+      unitPrice: priceOf(t),
       status: t.status || 'ISSUED',
       groupSize: groupSizeOf(t.groupSize),
       admitted: progressOf({ status: t.status || 'ISSUED', groupSize: t.groupSize, admitted: t.admitted }).admitted,
+      scanUrl: buildScanUrl(baseUrl(), booking.id, t.ticketNumber, signTicket(booking.id, t.ticketNumber)),
     })),
     event: order?.event_snapshot ?? (await getEventSnapshot(booking.event_id)),
     pointsApplied: order?.points_to_redeem ?? 0,
@@ -553,6 +625,7 @@ export async function renderBookingPdf(bookingId: string): Promise<{ base64: str
     logoBase64: await fetchLogoBase64(baseUrl()),
     baseUrl: baseUrl(),
     payment: { ...view.payment, totalPaidPaise: view.totalPaidPaise },
+    signTicket,
   });
   return { base64, filename: `puneri-mallus-tickets-${view.id.split('-')[0]}.pdf` };
 }

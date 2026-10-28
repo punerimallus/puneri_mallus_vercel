@@ -8,7 +8,9 @@ import {
   Megaphone, UserCircle2,
   PlaySquare,
   Ticket,
-  Mail
+  Mail,
+  UserCheck,
+  ScanLine
 } from 'lucide-react';
 import Link from 'next/link';
 import AddAdminCard from '@/components/admin/AddAdminCard';
@@ -94,6 +96,22 @@ export default function AdminPortal() {
       desc: "Monitor event sales, view purchaser ledgers, and pause/resume ticket categories.",
       icon: <Ticket className="text-green-400" size={32} />,
       link: "/admin/boxoffice",
+      status: "Live",
+      color: "from-green-400/20"
+    },
+    {
+      title: "Gate Volunteers",
+      desc: "Let a volunteer scan passes at the door without giving them the admin panel. Every admission is recorded against their name.",
+      icon: <UserCheck className="text-sky-400" size={32} />,
+      link: "/admin/volunteers",
+      status: "New",
+      color: "from-sky-400/20"
+    },
+    {
+      title: "Gate Scanner",
+      desc: "Check people in at the door. Open it on a phone, or just scan a pass QR with the camera.",
+      icon: <ScanLine className="text-green-400" size={32} />,
+      link: "/gate",
       status: "Live",
       color: "from-green-400/20"
     },

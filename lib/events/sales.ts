@@ -48,6 +48,32 @@ export function salesStatus(date: string | null | undefined, time: string | null
 
 export type EventDay = 'TODAY' | 'FUTURE' | 'PAST' | 'UNKNOWN';
 
+/**
+ * How long before an event starts the gate opens, and how long after it keeps scanning.
+ * Generous enough for early arrivals and an overrunning show, tight enough that last month's
+ * pass does not admit anyone.
+ */
+export const GATE_OPENS_BEFORE_MS = 8 * 3600_000;
+export const GATE_CLOSES_AFTER_MS = 10 * 3600_000;
+
+export type ScanWindow = 'OPEN' | 'EARLY' | 'CLOSED' | 'UNKNOWN';
+
+/**
+ * Should the gate admit anyone on this pass right now?
+ *
+ * The scanner used to check only that the pass belonged to the booking, so a pass for last
+ * month's event — or for a different event entirely — admitted cleanly. An unreadable date
+ * gives UNKNOWN, which the gate treats as "ask an admin" rather than waving people through.
+ */
+export function scanWindow(date: string | null | undefined, time: string | null | undefined, now: Date = new Date()): ScanWindow {
+  const start = eventStart(date, time);
+  if (!start) return 'UNKNOWN';
+  const delta = now.getTime() - start.getTime();
+  if (delta < -GATE_OPENS_BEFORE_MS) return 'EARLY';
+  if (delta > GATE_CLOSES_AFTER_MS) return 'CLOSED';
+  return 'OPEN';
+}
+
 /** Is the event today (in India), later, or already over (by calendar day)? Used to warn gate staff. */
 export function eventDay(date: string | null | undefined, now: Date = new Date()): EventDay {
   const day = parseDay(date);

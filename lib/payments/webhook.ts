@@ -42,7 +42,11 @@ export async function handleWebhookEvent(event: RazorpayWebhookEvent, deps: Webh
       if (!refund) return { handled: false, orderId, paymentId };
       // payment.amount_refunded is the running total across partial refunds, when Razorpay includes it.
       const total = payment?.amount_refunded ?? refund.amount;
-      const order = await applyRefund(refund.payment_id, total, deps);
+      // `orderId` is passed as a fallback: on an order that was never fulfilled we never wrote
+      // the payment id, so looking up by payment alone would find nothing. applyRefund throws if
+      // neither matches, which makes the route answer 5xx and Razorpay retry — rather than the
+      // refund being recorded as handled and lost.
+      const order = await applyRefund(refund.payment_id, total, deps, orderId);
       return { handled: !!order, outcome: 'REFUNDED', orderId: order?.razorpay_order_id ?? orderId, paymentId: refund.payment_id };
     }
     default:

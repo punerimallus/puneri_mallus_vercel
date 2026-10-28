@@ -19,7 +19,8 @@ const SECTIONS = [
   { label: 'Mallu Mart', href: '/admin/mart' },
   { label: 'Payments', href: '/admin/payments' },
   { label: 'Football', href: '/admin/football' },
-  { label: 'Gate Scanner', href: '/admin/scanner' },
+  { label: 'Gate Volunteers', href: '/admin/volunteers' },
+  { label: 'Gate Scanner', href: '/gate' },
 ];
 
 /** Floating admin navigation: back to the dashboard, which section you are in, and a switcher for every other section. */
@@ -38,8 +39,9 @@ export default function AdminDock({ email = '' }: { email?: string }) {
     return () => { document.removeEventListener('keydown', onKey); document.removeEventListener('mousedown', onClick); };
   }, [open]);
 
-  // The dashboard is its own menu, and the gate scanner is used one-handed at the door.
-  if (pathname === '/admin' || pathname === '/admin/' || pathname.startsWith('/admin/scanner')) return null;
+  // The dashboard is its own menu. (The gate scanner now lives at /gate, outside this layout,
+  // so it never shows the dock at all.)
+  if (pathname === '/admin' || pathname === '/admin/') return null;
 
   const current = SECTIONS.find((s) => pathname === s.href || pathname.startsWith(`${s.href}/`));
 

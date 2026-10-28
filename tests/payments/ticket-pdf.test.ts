@@ -71,8 +71,17 @@ describe('ticket PDF', () => {
     await buildTicketPdf(base);
     const urls = qr.mock.calls.map((c) => c[0]);
     expect(urls).toEqual([
-      'https://punerimallus.com/admin/scanner?bid=7f3c2a10-5b9e-4c1d-9a6e-2d8f0b1c4e77&tno=VIP011',
-      'https://punerimallus.com/admin/scanner?bid=7f3c2a10-5b9e-4c1d-9a6e-2d8f0b1c4e77&tno=VIP012',
+      'https://punerimallus.com/gate?bid=7f3c2a10-5b9e-4c1d-9a6e-2d8f0b1c4e77&tno=VIP011',
+      'https://punerimallus.com/gate?bid=7f3c2a10-5b9e-4c1d-9a6e-2d8f0b1c4e77&tno=VIP012',
+    ]);
+  });
+
+  it('signs each QR when a signer is supplied, so a hand-made code is refused at the gate', async () => {
+    const qr = vi.spyOn(QRCode, 'toDataURL');
+    await buildTicketPdf({ ...base, signTicket: (bid, tno) => `sig-${tno.toLowerCase()}` });
+    expect(qr.mock.calls.map((c) => c[0])).toEqual([
+      'https://punerimallus.com/gate?bid=7f3c2a10-5b9e-4c1d-9a6e-2d8f0b1c4e77&tno=VIP011&sig=sig-vip011',
+      'https://punerimallus.com/gate?bid=7f3c2a10-5b9e-4c1d-9a6e-2d8f0b1c4e77&tno=VIP012&sig=sig-vip012',
     ]);
   });
 

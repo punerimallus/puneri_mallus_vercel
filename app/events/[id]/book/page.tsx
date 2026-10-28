@@ -28,6 +28,9 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
   const [cart, setCart] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
+  // When the seats this checkout reserved are given back, if the payment never completes.
+  const [holdExpiresAt, setHoldExpiresAt] = useState<number | null>(null);
+  const [holdSecondsLeft, setHoldSecondsLeft] = useState<number | null>(null);
   const [isMember, setIsMember] = useState(false);
   // Send the passes on WhatsApp too: only offered when the feature is on and the profile has a valid mobile.
   const [whatsappNumber, setWhatsappNumber] = useState<string | null>(null);
@@ -142,23 +145,62 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
   // Decide what to show once the server knows the order's fate. Called after the
   // handler (success or failure) and when the modal is closed without one, because
   // a UPI/app payment can complete even though the checkout tab never reports it.
-  const settleOrder = async (orderId: string, { fromDismiss = false } = {}) => {
+  /** Returns true if any money was taken, so the caller knows whether the seats are still ours to release. */
+  const settleOrder = async (orderId: string, { fromDismiss = false } = {}): Promise<boolean> => {
     if (!fromDismiss) showAlert("Payment received. Confirming your passes...", "success");
     const result = await waitForOrder(orderId, { stopIfUnpaid: fromDismiss, timeoutMs: fromDismiss ? 12_000 : 45_000 });
 
     if (result.status === 'FULFILLED' && result.bookingId) {
       showAlert("Passes Secured Successfully!", "success");
       router.push(`/tickets/${result.bookingId}`);
-      return;
+      return true;
     }
     setProcessing(false);
-    if (result.status === 'NEEDS_ATTENTION') {
-      showAlert(`We received your payment but could not issue passes (${result.reason || 'please contact support'}). Our team has been alerted and will refund or fix it. Ref: ${orderRef(orderId)}`, "error");
-    } else if (result.status === 'CREATED' || result.status === 'FAILED') {
-      if (!fromDismiss) showAlert(`Payment not confirmed. If money was debited it will be auto-refunded or your passes emailed. Ref: ${orderRef(orderId)}`, "error");
-    } else if (!fromDismiss || result.status !== 'UNKNOWN') {
-      showAlert(`Payment received. Your passes will be emailed to ${email} shortly. Ref: ${orderRef(orderId)}`, "success");
+    if (result.status === 'REFUND_INITIATED') {
+      showAlert(`We took your payment but could not issue the passes, so we have already refunded it in full (5-7 working days). Ref: ${orderRef(orderId)}`, "error");
+      return true;
     }
+    if (result.status === 'NEEDS_ATTENTION') {
+      showAlert(`We received your payment but could not issue passes (${result.reason || 'please contact support'}). Our team has been alerted and will refund it. Ref: ${orderRef(orderId)}`, "error");
+      return true;
+    }
+    if (result.status === 'CREATED' || result.status === 'FAILED') {
+      if (!fromDismiss) showAlert(`Payment not confirmed. If money was debited it will be auto-refunded or your passes emailed. Ref: ${orderRef(orderId)}`, "error");
+      return false;
+    }
+    if (!fromDismiss || result.status !== 'UNKNOWN') {
+      showAlert(`Payment received. Your passes will be emailed to ${email} shortly. Ref: ${orderRef(orderId)}`, "success");
+      return true;
+    }
+    // Dismissed and we genuinely cannot tell: assume nothing was paid, but do not release the
+    // seats on a guess — the hold lapses on its own.
+    return true;
+  };
+
+  // Counts the hold down once per second while a checkout is open.
+  useEffect(() => {
+    if (holdExpiresAt === null) {
+      setHoldSecondsLeft(null);
+      return;
+    }
+    const tick = () => setHoldSecondsLeft(Math.max(0, Math.round((holdExpiresAt - Date.now()) / 1000)));
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [holdExpiresAt]);
+
+  /**
+   * The buyer closed the Razorpay window without paying. Their seats were reserved before
+   * checkout opened, so tell the server at once and put them back on sale rather than letting
+   * the 15-minute hold run down — during a busy drop that stock matters.
+   */
+  const releaseHeldSeats = (orderId: string) => {
+    fetch('/api/razorpay/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId }),
+      keepalive: true,
+    }).catch(() => undefined);
   };
 
   const processPayment = async () => {
@@ -172,6 +214,10 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
       });
       const orderData = await orderRes.json();
       if (!orderRes.ok) throw new Error(orderData.error);
+
+      // The server has already taken these seats, the ticket numbers and any points. Nothing
+      // can be sold out from under this buyer now; they just have to pay within the hold.
+      if (orderData.holdExpiresAt) setHoldExpiresAt(new Date(orderData.holdExpiresAt).getTime());
 
       let handled = false;
       const options = {
@@ -212,7 +258,13 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
           ondismiss: () => {
             setProcessing(false);
             // Quietly check in the background in case the payment completed in a UPI app.
-            if (!handled) settleOrder(orderData.id, { fromDismiss: true });
+            // Only once that comes back unpaid do we hand the seats back, so a payment that
+            // landed late is never mistaken for an abandoned checkout.
+            if (!handled) {
+              settleOrder(orderData.id, { fromDismiss: true }).then((paid) => {
+                if (!paid) releaseHeldSeats(orderData.id);
+              });
+            }
           }
         }
       };
@@ -467,6 +519,18 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
                 {pointsToRedeem > 0 && <div className="flex justify-between text-amber-400"><span>Tribe points</span><span>- {formatRupees(pointsToRedeem).replace('Rs. ', '₹')}</span></div>}
                 <div className="flex justify-between"><span>Payment gateway fee</span><span className="text-white">{formatRupees(feeAmount).replace('Rs. ', '₹')}</span></div>
               </div>
+              {/* Seats are reserved the moment checkout opens, so say so and show the clock. */}
+              {holdSecondsLeft !== null && (
+                <div className="mb-4 flex items-center justify-center gap-2 rounded-2xl border border-green-500/25 bg-green-500/10 px-4 py-3">
+                  <Clock size={13} className="text-green-400 shrink-0" />
+                  <span className="text-[11px] font-black uppercase tracking-widest text-green-400">
+                    {holdSecondsLeft > 0
+                      ? `Your ${totalTickets === 1 ? 'seat is' : 'seats are'} held — ${Math.floor(holdSecondsLeft / 60)}:${String(holdSecondsLeft % 60).padStart(2, '0')} left to pay`
+                      : 'Your hold has expired — please start again'}
+                  </span>
+                </div>
+              )}
+
               <button onClick={processPayment} disabled={processing || salesClosed} className="w-full bg-brandRed text-white py-5 rounded-2xl font-black uppercase tracking-widest flex justify-between items-center px-6 disabled:opacity-50 text-xs shadow-[0_0_40px_rgba(255,0,0,0.3)] hover:shadow-[0_0_60px_rgba(255,0,0,0.5)] transition-all active:scale-[0.98]">
                 {processing ? <Loader2 className="animate-spin mx-auto" /> : (
                   <>
