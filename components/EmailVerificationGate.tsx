@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mail, ArrowRight, Loader2, ShieldCheck, CheckCircle2, Briefcase, AlertCircle } from 'lucide-react';
 import { createBrowserClient } from '@supabase/ssr';
+import { friendlyError } from '@/lib/user-errors';
 
 interface OwnerData {
   fullName: string;
@@ -86,7 +87,7 @@ export default function EmailVerificationGate({ userId, source, onVerified, pref
       
       setStep(2); 
     } catch (err: any) {
-      setErrorMsg(err.message || "Failed to send verification link.");
+      setErrorMsg(friendlyError(err, "Could not send the verification link. Please try again."));
     } finally {
       setLoading(false);
     }

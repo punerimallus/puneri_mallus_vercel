@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useAlert } from '@/context/AlertContext';
 import WhatsAppTest from '@/components/admin/WhatsAppTest';
+import { friendlyError } from '@/lib/user-errors';
 
 export default function AdminPaymentSettings() {
   const [loading, setLoading] = useState(true);
@@ -68,7 +69,7 @@ export default function AdminPaymentSettings() {
       showAlert(`Checked ${data.checked} orders: ${data.fulfilled.length} recovered, ${data.needsAttention.length} need attention, ${data.emailsSent}/${data.emailsRetried} emails re-sent`, "success");
       loadProblemOrders();
     } catch (err: any) {
-      showAlert(err.message || "Reconcile failed", "error");
+      showAlert(friendlyError(err, "Reconcile failed. Please try again."), "error");
     } finally {
       setReconciling(false);
     }

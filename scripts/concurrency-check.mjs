@@ -51,10 +51,25 @@ try {
     .select('id').single()).data.id;
   catA = await mk('CONC A', PREFIX + 'A-', 10);
   catB = await mk('CONC B', PREFIX + 'B-', 10);
-  const who = (await db.from('profiles').select('id, loyalty_points, loyalty_points_held').limit(1).single()).data;
-  user = who.id;
-  pointsBefore = { loyalty_points: who.loyalty_points ?? 0, loyalty_points_held: who.loyalty_points_held ?? 0 };
+  // The points test needs a real account, because the balance lives on `profiles` and that
+  // table is tied to real auth users — there is no throwaway profile to make. So borrow one
+  // that currently has NOTHING to lose: zero balance, zero held. Then even if this process is
+  // killed before the restore in `finally`, the worst case is a named account left holding test
+  // points, not somebody's real balance overwritten.
+  const { data: candidates } = await db.from('profiles')
+    .select('id, email, loyalty_points, loyalty_points_held')
+    .eq('loyalty_points', 0)
+    .eq('loyalty_points_held', 0)
+    .limit(1);
+  const who = candidates?.[0];
+  if (!who) {
+    bad('no spare account', 'every profile holds points; skipping the points test rather than touching a real balance');
+  } else {
+    user = who.id;
+    pointsBefore = { loyalty_points: 0, loyalty_points_held: 0 };
+  }
   ok('created two disposable categories', 'capacity 10 each, on a made-up event id');
+  if (who) ok('borrowed an empty account for the points test', who.email + ' (0 points, restored at the end)');
 
   hdr('1. Forty buyers hit ten seats at the same instant');
   const t0 = Date.now();
@@ -117,6 +132,10 @@ try {
   }
 
   hdr('6. Loyalty points: one balance, twenty simultaneous checkouts');
+  if (!user) {
+    console.log('   skipped — no empty account was free to borrow');
+    throw new Error('SKIP_POINTS');
+  }
   await db.from('profiles').update({ loyalty_points: 500, loyalty_points_held: 0 }).eq('id', user);
   const r6 = await Promise.all(Array.from({ length: 20 }, (_, i) => reserve('c_d_' + i, user, [{ categoryId: catA, qty: 1 }], 500, 1000)));
   r6.forEach((r, i) => { if (!r.error) made.add('c_d_' + i); });
@@ -126,7 +145,8 @@ try {
   (prof.loyalty_points === 500 && prof.loyalty_points_held === 500)
     ? ok('500 held, nothing spent until the payment confirms') : bad('points accounting wrong', JSON.stringify(prof));
 } catch (e) {
-  bad('aborted', String(e?.message || e));
+  // A deliberate skip is not a failure.
+  if (String(e?.message) !== 'SKIP_POINTS') bad('aborted', String(e?.message || e));
 } finally {
   hdr('Cleanup');
   for (const id of made) await db.from('inventory_reservations').delete().eq('reservation_id', id);
@@ -135,7 +155,13 @@ try {
   if (catB) await db.from('event_ticket_categories').delete().eq('id', catB);
   const left = (await db.from('event_ticket_categories').select('id', { count: 'exact', head: true }).eq('event_id', EVENT)).count;
   left === 0 ? ok('test categories removed') : bad('categories left behind', String(left));
-  ok('loyalty balance restored', JSON.stringify(pointsBefore));
+
+  if (user) {
+    const after = (await db.from('profiles').select('loyalty_points, loyalty_points_held').eq('id', user).single()).data;
+    (after?.loyalty_points === 0 && after?.loyalty_points_held === 0)
+      ? ok('borrowed account put back to zero')
+      : bad('BORROWED ACCOUNT NOT RESTORED', 'set loyalty_points and loyalty_points_held to 0 for profile ' + user);
+  }
   console.log('\n' + '='.repeat(60) + '\n  ' + pass + ' passed, ' + fail + ' failed\n' + '='.repeat(60) + '\n');
   process.exit(fail ? 1 : 0);
 }

@@ -9,6 +9,7 @@ import { useAlert } from '@/context/AlertContext';
 import { Reorder } from 'framer-motion'; 
 import Link from 'next/link';
 import Image from 'next/image';
+import { friendlyError } from '@/lib/user-errors';
 
 interface TeamMember {
   _id?: string;
@@ -68,7 +69,7 @@ export default function AdminTeamPage() {
       setMembers(updatedList);
       await syncToDatabase(updatedList);
     } catch (err: any) {
-      showAlert(err.message, "error");
+      showAlert(friendlyError(err), "error");
     } finally {
       setUploading(false);
     }
@@ -103,7 +104,7 @@ export default function AdminTeamPage() {
       await syncToDatabase(updated);
       showAlert("Image replaced successfully", "success");
     } catch (err: any) {
-      showAlert(err.message, "error");
+      showAlert(friendlyError(err), "error");
     } finally {
       setUploading(false);
     }

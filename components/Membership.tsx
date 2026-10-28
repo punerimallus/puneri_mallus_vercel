@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation'; // 🔥 NEW: Added router for succe
 import { waitForOrder, orderRef } from '@/lib/payments/client';
 import { onEnter } from '@/lib/ui/enter';
 import { formatDobDisplay, isOldEnough, maxDobFor, minDobFor } from '@/lib/dob';
+import { friendlyError } from '@/lib/user-errors';
 
 interface MembershipCardProps {
   price: number;
@@ -131,7 +132,7 @@ export default function MembershipCard({ price, benefits, userId, userEmail }: M
       setStep(3); // Proceed to waiting room
 
     } catch (err: any) {
-      showAlert(err.message || "Failed to save details.", "error");
+      showAlert(friendlyError(err, "Could not save your details. Please try again."), "error");
       setUpgrading(false);
     }
   };
@@ -220,7 +221,7 @@ export default function MembershipCard({ price, benefits, userId, userEmail }: M
       });
       rzp.open();
     } catch (err: any) {
-      showAlert(err.message || "Checkout failed", "error");
+      showAlert(friendlyError(err, "Checkout could not start. Please try again."), "error");
       setUpgrading(false);
     }
   };

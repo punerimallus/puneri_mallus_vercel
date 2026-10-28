@@ -12,6 +12,7 @@ import { groupSizeOf, isGroup, pricePerPerson } from '@/lib/payments/groups';
 import { salesStatus } from '@/lib/events/sales';
 import { grossUpToPaise, MAX_GROUP_TICKETS_PER_ACCOUNT, MAX_TICKETS_PER_ACCOUNT } from '@/lib/payments/pricing';
 import { formatRupees } from '@/lib/payments/format';
+import { friendlyError } from '@/lib/user-errors';
 
 export default function EventBookingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: eventId } = use(params);
@@ -275,7 +276,7 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
       });
       rzp.open();
     } catch (err: any) {
-      showAlert(err.message || "Failed to initiate gateway", "error");
+      showAlert(friendlyError(err, "Checkout could not start. Please try again."), "error");
       setProcessing(false);
     }
   };

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
 import Link from 'next/link';
 import { Mail, ArrowLeft, CheckCircle } from 'lucide-react';
+import { friendlyError } from '@/lib/user-errors';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
@@ -38,7 +39,7 @@ const checkRes = await fetch(`/api/profile/check-email?email=${encodeURIComponen
     });
 
     if (error) {
-      setError(error.message);
+      setError(friendlyError(error, "Could not send the reset link. Please try again."));
     } else {
       setSubmitted(true);
     }

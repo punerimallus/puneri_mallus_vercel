@@ -5,6 +5,7 @@ import { Phone, User, ArrowRight, X, Loader2, Smartphone, ShieldCheck } from 'lu
 import { createBrowserClient } from '@supabase/ssr';
 import { auth as firebaseAuth } from '@/lib/firebase';
 import { RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult } from "firebase/auth";
+import { friendlyError } from '@/lib/user-errors';
 
 export default function GlobalEntryGate() {
   const [isOpen, setIsOpen] = useState(false);
@@ -68,7 +69,7 @@ export default function GlobalEntryGate() {
         setStep(2);
       }
     } catch (err: any) {
-      setErrorMsg("Failed to connect. Please check your network.");
+      setErrorMsg(friendlyError(err, "Could not connect. Please check your network."));
     } finally {
       setLoading(false);
     }
@@ -91,7 +92,7 @@ export default function GlobalEntryGate() {
       setConfirmationResult(result);
       setStep(3); // Move to OTP Step
     } catch (err: any) {
-      setErrorMsg("Failed to send code. Please check the number.");
+      setErrorMsg(friendlyError(err, "We could not send the code. Please check the number."));
       if (recaptchaVerifierRef.current) {
         recaptchaVerifierRef.current.clear();
         recaptchaVerifierRef.current = null;
@@ -175,7 +176,7 @@ export default function GlobalEntryGate() {
       }
 
     } catch (err: any) {
-      setErrorMsg(err.message || "Invalid code or connection error. Please try again.");
+      setErrorMsg(friendlyError(err, "That code did not work. Please try again."));
     } finally { 
       setLoading(false); 
     }

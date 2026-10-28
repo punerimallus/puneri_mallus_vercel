@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { User, Phone, Mail, MapPin, Users, ShieldCheck, ArrowRight, ArrowLeft, Loader2, Trophy, CheckSquare, CalendarDays } from 'lucide-react';
 import { useAlert } from '@/context/AlertContext';
 import { onEnter } from '@/lib/ui/enter';
+import { friendlyError } from '@/lib/user-errors';
 
 const TEAM_TYPES = ["Locality Team", "Friends Team", "Corporate Team", "Club Team", "Other"];
 const PUNE_AREAS = ["Akurdi", "Aundh", "Balewadi", "Baner", "Bavdhan", "Bhosari", "Bibwewadi", "Camp", "Chikhali", "Chinchwad", "Dapodi", "Deccan", "Dhanori", "Erandwane", "Fatima Nagar", "Ghorpadi", "Hadapsar", "Hinjewadi", "Kalyani Nagar", "Karve Nagar", "Kasarwadi","Kalewadi","Katraj", "Khadki", "Kondhwa", "Koregaon Park", "Kothrud", "Lohegaon", "Magarpatta", "Model Colony", "Moshi", "Mundhwa", "NIBM", "Nigdi", "Pashan", "Phugewadi", "Pimpri", "Pimple Gurav", "Pimple Nilakh", "Pimple Saudagar", "Pune City", "Punawale", "Rahatani", "Ravet", "Sadashiv Peth", "Sahakar Nagar", "Sangvi", "Shivajinagar", "Sinhagad Road", "Sus", "Swargate", "Talawade", "Tathawade", "Thergaon", "Undri", "Viman Nagar", "Vishrantwadi", "Wakad", "Wanowrie", "Warje", "Yerwada"].sort();
@@ -93,7 +94,7 @@ export default function FootballRegistration() {
       router.push('/football/closed');
 
     } catch (err: any) {
-      showAlert(err.message || "Failed to submit. Please try again.", "error");
+      showAlert(friendlyError(err, "Could not submit. Please try again."), "error");
       setLoading(false);
     }
   };

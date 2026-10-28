@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Mail, Receipt, ArrowRight, Loader2, X } from 'lucide-react';
 import { createBrowserClient } from '@supabase/ssr';
 import { onEnter } from '@/lib/ui/enter';
+import { friendlyError } from '@/lib/user-errors';
 
 interface MartInvoiceGateProps {
   userId: string;
@@ -44,7 +45,7 @@ export default function MartInvoiceGate({ userId, userPhone, onSuccess, onCancel
       // Pass the email back to the parent component to trigger Razorpay
       onSuccess(email.toLowerCase().trim());
     } catch (err: any) {
-      setError(err.message || "Failed to save invoice email.");
+      setError(friendlyError(err, "Could not save that email. Please try again."));
       setLoading(false);
     }
   };
