@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { 
   ShieldCheck, Trash2, Search, Loader2, 
-  MapPin, ExternalLink, Globe, Instagram, MessageCircle, X, Check, Zap, GripVertical,
+  MapPin, ExternalLink, Globe, Instagram, MessageCircle, X, Check, Zap, GripVertical, Phone,
   FileText, Eye, User
 } from 'lucide-react';
 import Image from 'next/image';
@@ -274,10 +274,45 @@ const handleDelete = async () => {
                 </div>
               </div>
 
+              {/* The number the owner gave on the Mallu Connect form, so an admin can call or
+                  message them without opening the listing. Tap to dial; WhatsApp alongside when
+                  they gave one. onPointerDown is stopped on both, or the click starts a row drag. */}
+              <div className="flex flex-col items-center md:items-end gap-1.5 shrink-0 md:mr-2">
+                {item.contact ? (
+                  <a
+                    href={`tel:+91${item.contact}`}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    className="flex items-center gap-2 text-sm font-black tracking-wider text-white hover:text-brandRed transition-colors"
+                    title="Call this business"
+                  >
+                    <Phone size={13} className="text-brandRed shrink-0" />
+                    +91 {item.contact}
+                  </a>
+                ) : (
+                  <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-zinc-600">
+                    <Phone size={12} className="shrink-0" /> No number given
+                  </span>
+                )}
+
+                {item.whatsapp && (
+                  <a
+                    href={`https://wa.me/91${item.whatsapp}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-green-500/80 hover:text-green-400 transition-colors"
+                    title={`WhatsApp +91 ${item.whatsapp}`}
+                  >
+                    <MessageCircle size={11} className="shrink-0" />
+                    {item.whatsapp === item.contact ? 'WhatsApp' : `WhatsApp ${item.whatsapp}`}
+                  </a>
+                )}
+              </div>
+
               <div className="flex items-center gap-3">
-                <Link 
-                  href={`/directory/${item._id}`} 
-                  target="_blank" 
+                <Link
+                  href={`/directory/${item._id}`}
+                  target="_blank"
                   onPointerDown={(e) => e.stopPropagation()}
                   className="p-3 bg-zinc-900 text-zinc-500 hover:text-brandRed rounded-xl transition-all border border-white/5"
                 >
