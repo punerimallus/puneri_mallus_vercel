@@ -18,6 +18,8 @@ const base: TicketPdfInput = {
 
 // jsPDF defines text() per instance, so record draws through a thin subclass.
 const drawn: string[] = [];
+/** Shapes and images, in the order they are drawn, with the fill colour in force at the time. */
+const shapes: { op: string; args: number[]; fill: string }[] = [];
 vi.mock('jspdf', async (orig) => {
   const mod: any = await orig();
   const Real = mod.default ?? mod.jsPDF;
@@ -28,6 +30,25 @@ vi.mock('jspdf', async (orig) => {
       this.text = (t: any, ...rest: any[]) => {
         (Array.isArray(t) ? t : [t]).forEach((x) => drawn.push(String(x)));
         return text(t, ...rest);
+      };
+
+      // Same trick for the shapes, so the header's draw ORDER can be asserted: a panel drawn
+      // after the logo would hide it, and that is exactly the mistake worth catching.
+      let fill = '';
+      const setFillColor = this.setFillColor.bind(this);
+      this.setFillColor = (...a: any[]) => {
+        fill = a.join(',');
+        return setFillColor(...a);
+      };
+      const roundedRect = this.roundedRect.bind(this);
+      this.roundedRect = (...a: any[]) => {
+        shapes.push({ op: 'roundedRect', args: a.slice(0, 4).map(Number), fill });
+        return roundedRect(...a);
+      };
+      const addImage = this.addImage.bind(this);
+      this.addImage = (...a: any[]) => {
+        shapes.push({ op: 'addImage', args: a.filter((x: any) => typeof x === 'number').slice(0, 4).map(Number), fill });
+        return addImage(...a);
       };
     }
   }
@@ -40,7 +61,7 @@ function captureText() {
   return { drawn };
 }
 
-afterEach(() => { vi.restoreAllMocks(); drawn.length = 0; });
+afterEach(() => { vi.restoreAllMocks(); drawn.length = 0; shapes.length = 0; });
 
 describe('ticket PDF', () => {
   it('has one page per pass plus a receipt', async () => {
@@ -123,5 +144,55 @@ describe('fetchLogoBase64', () => {
     expect(await fetchLogoBase64('https://x.test')).toMatch(/^data:image\/png;base64,.{1000,}/);
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('nope', { status: 404 }));
     expect(await fetchLogoBase64('https://x.test')).toMatch(/^data:image\/png;base64,.{1000,}/);
+  });
+});
+
+describe('the logo sits on a black panel', () => {
+  // A 1x1 PNG is enough: the test is about where the logo is placed, not what it looks like.
+  const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+  /** Shapes drawn since the last reset, in order. */
+  function captureHeader() {
+    shapes.length = 0;
+    return shapes;
+  }
+
+  it('draws a black panel before the logo, enclosing it', async () => {
+    const calls = captureHeader();
+    await buildTicketPdf({ ...base, logoBase64: PIXEL });
+
+    const panel = calls.find((c) => c.op === 'roundedRect' && c.fill === '0,0,0');
+    expect(panel, 'a black rounded panel should be drawn').toBeTruthy();
+
+    const logo = calls.find((c) => c.op === 'addImage');
+    expect(logo).toBeTruthy();
+
+    // Order matters: a panel drawn after the logo would hide it.
+    expect(calls.indexOf(panel!)).toBeLessThan(calls.indexOf(logo!));
+
+    // And it has to actually cover the logo on all four sides.
+    const [px, py, pw, ph] = panel!.args;
+    const [lx, ly, lw, lh] = logo!.args;
+    expect(px).toBeLessThanOrEqual(lx);
+    expect(py).toBeLessThanOrEqual(ly);
+    expect(px + pw).toBeGreaterThanOrEqual(lx + lw);
+    expect(py + ph).toBeGreaterThanOrEqual(ly + lh);
+  });
+
+  it('keeps the panel inside the header, clear of the red rule', async () => {
+    const calls = captureHeader();
+    await buildTicketPdf({ ...base, logoBase64: PIXEL });
+    const panel = calls.find((c) => c.op === 'roundedRect' && c.fill === '0,0,0')!;
+    const [px, py, , ph] = panel.args;
+
+    expect(px).toBe(16);              // lines up with the page margin, like the title opposite
+    expect(py).toBeGreaterThan(0);    // not bleeding off the top
+    expect(py + ph).toBeLessThan(40); // the red divider starts at y = 40
+  });
+
+  it('draws no panel when there is no logo to put on it', async () => {
+    const calls = captureHeader();
+    await buildTicketPdf({ ...base, logoBase64: null });
+    expect(calls.some((c) => c.op === 'roundedRect' && c.fill === '0,0,0')).toBe(false);
   });
 });

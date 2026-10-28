@@ -74,7 +74,23 @@ const label = (doc: Doc, text: string, x: number, y: number, align: 'left' | 'ri
 function header(doc: Doc, logo: string | null, title: string, subtitle: string) {
   if (logo) {
     // Logo is 552x472; keep its proportions.
-    doc.addImage(logo, 'PNG', M, 6, 32, 32 * (472 / 552), 'pm-logo', 'FAST');
+    // The "puneri" half of the wordmark is white with a thin outline, so on a white page it all
+    // but disappears — it only reads against something dark. A black panel behind it gives those
+    // white letters something to sit on; the red "MALLUS" is legible either way.
+    //
+    // The panel starts at the page margin rather than the logo, so its left edge lines up with
+    // the title on the right and with the footer, and the logo is inset within it.
+    // Padding is chosen so the logo keeps the exact vertical position it had before the panel
+    // existed (y = 6), leaving the breathing room above the red rule at y = 40 unchanged.
+    const pad = 2.5;
+    const logoW = 32;
+    const logoH = 32 * (472 / 552);
+    const boxX = M;
+    const boxY = 6 - pad;
+
+    doc.setFillColor(0, 0, 0);
+    doc.roundedRect(boxX, boxY, logoW + pad * 2, logoH + pad * 2, 2.5, 2.5, 'F');
+    doc.addImage(logo, 'PNG', boxX + pad, boxY + pad, logoW, logoH, 'pm-logo', 'FAST');
   } else {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(18);

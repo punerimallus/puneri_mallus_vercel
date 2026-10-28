@@ -5,6 +5,7 @@
 --
 -- WHAT IT REMOVES  (all of it is test data)
 --   ticket_bookings              every booking
+--   scan_log                     the admission history for those bookings
 --   payment_orders               EVENT_TICKET orders only
 --   ticket_numbers               every seat held
 --   inventory_reservations       every reservation
@@ -44,6 +45,14 @@ delete from public.inventory_reservations;
 delete from public.payment_orders where payment_type = 'EVENT_TICKET';
 delete from public.ticket_bookings;
 
+-- 3b. The admission history ------------------------------------------------------------
+-- scan_log records who admitted whom. It is an audit trail, so it is removed deliberately and
+-- separately rather than quietly: with the bookings gone its rows point at nothing, and leaving
+-- them means a future "who scanned what" query returns test noise mixed with real admissions.
+--
+-- Comment this out if you want to keep a record of the test scans.
+delete from public.scan_log;
+
 -- 4. Counters ---------------------------------------------------------------------------
 -- `sold` means "seats in use" and `released` is pinned at 0 by design. `issued_total` is the
 -- monotonic "has this category ever issued a pass" marker, which a fresh start resets too.
@@ -68,6 +77,7 @@ select
   (select count(*) from public.inventory_reservations)                             as reservations,
   (select coalesce(sum(sold), 0) from public.event_ticket_categories)              as total_sold,
   (select count(*) from public.payments)                                           as ledger_kept,
+  (select count(*) from public.scan_log)                                           as scans,
   (select count(*) from public.payment_webhook_events)                             as webhook_dedupe_kept;
 
 commit;
