@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildReceipt, buildScanUrl, formatEventDate, formatIst, formatRupees, pdfSafe } from '@/lib/payments/format';
+import { buildReceipt, buildScanUrl, formatAmount, formatEventDate, formatIst, formatRupees, pdfSafe } from '@/lib/payments/format';
+import { pricePerPerson } from '@/lib/payments/groups';
 import { grossUpToPaise } from '@/lib/payments/pricing';
 
 describe('formatEventDate', () => {
@@ -79,5 +80,42 @@ describe('pdfSafe', () => {
     expect(pdfSafe('Onam Night - Baner, Pune')).toBe('Onam Night - Baner, Pune');
     expect(pdfSafe('Café  Mallu—Night')).toBe('Café Mallu—Night');
     expect(pdfSafe('Party 🎉 മലയാളം')).toBe('Party');
+  });
+});
+
+describe('formatAmount', () => {
+  it('leaves whole rupees whole', () => {
+    expect(formatAmount(2)).toBe('2');
+    expect(formatAmount(400)).toBe('400');
+    expect(formatAmount(1500)).toBe('1,500');
+    expect(formatAmount(100000)).toBe('1,00,000');  // Indian grouping
+  });
+
+  it('gives a fractional amount both decimals', () => {
+    // A group pass of 5 at Rs.2 is Rs.0.40 each. "0.4" looked like a rendering fault.
+    expect(formatAmount(0.4)).toBe('0.40');
+    expect(formatAmount(166.67)).toBe('166.67');
+    expect(formatAmount(424.15)).toBe('424.15');
+    expect(formatAmount(0.5)).toBe('0.50');
+  });
+
+  it('rounds to two decimals rather than trailing off', () => {
+    expect(formatAmount(166.666)).toBe('166.67');
+    expect(formatAmount(0.333)).toBe('0.33');
+  });
+
+  it('copes with nothing sensible', () => {
+    expect(formatAmount(0)).toBe('0');
+    expect(formatAmount(NaN)).toBe('0');
+    expect(formatAmount(Infinity)).toBe('0');
+  });
+});
+
+describe('per-person price, as the card shows it', () => {
+  it('reads properly for the prices actually configured', () => {
+    // Rs.2 group of 5 -> the case in the screenshot.
+    expect(`₹${formatAmount(pricePerPerson(2, 5))} each`).toBe('₹0.40 each');
+    expect(`₹${formatAmount(pricePerPerson(2000, 5))} each`).toBe('₹400 each');
+    expect(`₹${formatAmount(pricePerPerson(500, 3))} each`).toBe('₹166.67 each');
   });
 });

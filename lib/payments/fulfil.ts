@@ -315,6 +315,21 @@ export async function fulfilOrder(
         );
       }
 
+      // The reservation always records one number per seat it took. If that is not true here
+      // something has corrupted the order, and issuing what we can would hand the buyer a PDF
+      // with fewer passes than they paid for — or none at all — while looking like a success.
+      // Refund instead.
+      const shortfall = allocations.find((a) => !Array.isArray(a.numbers) || a.numbers.length !== a.qty);
+      if (shortfall) {
+        return await cannotDeliver(
+          deps,
+          order,
+          payment.id,
+          `ALLOCATION_INCOMPLETE: ${shortfall.categoryId} has ${shortfall.numbers?.length ?? 0} of ${shortfall.qty} numbers`,
+          'The seats recorded against this order are incomplete, so the passes could not be issued correctly.',
+        );
+      }
+
       try {
         await deps.confirmReservation(reservationId);
       } catch (e) {

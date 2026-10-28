@@ -34,6 +34,21 @@ export function formatRupees(amount: number): string {
   return `Rs. ${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+/**
+ * A rupee figure to sit next to a ₹ sign on screen.
+ *
+ * Whole amounts stay whole (₹400, ₹1,500) because trailing zeroes are noise on a price list;
+ * anything fractional gets both decimals, so a group pass reads "₹0.40 each" rather than the
+ * half-finished-looking "₹0.4".
+ */
+export function formatAmount(amount: number): string {
+  const n = Number.isFinite(amount) ? amount : 0;
+  return n.toLocaleString('en-IN', {
+    minimumFractionDigits: Number.isInteger(n) ? 0 : 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 /** "1 Oct 2026, 9:41 pm" in Indian time, whatever timezone the server runs in. */
 export function formatIst(value: Date | string | number): string {
   const d = new Date(value);

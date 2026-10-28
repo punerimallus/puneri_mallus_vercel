@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, use } from 'react';
-import { CheckCircle2, MapPin, Calendar, Clock, Mail, Smartphone, Loader2, ArrowRight, Download, ChevronLeft, ChevronRight, LogIn } from 'lucide-react';
+import { CheckCircle2, MapPin, Calendar, Clock, Mail, Smartphone, Loader2, ArrowRight, Download, ChevronLeft, ChevronRight, LogIn, BookmarkCheck, User } from 'lucide-react';
 import Link from 'next/link';
 import QRCode from 'qrcode';
 import { admitsLabel, isGroup } from '@/lib/payments/groups';
@@ -33,6 +33,8 @@ export default function TicketSuccessPage({ params }: { params: Promise<{ bookin
   const [problem, setProblem] = useState<'login' | 'missing' | 'error' | null>(null);
   const [view, setView] = useState<View | null>(null);
   const [image, setImage] = useState<string | null>(null);
+  // Shown beside the profile link so the address is memorable, not just clickable.
+  const [origin, setOrigin] = useState('');
   const [qrs, setQrs] = useState<string[]>([]);
   const [active, setActive] = useState(0);
   const [resendState, setResendState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
@@ -49,6 +51,7 @@ export default function TicketSuccessPage({ params }: { params: Promise<{ bookin
         const v: View = result.booking;
         setView(v);
         setImage(result.image || null);
+        setOrigin(String(result.baseUrl || window.location.origin).replace(/\/+$/, ''));
         // QR codes are drawn in the browser (no third-party service) from the signed link the
         // server built. Signing needs a server secret, so the browser can only ever render what
         // it is given — it cannot mint a QR for a pass.
@@ -239,7 +242,27 @@ export default function TicketSuccessPage({ params }: { params: Promise<{ bookin
           {resendMessage && <p className={`text-[10px] font-bold uppercase tracking-widest ${resendState === 'sent' ? 'text-green-500' : 'text-zinc-400'}`}>{resendMessage}</p>}
         </div>
 
-        <div className="mt-8 text-center">
+        {/* People close this page and then worry they have lost the tickets. Say plainly where
+            they live, and show the address so it is memorable rather than just clickable. */}
+        <div className="mt-8 rounded-3xl border border-white/10 bg-zinc-950 p-6 text-center">
+          <BookmarkCheck size={20} className="text-brandRed mx-auto mb-3" />
+          <p className="text-sm font-bold text-white">These passes are saved to your account</p>
+          <p className="mt-2 text-xs leading-relaxed text-zinc-400">
+            You do not need this page or the email. Your tickets are always in your profile, under
+            <span className="text-white font-bold"> My Tickets</span>.
+          </p>
+          <Link
+            href="/profile"
+            className="mt-4 inline-flex items-center justify-center gap-2 rounded-2xl bg-white/5 border border-white/10 px-6 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-white hover:text-black"
+          >
+            <User size={13} /> Open My Tickets
+          </Link>
+          <p className="mt-3 font-mono text-[10px] text-zinc-600 break-all">
+            {origin}/profile
+          </p>
+        </div>
+
+        <div className="mt-6 text-center">
           <Link href="/" className="inline-flex bg-white/5 border border-white/10 text-white px-8 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-white hover:text-black transition-all items-center justify-center gap-2">
             Return to Homepage <ArrowRight size={14} />
           </Link>

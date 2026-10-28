@@ -59,7 +59,8 @@ export function looksTechnical(message: string): boolean {
     || /\bat\s+\w+\s+\(/.test(m)          // stack frame
     || /\b[45]\d{2}\b.*\b(?:status|code)\b/i.test(m)
     || /\{|\}|<[a-z]+>/i.test(m)          // JSON or markup
-    || /undefined|null|NaN/.test(m)
+    // Whole words only: "annulled" and "cancelled" are ordinary English and must survive.
+    || /\b(?:undefined|null|NaN)\b/.test(m)
     // Database talk: "column x does not exist", "duplicate key value violates ...".
     || /\b(?:column|relation|constraint|duplicate key|violates|syntax error at)\b/i.test(m)
     || /\b\w+\.\w+ does not exist\b/i.test(m)

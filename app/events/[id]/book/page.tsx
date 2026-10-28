@@ -11,7 +11,7 @@ import { maskNumber, normalizeWhatsAppNumber } from '@/lib/whatsapp';
 import { groupSizeOf, isGroup, pricePerPerson } from '@/lib/payments/groups';
 import { salesStatus } from '@/lib/events/sales';
 import { grossUpToPaise, MAX_GROUP_TICKETS_PER_ACCOUNT, MAX_TICKETS_PER_ACCOUNT } from '@/lib/payments/pricing';
-import { formatRupees } from '@/lib/payments/format';
+import { formatAmount, formatRupees } from '@/lib/payments/format';
 import { friendlyError } from '@/lib/user-errors';
 
 export default function EventBookingPage({ params }: { params: Promise<{ id: string }> }) {
@@ -19,6 +19,8 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
   
   // 🔥 Tribe Loyalty States
   const [loyaltyBalance, setLoyaltyBalance] = useState(0);
+  // Points tied up in another unfinished checkout of theirs; shown so the number makes sense.
+  const [loyaltyHeld, setLoyaltyHeld] = useState(0);
   const [applyPoints, setApplyPoints] = useState(false);
   const MIN_REDEEM_THRESHOLD = 50; 
   
@@ -76,13 +78,18 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
         if (user) {
           const { data: profile } = await supabase
             .from('profiles')
-            .select('is_member, loyalty_points, phone_number')
+            .select('is_member, loyalty_points, loyalty_points_held, phone_number')
             .eq('id', user.id)
             .single();
-          
+
           if (profile) {
             setIsMember(profile.is_member);
-            setLoyaltyBalance(profile.loyalty_points || 0);
+            // Points promised to another checkout of theirs cannot be spent here, and the server
+            // enforces exactly this. Showing the raw balance would offer a discount that is then
+            // refused at Proceed to Pay, which reads as a bug rather than as "finish your other tab".
+            const held = profile.loyalty_points_held || 0;
+            setLoyaltyBalance(Math.max(0, (profile.loyalty_points || 0) - held));
+            setLoyaltyHeld(held);
             setWhatsappNumber(normalizeWhatsAppNumber(profile.phone_number));
           }
         }
@@ -398,11 +405,15 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
               </form>
             ) : (
               <div className="space-y-4">
-                <div className="flex justify-between items-end mb-6 border-b border-white/5 pb-4">
-                  <h2 className="text-lg font-black uppercase tracking-widest text-zinc-200 flex items-center gap-2">
-                    <Sparkles size={16} className="text-brandRed" /> Select Passes
+                {/* Stacks on a phone: side by side, the heading wrapped to two lines and the
+                    limits pill crowded into it. */}
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-3 mb-6 border-b border-white/5 pb-4">
+                  <h2 className="text-lg font-black uppercase tracking-widest text-zinc-200 flex items-center gap-2 shrink-0">
+                    <Sparkles size={16} className="text-brandRed shrink-0" /> Select Passes
                   </h2>
-                  <p className="text-[10px] text-brandRed font-black uppercase tracking-widest bg-brandRed/10 border border-brandRed/20 px-3 py-1.5 rounded-full shadow-inner">Max {MAX_TICKETS_PER_ACCOUNT} per account{hasGroupCategory ? ` · ${MAX_GROUP_TICKETS_PER_ACCOUNT} group tickets` : ''}</p>
+                  <p className="self-start sm:self-auto text-[9px] sm:text-[10px] text-brandRed font-black uppercase tracking-widest bg-brandRed/10 border border-brandRed/20 px-3 py-1.5 rounded-full shadow-inner leading-relaxed">
+                    Max {MAX_TICKETS_PER_ACCOUNT} per account{hasGroupCategory ? ` · ${MAX_GROUP_TICKETS_PER_ACCOUNT} group tickets` : ''}
+                  </p>
                 </div>
 
                 <div className="space-y-3">
@@ -418,44 +429,46 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
                       : cat.price;
 
                     return (
-                      <div key={cat.id} className={`bg-black/60 backdrop-blur-md border p-5 rounded-2xl flex justify-between items-center transition-all duration-300 ${isSoldOut ? 'border-zinc-900 opacity-50 grayscale' : 'border-white/10 hover:border-white/30 hover:bg-white/[0.02] shadow-lg'}`}>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-sm font-black text-white uppercase tracking-widest">{cat.name}</h3>
+                      <div key={cat.id} className={`bg-black/60 backdrop-blur-md border p-4 sm:p-5 rounded-2xl flex items-center justify-between gap-3 sm:gap-4 transition-all duration-300 ${isSoldOut ? 'border-zinc-900 opacity-50 grayscale' : 'border-white/10 hover:border-white/30 hover:bg-white/[0.02] shadow-lg'}`}>
+                        {/* min-w-0 lets a long category name wrap instead of shoving the button
+                            off the card, and both rows wrap rather than overflowing on a phone. */}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                            <h3 className="text-[13px] sm:text-sm font-black text-white uppercase tracking-widest break-words">{cat.name}</h3>
                             {isGroup(cat.group_size) && (
-                               <span className="text-[8px] bg-white/10 border border-white/20 text-white px-2 py-0.5 rounded-full font-black uppercase tracking-widest">
+                               <span className="shrink-0 text-[8px] bg-white/10 border border-white/20 text-white px-2 py-0.5 rounded-full font-black uppercase tracking-widest">
                                  Group of {groupSizeOf(cat.group_size)}
                                </span>
                             )}
                             {hasActiveDiscount && (
-                               <span className="text-[8px] bg-brandRed text-white px-2 py-0.5 rounded-full font-black uppercase tracking-widest flex items-center gap-1 shadow-[0_0_10px_rgba(255,0,0,0.4)]">
+                               <span className="shrink-0 text-[8px] bg-brandRed text-white px-2 py-0.5 rounded-full font-black uppercase tracking-widest flex items-center gap-1 shadow-[0_0_10px_rgba(255,0,0,0.4)]">
                                  <Star size={8} className="fill-white" /> Tribe Rate
                                </span>
                             )}
                           </div>
-                          <div className="flex items-center gap-3 mt-1.5">
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-2">
                             {hasActiveDiscount ? (
                                <div className="flex items-center gap-2">
-                                 <p className="text-[10px] font-bold text-zinc-500 tracking-widest line-through">₹{cat.price.toLocaleString('en-IN')}</p>
-                                 <p className="text-xs font-bold text-brandRed tracking-widest">₹{displayPrice.toLocaleString('en-IN')}</p>
+                                 <p className="text-[10px] font-bold text-zinc-500 tracking-widest line-through">₹{formatAmount(cat.price)}</p>
+                                 <p className="text-xs font-bold text-brandRed tracking-widest">₹{formatAmount(displayPrice)}</p>
                                </div>
                             ) : (
-                               <p className="text-xs font-bold text-brandRed tracking-widest">₹{displayPrice.toLocaleString('en-IN')}</p>
+                               <p className="text-xs font-bold text-brandRed tracking-widest">₹{formatAmount(displayPrice)}</p>
                             )}
-                            {isGroup(cat.group_size) && <p className="text-[10px] font-bold text-zinc-400 tracking-widest">admits {groupSizeOf(cat.group_size)} &middot; ₹{pricePerPerson(displayPrice, cat.group_size).toLocaleString('en-IN')} each</p>}
-                            {isFastFilling && <span className="text-[9px] font-black uppercase text-orange-500 bg-orange-500/10 px-2 py-0.5 rounded-full animate-pulse border border-orange-500/20 shadow-[0_0_10px_rgba(249,115,22,0.2)]">Fast Filling</span>}
-                            {isSoldOut && <span className="text-[9px] font-black uppercase text-zinc-500 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded-full">Sold Out</span>}
+                            {isGroup(cat.group_size) && <p className="text-[10px] font-bold text-zinc-400 tracking-widest">admits {groupSizeOf(cat.group_size)} &middot; ₹{formatAmount(pricePerPerson(displayPrice, cat.group_size))} each</p>}
+                            {isFastFilling && <span className="shrink-0 text-[9px] font-black uppercase text-orange-500 bg-orange-500/10 px-2 py-0.5 rounded-full animate-pulse border border-orange-500/20 shadow-[0_0_10px_rgba(249,115,22,0.2)]">Fast Filling</span>}
+                            {isSoldOut && <span className="shrink-0 text-[9px] font-black uppercase text-zinc-500 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded-full">Sold Out</span>}
                           </div>
                         </div>
-                        
+
                         {isSoldOut ? (
-                          <button disabled className="bg-zinc-950 text-zinc-600 font-bold text-[10px] uppercase tracking-widest px-6 py-2.5 rounded-xl border border-zinc-800">Sold Out</button>
+                          <button disabled className="shrink-0 bg-zinc-950 text-zinc-600 font-bold text-[10px] uppercase tracking-widest px-5 sm:px-6 py-2.5 rounded-xl border border-zinc-800">Sold Out</button>
                         ) : qty === 0 ? (
-                          <button onClick={() => updateCart(cat.id, 1, remaining)} className="border border-white/20 bg-white/5 text-white font-bold text-[10px] uppercase tracking-widest px-6 py-2.5 rounded-xl hover:bg-white hover:text-black transition-all active:scale-95 shadow-md">
+                          <button onClick={() => updateCart(cat.id, 1, remaining)} className="shrink-0 border border-white/20 bg-white/5 text-white font-bold text-[10px] uppercase tracking-widest px-5 sm:px-6 py-3 rounded-xl hover:bg-white hover:text-black transition-all active:scale-95 shadow-md">
                             Add
                           </button>
                         ) : (
-                          <div className="flex items-center gap-4 bg-white text-black rounded-xl px-2 py-1.5 shadow-[0_0_15px_rgba(255,255,255,0.2)] ring-2 ring-white/50">
+                          <div className="shrink-0 flex items-center gap-3 sm:gap-4 bg-white text-black rounded-xl px-2 py-1.5 shadow-[0_0_15px_rgba(255,255,255,0.2)] ring-2 ring-white/50">
                             <button onClick={() => updateCart(cat.id, -1, remaining)} className="p-1.5 hover:text-brandRed transition-colors"><Minus size={14} /></button>
                             <span className="font-black text-sm w-4 text-center">{qty}</span>
                             <button onClick={() => updateCart(cat.id, 1, remaining)} className="p-1.5 hover:text-brandRed transition-colors"><Plus size={14} /></button>
@@ -482,6 +495,11 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
                     </span>
                     <span className="text-[9px] text-zinc-400 font-bold uppercase tracking-widest">
                       Balance: {loyaltyBalance} PTS
+                      {loyaltyHeld > 0 && (
+                        <span className="block text-[8px] text-zinc-500 normal-case tracking-normal font-bold mt-0.5">
+                          {loyaltyHeld} held by another checkout
+                        </span>
+                      )}
                     </span>
                   </div>
 

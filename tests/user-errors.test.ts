@@ -98,3 +98,23 @@ describe('what counts as developer output', () => {
       .toBe('Something went wrong. Please try again.');
   });
 });
+
+describe('ordinary English is not mistaken for developer output', () => {
+  it('keeps messages that merely contain those letters inside a word', () => {
+    // "annulled" contains "null"; "candid" contains no code. Substring matching ate these.
+    for (const human of [
+      'Your booking was annulled by the organiser.',
+      'That order was cancelled, so the seats went back on sale.',
+      'The venue is in Kondhwa Annexe.',
+    ]) {
+      expect(looksTechnical(human)).toBe(false);
+      expect(friendlyError(new Error(human))).toBe(human);
+    }
+  });
+
+  it('still catches the bare values on their own', () => {
+    for (const technical of ['undefined', 'null', 'NaN', 'Cannot read x of undefined']) {
+      expect(looksTechnical(technical)).toBe(true);
+    }
+  });
+});

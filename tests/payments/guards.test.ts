@@ -6,7 +6,7 @@ import { checkSchema, resetSchemaCache, REQUIRED_MARKER } from '@/lib/payments/s
 import { RATE_RULES, rateLimit, rateKey, resetRateLimits } from '@/lib/rate-limit';
 import { signTicket, unsignedPassesAllowed, verifyTicketSignature } from '@/lib/payments/ticket-signature';
 import { canScanEvent, gateIdentifier, gateIdentifierLabel, resolveGateActor, StaffDb } from '@/lib/payments/staff';
-import { translateInventoryError, reservationMessage, ticketNumberValue } from '@/lib/payments/inventory';
+import { translateInventoryError, reservationMessage, reserveInventory, ticketNumberValue } from '@/lib/payments/inventory';
 import { PointsUnavailableError, ReservationLostError, SoldOutError, TicketLimitError } from '@/lib/payments/types';
 
 const markerDb = (result: { data: unknown; error: { message: string } | null }) =>
@@ -271,5 +271,46 @@ describe('identifying a volunteer the way they actually sign in', () => {
     const typedByOrganiser = gateIdentifier('+91 98901 22274')!;
     const emailOnTheirAccount = '9890122274@punerimallus.com';
     expect(typedByOrganiser).toBe(emailOnTheirAccount);
+  });
+});
+
+describe('a reservation that did not fully succeed never reaches payment', () => {
+  const db = (data: unknown) => ({ rpc: async () => ({ data, error: null }) }) as never;
+  const req = {
+    reservationId: 'r1', userId: 'u1',
+    items: [{ categoryId: 'cat_a', qty: 2 }, { categoryId: 'cat_b', qty: 1 }],
+    maxSingle: 7, maxGroup: 2,
+  };
+
+  it('accepts a result that matches the cart exactly', async () => {
+    const out = await reserveInventory(db([
+      { categoryId: 'cat_a', qty: 2, endSold: 2, numbers: [1, 2] },
+      { categoryId: 'cat_b', qty: 1, endSold: 1, numbers: [1] },
+    ]), req);
+    expect(out).toHaveLength(2);
+  });
+
+  it('refuses an empty result rather than sending the buyer to pay for nothing', async () => {
+    await expect(reserveInventory(db([]), req)).rejects.toThrow(/RESERVATION_INCOMPLETE/);
+    await expect(reserveInventory(db(null), req)).rejects.toThrow(/RESERVATION_INCOMPLETE/);
+  });
+
+  it('refuses when a category is missing from the result', async () => {
+    await expect(reserveInventory(db([{ categoryId: 'cat_a', qty: 2, endSold: 2, numbers: [1, 2] }]), req))
+      .rejects.toThrow(/RESERVATION_INCOMPLETE/);
+  });
+
+  it('refuses when fewer numbers came back than seats asked for', async () => {
+    await expect(reserveInventory(db([
+      { categoryId: 'cat_a', qty: 2, endSold: 2, numbers: [1] },
+      { categoryId: 'cat_b', qty: 1, endSold: 1, numbers: [1] },
+    ]), req)).rejects.toThrow(/cat_a wanted 2, got 1/);
+  });
+
+  it('ignores zero-quantity lines when checking', async () => {
+    const out = await reserveInventory(db([{ categoryId: 'cat_a', qty: 1, endSold: 1, numbers: [1] }]), {
+      ...req, items: [{ categoryId: 'cat_a', qty: 1 }, { categoryId: 'cat_b', qty: 0 }],
+    });
+    expect(out).toHaveLength(1);
   });
 });

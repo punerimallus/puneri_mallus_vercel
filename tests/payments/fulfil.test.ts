@@ -367,3 +367,37 @@ describe('a refund landing mid-fulfilment cannot be overwritten', () => {
     expect(res.bookingId).toBe('booking-other');
   });
 });
+
+describe('a booking is never issued with fewer passes than were paid for', () => {
+  it('refunds rather than issuing a booking with no passes at all', async () => {
+    const w = world();
+    // An allocation that lost its numbers: the reservation says 2 seats, but none are recorded.
+    w.orders.get('order_1')!.allocated_tickets = [{ categoryId: 'cat_vip', qty: 2, endSold: 12, numbers: [] }];
+
+    const res = await fulfilOrder('order_1', { paymentId: 'pay_1', source: 'WEBHOOK' }, w.deps);
+
+    // Without the guard this produced a FULFILLED order and a PDF containing zero tickets.
+    expect(res.outcome).toBe('REFUND_INITIATED');
+    expect(res.reason).toMatch(/ALLOCATION_INCOMPLETE/);
+    expect(w.bookings.size).toBe(0);
+    expect(w.refunds).toHaveLength(1);
+  });
+
+  it('refunds when only some of the numbers are recorded', async () => {
+    const w = world();
+    // Paid for 2, but only one number survived.
+    w.orders.get('order_1')!.allocated_tickets = [{ categoryId: 'cat_vip', qty: 2, endSold: 12, numbers: [11] }];
+
+    const res = await fulfilOrder('order_1', { paymentId: 'pay_1', source: 'WEBHOOK' }, w.deps);
+    expect(res.outcome).toBe('REFUND_INITIATED');
+    expect(res.reason).toMatch(/1 of 2 numbers/);
+    expect(w.bookings.size).toBe(0);
+  });
+
+  it('issues normally when every seat has its number', async () => {
+    const w = world();
+    const res = await fulfilOrder('order_1', { paymentId: 'pay_1', source: 'WEBHOOK' }, w.deps);
+    expect(res.outcome).toBe('FULFILLED');
+    expect(w.bookings.get(res.bookingId!)!.tickets_data).toHaveLength(3);
+  });
+});

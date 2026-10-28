@@ -98,7 +98,24 @@ export async function reserveInventory(db: InventoryDb, req: ReserveRequest): Pr
     p_max_group: req.maxGroup,
   });
   if (error) throw translateInventoryError(`${error.message}`);
-  return (data || []) as Allocation[];
+
+  // The function raises rather than returning nothing, so an empty or short result means
+  // something is wrong with it. Catching that HERE matters: this runs before the buyer is sent
+  // to Razorpay, so the sale is refused rather than taken and then refunded.
+  const allocations = (data || []) as Allocation[];
+  const wanted = req.items.filter((i) => i.qty > 0);
+  if (allocations.length !== wanted.length) {
+    throw new Error(`RESERVATION_INCOMPLETE: asked for ${wanted.length} categories, got ${allocations.length}`);
+  }
+  for (const want of wanted) {
+    const got = allocations.find((a) => String(a.categoryId) === String(want.categoryId));
+    if (!got || !Array.isArray(got.numbers) || got.numbers.length !== want.qty) {
+      throw new Error(
+        `RESERVATION_INCOMPLETE: ${want.categoryId} wanted ${want.qty}, got ${got?.numbers?.length ?? 0}`,
+      );
+    }
+  }
+  return allocations;
 }
 
 /** The payment went through: the held numbers become issued and the reserved points are spent. */
