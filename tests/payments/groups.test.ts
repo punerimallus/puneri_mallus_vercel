@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MAX_GROUP_SIZE, admitsLabel, groupSizeOf, isGroup, pricePerPerson } from '@/lib/payments/groups';
-import { quoteEventCart } from '@/lib/payments/pricing';
+import { quoteEventCart, ticketNumberWidth } from '@/lib/payments/pricing';
 import { buildIssuedTickets } from '@/lib/payments/fulfil';
 import { buildTicketPdf } from '@/lib/payments/ticket-pdf';
 import QRCode from 'qrcode';
@@ -56,7 +56,7 @@ describe('group tickets at checkout', () => {
   });
   it('gives each group ticket one number (one QR) that carries the group size', () => {
     const order: any = { cart: [{ categoryId: 'grp5', name: 'GROUP OF 5 - GENERAL', prefix: 'G5-', qty: 2, unitPrice: 2000, groupSize: 5 }, { categoryId: 'single', name: 'GENERAL', prefix: 'GEN-', qty: 1, unitPrice: 500 }] };
-    const t = buildIssuedTickets(order, [{ categoryId: 'grp5', qty: 2, endSold: 4 }, { categoryId: 'single', qty: 1, endSold: 10 }]);
+    const t = buildIssuedTickets(order, [{ categoryId: 'grp5', qty: 2, endSold: 4, numbers: [3, 4] }, { categoryId: 'single', qty: 1, endSold: 10, numbers: [10] }]);
     expect(t).toEqual([
       { categoryId: 'grp5', categoryName: 'GROUP OF 5 - GENERAL', ticketNumber: 'G5-003', status: 'ISSUED', groupSize: 5 },
       { categoryId: 'grp5', categoryName: 'GROUP OF 5 - GENERAL', ticketNumber: 'G5-004', status: 'ISSUED', groupSize: 5 },
@@ -102,5 +102,35 @@ describe('group ticket PDF', () => {
     expect(all).toContain('One scan, one person');
     expect(all).toContain('valid for one person only');
     expect(all).not.toContain('Group ticket');
+  });
+});
+
+describe('pass numbers are padded to the capacity', () => {
+  it('fixes the width from the capacity, so every pass in a category matches', () => {
+    expect(ticketNumberWidth(100)).toBe(3);   // GEN-001 .. GEN-100
+    expect(ticketNumberWidth(999)).toBe(3);
+    expect(ticketNumberWidth(1000)).toBe(4);  // GEN-0001 .. GEN-1000, not GEN-999 then GEN-1000
+    expect(ticketNumberWidth(5000)).toBe(4);
+    expect(ticketNumberWidth(20)).toBe(3);    // never narrower than three
+    expect(ticketNumberWidth(null)).toBe(3);  // unlimited capacity
+    expect(ticketNumberWidth(0)).toBe(3);
+  });
+
+  it('a 1000-seat category numbers evenly from 0001 to 1000', () => {
+    const order: any = { cart: [{ categoryId: 'c', name: 'GENERAL', prefix: 'GEN-', qty: 4, unitPrice: 100, numberWidth: 4 }] };
+    const t = buildIssuedTickets(order, [{ categoryId: 'c', qty: 4, endSold: 1000, numbers: [1, 99, 999, 1000] }]);
+    expect(t.map((x) => x.ticketNumber)).toEqual(['GEN-0001', 'GEN-0099', 'GEN-0999', 'GEN-1000']);
+  });
+
+  it('a 100-seat category still reads GEN-001', () => {
+    const order: any = { cart: [{ categoryId: 'c', name: 'GENERAL', prefix: 'GEN-', qty: 2, unitPrice: 100, numberWidth: 3 }] };
+    const t = buildIssuedTickets(order, [{ categoryId: 'c', qty: 2, endSold: 100, numbers: [1, 100] }]);
+    expect(t.map((x) => x.ticketNumber)).toEqual(['GEN-001', 'GEN-100']);
+  });
+
+  it('an order with no recorded width falls back to three digits', () => {
+    const order: any = { cart: [{ categoryId: 'c', name: 'GENERAL', prefix: 'GEN-', qty: 1, unitPrice: 100 }] };
+    const t = buildIssuedTickets(order, [{ categoryId: 'c', qty: 1, endSold: 7, numbers: [7] }]);
+    expect(t[0].ticketNumber).toBe('GEN-007');
   });
 });

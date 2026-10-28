@@ -182,7 +182,7 @@ describe('the QR has to be ours', () => {
 });
 
 describe('a pass only works at its own event, at the right time', () => {
-  it('refuses a volunteer admitting on a pass for an event that is over', async () => {
+  it('asks a volunteer to confirm on a pass for an event that is over, then lets them admit', async () => {
     row = fresh([{ categoryName: 'GENERAL', ticketNumber: 'A', status: 'ISSUED' }]);
     ({ date: eventDate, time: eventTime } = eventAt(-30));
     isAdmin = false;
@@ -192,7 +192,14 @@ describe('a pass only works at its own event, at the right time', () => {
     const r = await post({ ...ids, ticketNumber: 'A' });
     expect(r.status).toBe(409);
     expect(r.body.code).toBe('GATE_CLOSED');
+    expect(r.body.needsOverride).toBe(true);
     expect(row.tickets_data[0].status).toBe('ISSUED');
+
+    // The volunteer standing at the door can confirm and let them in. The window stops an
+    // accidental wrong-day admission, not the person doing the job.
+    const forced = await post({ ...ids, ticketNumber: 'A', override: true });
+    expect(forced.status).toBe(200);
+    expect(row.tickets_data[0].status).toBe('CHECKED_IN');
   });
 
   it('refuses a pass for an event weeks away', async () => {
@@ -205,9 +212,11 @@ describe('a pass only works at its own event, at the right time', () => {
     const r = await post({ ...ids, ticketNumber: 'A' });
     expect(r.status).toBe(409);
     expect(r.body.code).toBe('GATE_EARLY');
+    expect(r.body.needsOverride).toBe(true);
+    expect(row.tickets_data[0].status).toBe('ISSUED');
   });
 
-  it('an admin is asked to confirm before overriding the window, then allowed', async () => {
+  it('an admin is asked to confirm too, then allowed', async () => {
     row = fresh([{ categoryName: 'GENERAL', ticketNumber: 'A', status: 'ISSUED' }]);
     ({ date: eventDate, time: eventTime } = eventAt(-30));
 
@@ -231,6 +240,9 @@ describe('a pass only works at its own event, at the right time', () => {
     const r = await post({ ...ids, ticketNumber: 'A' });
     expect(r.status).toBe(409);
     expect(r.body.code).toBe('GATE_UNKNOWN');
+    expect(r.body.needsOverride).toBe(true);
+    // Still not admitted without a deliberate confirmation.
+    expect(row.tickets_data[0].status).toBe('ISSUED');
   });
 });
 

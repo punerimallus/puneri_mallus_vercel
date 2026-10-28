@@ -2,11 +2,13 @@
 import { useState, useEffect } from 'react';
 import { 
   Ticket, Loader2, ArrowLeft, Users, 
-  PauseCircle, PlayCircle, IndianRupee, ShieldCheck, Search, Mail
+  PauseCircle, PlayCircle, IndianRupee, ShieldCheck, Search, Mail,
+  DoorOpen, UserCheck, UserX, CircleDashed
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAlert } from '@/context/AlertContext';
 import { seatsInUse } from '@/lib/payments/seats';
+import { ATTENDANCE_LABEL, AttendanceState, attendancePercent, bookingAttendance, eventAttendance } from '@/lib/payments/attendance';
 
 export default function BoxOfficeDashboard() {
   const [events, setEvents] = useState<any[]>([]);
@@ -15,6 +17,8 @@ export default function BoxOfficeDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  // Who has come through the door: All, or one of the attendance states.
+  const [doorFilter, setDoorFilter] = useState<'ALL' | AttendanceState>('ALL');
   const { showAlert } = useAlert();
 
   useEffect(() => {
@@ -126,10 +130,32 @@ export default function BoxOfficeDashboard() {
     }
   };
 
-  const filteredBookings = dashboardData?.bookings.filter(b => 
-    b.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    b.email?.toLowerCase().includes(searchQuery.toLowerCase())
-  ) || [];
+  // Attendance is worked out once per booking and reused by the filter, the counts and the row.
+  const withAttendance = (dashboardData?.bookings || []).map((b: any) => ({
+    ...b,
+    door: bookingAttendance(b.tickets_data, b.status),
+  }));
+  const door = eventAttendance(dashboardData?.bookings || []);
+  const doorCounts = {
+    ALL: withAttendance.filter((b: any) => b.door.state !== 'REFUNDED').length,
+    NOT_ARRIVED: withAttendance.filter((b: any) => b.door.state === 'NOT_ARRIVED').length,
+    PARTLY_IN: withAttendance.filter((b: any) => b.door.state === 'PARTLY_IN').length,
+    ALL_IN: withAttendance.filter((b: any) => b.door.state === 'ALL_IN').length,
+    REFUNDED: withAttendance.filter((b: any) => b.door.state === 'REFUNDED').length,
+  };
+
+  const q = searchQuery.trim().toLowerCase();
+  const filteredBookings = withAttendance.filter((b: any) => {
+    const matchesSearch = !q
+      || b.full_name?.toLowerCase().includes(q)
+      || b.email?.toLowerCase().includes(q)
+      // Searching by pass number is how you find one person at a busy gate.
+      || (b.tickets_data || []).some((t: any) => String(t.ticketNumber).toLowerCase().includes(q));
+    if (!matchesSearch) return false;
+    // "All" hides refunded bookings; they have their own filter.
+    if (doorFilter === 'ALL') return b.door.state !== 'REFUNDED';
+    return b.door.state === doorFilter;
+  });
 
   if (loading) return <div className="min-h-screen bg-black flex items-center justify-center"><Loader2 className="animate-spin text-brandRed" size={40} /></div>;
 
@@ -203,6 +229,42 @@ export default function BoxOfficeDashboard() {
               </div>
             </div>
 
+            {/* AT THE DOOR */}
+            <div className="space-y-6 pt-8 border-t border-white/5">
+              <h3 className="text-2xl font-black uppercase italic tracking-tighter flex items-center gap-3">
+                <DoorOpen className="text-brandRed" size={24} /> At The Door
+              </h3>
+
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-zinc-950 border border-white/10 rounded-[24px] p-6">
+                  <p className="text-[9px] text-zinc-600 font-black uppercase tracking-widest mb-2">People inside</p>
+                  <p className="text-3xl font-black text-green-500">{door.admitted}<span className="text-base text-zinc-600"> / {door.people}</span></p>
+                  <div className="mt-3 h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                    <div className="h-full bg-green-500 transition-all" style={{ width: attendancePercent(door) + '%' }} />
+                  </div>
+                  <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest mt-2">{attendancePercent(door)}% turned up</p>
+                </div>
+
+                <div className="bg-zinc-950 border border-white/10 rounded-[24px] p-6">
+                  <p className="text-[9px] text-zinc-600 font-black uppercase tracking-widest mb-2">Still to come</p>
+                  <p className="text-3xl font-black text-white">{door.remaining}</p>
+                  <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest mt-2">{door.notArrived} bookings not arrived</p>
+                </div>
+
+                <div className="bg-zinc-950 border border-white/10 rounded-[24px] p-6">
+                  <p className="text-[9px] text-zinc-600 font-black uppercase tracking-widest mb-2">Passes scanned</p>
+                  <p className="text-3xl font-black text-white">{door.passesScanned}<span className="text-base text-zinc-600"> / {door.passes}</span></p>
+                  <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest mt-2">fully used up</p>
+                </div>
+
+                <div className="bg-zinc-950 border border-white/10 rounded-[24px] p-6">
+                  <p className="text-[9px] text-zinc-600 font-black uppercase tracking-widest mb-2">Voided / refunded</p>
+                  <p className="text-3xl font-black text-zinc-500">{door.refunded}</p>
+                  <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest mt-2">no longer admit</p>
+                </div>
+              </div>
+            </div>
+
             {/* PURCHASERS LEDGER */}
             <div className="space-y-6 pt-8 border-t border-white/5">
               <div className="flex flex-col md:flex-row justify-between items-center gap-4">
@@ -211,12 +273,35 @@ export default function BoxOfficeDashboard() {
                 </h3>
                 <div className="relative w-full md:w-80">
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600" size={16} />
-                  <input 
-                    placeholder="SEARCH NAMES OR EMAILS..." 
+                  <input
+                    placeholder="SEARCH NAME, EMAIL OR PASS NO..."
                     value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
                     className="w-full bg-zinc-950 border border-white/10 p-3 pl-12 rounded-2xl text-[10px] font-black uppercase tracking-widest outline-none focus:border-brandRed"
                   />
                 </div>
+              </div>
+
+              {/* Who to look at: everyone, or just the ones still outside. */}
+              <div className="flex flex-wrap gap-2">
+                {([
+                  ['ALL', 'All', doorCounts.ALL, 'text-white'],
+                  ['NOT_ARRIVED', 'Not arrived', doorCounts.NOT_ARRIVED, 'text-amber-400'],
+                  ['PARTLY_IN', 'Partly in', doorCounts.PARTLY_IN, 'text-sky-400'],
+                  ['ALL_IN', 'Checked in', doorCounts.ALL_IN, 'text-green-500'],
+                  ['REFUNDED', 'Refunded', doorCounts.REFUNDED, 'text-zinc-500'],
+                ] as const).map(([key, label, count, tone]) => (
+                  <button
+                    key={key}
+                    onClick={() => setDoorFilter(key as 'ALL' | AttendanceState)}
+                    className={`px-4 py-2.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 ${
+                      doorFilter === key
+                        ? 'bg-brandRed border-brandRed text-white'
+                        : `bg-zinc-950 border-white/10 ${tone} hover:border-white/25`
+                    }`}
+                  >
+                    {label} <span className="opacity-60">{count}</span>
+                  </button>
+                ))}
               </div>
 
               <div className="bg-zinc-950 border border-white/10 rounded-[30px] overflow-hidden shadow-2xl overflow-x-auto">
@@ -226,6 +311,7 @@ export default function BoxOfficeDashboard() {
                       <th className="p-6">User Identity</th>
                       <th className="p-6">Tickets Acquired</th>
                       <th className="p-6">Amount Paid</th>
+                      <th className="p-6">At The Door</th>
                       <th className="p-6">Transaction Ref</th>
                       <th className="p-6">Delivery</th>
                     </tr>
@@ -276,6 +362,9 @@ export default function BoxOfficeDashboard() {
                           <div className="flex items-center gap-1"><IndianRupee size={12}/>{booking.amount_paid}</div>
                         </td>
                         <td className="p-6">
+                          <DoorCell door={booking.door} />
+                        </td>
+                        <td className="p-6">
                           <span className="font-mono text-[10px] text-zinc-500 block">{booking.razorpay_payment_id}</span>
                           <span className="text-[9px] text-zinc-600 block mt-1">{new Date(booking.created_at).toLocaleDateString('en-IN')}</span>
                         </td>
@@ -292,7 +381,7 @@ export default function BoxOfficeDashboard() {
                       </tr>
                     ))}
                     {filteredBookings.length === 0 && (
-                      <tr><td colSpan={5} className="p-10 text-center text-zinc-500 italic">No bookings found matching query.</td></tr>
+                      <tr><td colSpan={6} className="p-10 text-center text-zinc-500 italic">No bookings found matching query.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -303,5 +392,35 @@ export default function BoxOfficeDashboard() {
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * How much of one booking has walked through the door.
+ *
+ * It shows people rather than passes, because a group pass is one pass but several people and
+ * can be half admitted — "1 of 5 in" is the thing an organiser at the gate needs to see.
+ */
+function DoorCell({ door }: { door: ReturnType<typeof bookingAttendance> }) {
+  const tone =
+    door.state === 'ALL_IN' ? 'text-green-500 border-green-500/30 bg-green-500/10'
+    : door.state === 'PARTLY_IN' ? 'text-sky-400 border-sky-400/30 bg-sky-400/10'
+    : door.state === 'REFUNDED' ? 'text-zinc-500 border-white/10 bg-white/5'
+    : 'text-amber-400 border-amber-500/30 bg-amber-500/10';
+
+  const Icon = door.state === 'ALL_IN' ? UserCheck : door.state === 'REFUNDED' ? UserX : CircleDashed;
+
+  return (
+    <>
+      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[9px] font-black uppercase tracking-widest ${tone}`}>
+        <Icon size={11} /> {ATTENDANCE_LABEL[door.state]}
+      </span>
+      {door.state !== 'REFUNDED' && (
+        <span className="block text-[9px] text-zinc-500 font-bold uppercase tracking-widest mt-1.5">
+          {door.admitted} of {door.people} in
+          {door.remaining > 0 ? ` · ${door.remaining} to come` : ''}
+        </span>
+      )}
+    </>
   );
 }

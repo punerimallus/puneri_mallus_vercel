@@ -6,9 +6,8 @@
 // number in that booking. A short HMAC binds the pair to a key only the server holds, so a
 // hand-made QR is rejected at the gate.
 //
-// Passes printed before this exist and must keep working, so the scanner accepts an unsigned
-// code and records it in the audit trail as unsigned. Set TICKET_QR_STRICT=true once the
-// already-issued passes for your live events have been through the gate.
+// Signing landed before ticket sales opened, so an unsigned code is never a real pass and the
+// gate refuses it outright.
 
 import crypto from 'crypto';
 
@@ -36,6 +35,20 @@ export function signTicket(bookingId: string, ticketNumber: string): string {
 
 export type SignatureVerdict = 'VALID' | 'INVALID' | 'UNSIGNED';
 
+/**
+ * Are unsigned passes still allowed through the gate?
+ *
+ * They are not, by default. Signing landed before ticket sales opened, so no unsigned pass was
+ * ever in circulation and accepting one would only ever mean accepting a forgery — a hand-made
+ * QR with the `sig` left off would otherwise sail through the legacy path.
+ *
+ * TICKET_QR_UNSIGNED_OK=true re-opens it, which is only useful if passes somehow get issued
+ * without a signing key configured.
+ */
+export function unsignedPassesAllowed(): boolean {
+  return process.env.TICKET_QR_UNSIGNED_OK === 'true';
+}
+
 /** Whether a scanned code really came from us. */
 export function verifyTicketSignature(bookingId: string, ticketNumber: string, signature: unknown): SignatureVerdict {
   if (signature === undefined || signature === null || signature === '') return 'UNSIGNED';
@@ -47,7 +60,3 @@ export function verifyTicketSignature(bookingId: string, ticketNumber: string, s
   return ok ? 'VALID' : 'INVALID';
 }
 
-/** Are unsigned (pre-signing) passes still allowed through the gate? */
-export function unsignedPassesAllowed(): boolean {
-  return process.env.TICKET_QR_STRICT !== 'true';
-}

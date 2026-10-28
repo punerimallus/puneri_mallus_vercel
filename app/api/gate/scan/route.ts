@@ -99,30 +99,19 @@ export async function POST(req: Request) {
       });
     }
 
-    // Admitting is refused outside the event's own gate window. An admin can still override,
-    // because someone has to be able to deal with a genuinely odd situation at the door.
-    if (window !== 'OPEN' && actor.role !== 'ADMIN') {
+    // Outside the event's own gate window, anyone on the gate — admin or volunteer — is asked to
+    // confirm rather than refused. The window exists to stop a pass for a DIFFERENT day being
+    // waved through by accident, which a deliberate confirmation still prevents; blocking
+    // volunteers outright only meant the one person actually standing at the door could not do
+    // their job when a date was off by a few hours.
+    if (window !== 'OPEN' && body.override !== true) {
       const why =
         window === 'EARLY'
-          ? 'The gate for this event is not open yet.'
+          ? 'This pass is for an event that has not started yet. Confirm you still want to admit.'
           : window === 'CLOSED'
-            ? 'This event is over. This pass no longer admits anyone.'
-            : 'This event has no readable date, so the gate cannot be opened automatically. Ask an admin.';
-      return NextResponse.json({ error: why, code: `GATE_${window}`, gate }, { status: 409 });
-    }
-    if (window !== 'OPEN' && actor.role === 'ADMIN' && body.override !== true) {
-      return NextResponse.json(
-        {
-          error:
-            window === 'CLOSED'
-              ? 'This event is already over. Confirm you still want to admit on this pass.'
-              : 'The gate for this event is not open yet. Confirm you still want to admit on this pass.',
-          code: `GATE_${window}`,
-          needsOverride: true,
-          gate,
-        },
-        { status: 409 },
-      );
+            ? 'This pass is for an event that is already over. Confirm you still want to admit.'
+            : 'This event has no readable date, so the gate cannot check the time. Confirm you still want to admit.';
+      return NextResponse.json({ error: why, code: `GATE_${window}`, needsOverride: true, gate }, { status: 409 });
     }
 
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {

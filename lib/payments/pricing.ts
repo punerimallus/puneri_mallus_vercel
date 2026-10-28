@@ -9,6 +9,22 @@ export const MAX_TICKETS_PER_ACCOUNT = 7;
 export const MAX_GROUP_TICKETS_PER_ACCOUNT = 2;
 export const MIN_REDEEM_POINTS = 50;
 
+/** Smallest pass number width, so a small category still reads GEN-001 rather than GEN-1. */
+export const MIN_TICKET_NUMBER_WIDTH = 3;
+
+/**
+ * How many digits to pad a pass number to, from the category's capacity.
+ *
+ * A number can never exceed the capacity (the allocator refuses the sale first), so the capacity
+ * decides the width for good: 100 seats gives GEN-001..GEN-100, and 1000 gives
+ * GEN-0001..GEN-1000 rather than GEN-999 followed by a wider GEN-1000.
+ */
+export function ticketNumberWidth(capacity: number | null | undefined): number {
+  const cap = Math.floor(Number(capacity));
+  if (!Number.isFinite(cap) || cap < 1) return MIN_TICKET_NUMBER_WIDTH;
+  return Math.max(MIN_TICKET_NUMBER_WIDTH, String(cap).length);
+}
+
 export function grossUpToPaise(baseRupees: number): number {
   return Math.round((baseRupees / (1 - GATEWAY_FEE_RATE)) * 100);
 }
@@ -83,7 +99,7 @@ export function quoteEventCart(input: EventCartInput): EventCartQuote {
 
     const unitPrice = cat.price - (cat.price * discount) / 100;
     const groupSize = groupSizeOf(cat.group_size);
-    lines.push({ categoryId, name: cat.name, prefix: cat.prefix, qty, unitPrice, ...(groupSize > 1 ? { groupSize } : {}) });
+    lines.push({ categoryId, name: cat.name, prefix: cat.prefix, qty, unitPrice, numberWidth: ticketNumberWidth(cat.capacity), ...(groupSize > 1 ? { groupSize } : {}) });
     subtotal += unitPrice * qty;
     totalQty += qty;
     if (groupSize > 1) groupQty += qty;

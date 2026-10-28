@@ -5,6 +5,7 @@ import {
   QrCode, Info, Search, CalendarDays, Copy, Check,
 } from 'lucide-react';
 import { useAlert } from '@/context/AlertContext';
+import { gateIdentifier, gateIdentifierLabel } from '@/lib/payments/staff';
 
 interface Staff {
   id: string;
@@ -23,7 +24,6 @@ interface EventOption {
   date?: string;
 }
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * The gate list: who may scan passes at the door.
@@ -80,9 +80,10 @@ export default function GateVolunteersPage() {
   }, [load]);
 
   const add = async () => {
-    const clean = email.trim().toLowerCase();
-    if (!EMAIL_RE.test(clean)) {
-      showAlert('Enter a valid email address.', 'error');
+    // A phone number or an email; a phone becomes the address the account really has.
+    const clean = gateIdentifier(email);
+    if (!clean) {
+      showAlert('Enter their 10-digit mobile number, or the email they sign in with.', 'error');
       return;
     }
     setSaving(true);
@@ -97,7 +98,7 @@ export default function GateVolunteersPage() {
         showAlert(data.error || 'Could not add them.', 'error');
         return;
       }
-      showAlert(`${clean} can now scan passes at the gate.`, 'success');
+      showAlert(`${gateIdentifierLabel(clean)} can now scan passes at the gate.`, 'success');
       setEmail('');
       setNote('');
       await load();
@@ -116,18 +117,18 @@ export default function GateVolunteersPage() {
       showAlert('Could not update them.', 'error');
       return;
     }
-    showAlert(s.active ? `${s.email} can no longer scan.` : `${s.email} can scan again.`, 'success');
+    showAlert(s.active ? `${gateIdentifierLabel(s.email)} can no longer scan.` : `${gateIdentifierLabel(s.email)} can scan again.`, 'success');
     setStaff((prev) => prev.map((r) => (r.id === s.id ? { ...r, active: !r.active } : r)));
   };
 
   const remove = async (s: Staff) => {
-    if (!confirm(`Remove ${s.email} from the gate list? Their past scans stay in the log.`)) return;
+    if (!confirm(`Remove ${gateIdentifierLabel(s.email)} from the gate list? Their past scans stay in the log.`)) return;
     const res = await fetch(`/api/admin/staff?id=${encodeURIComponent(s.id)}`, { method: 'DELETE' });
     if (!res.ok) {
       showAlert('Could not remove them.', 'error');
       return;
     }
-    showAlert(`${s.email} removed from the gate list.`, 'success');
+    showAlert(`${gateIdentifierLabel(s.email)} removed from the gate list.`, 'success');
     setStaff((prev) => prev.filter((r) => r.id !== s.id));
   };
 
@@ -174,13 +175,13 @@ export default function GateVolunteersPage() {
 
         <div className="grid gap-4 sm:grid-cols-[1.3fr_1fr_1fr_auto] items-end">
           <label className="block space-y-2">
-            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Their login email</span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Their mobile number</span>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') add(); }}
-              placeholder="volunteer@example.com"
+              placeholder="9890122274"
               className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:border-brandRed/50 focus:outline-none"
             />
           </label>
@@ -223,7 +224,7 @@ export default function GateVolunteersPage() {
         <div className="mt-5 flex items-start gap-2 text-[11px] text-zinc-500 leading-relaxed">
           <Info size={13} className="mt-0.5 shrink-0" />
           <p>
-            They must sign in to the site with this exact email. They will only be able to open the
+            They must sign in to the site with this exact number. They will only be able to open the
             gate scanner — not the admin panel — and every person they admit is recorded against
             their name.
           </p>

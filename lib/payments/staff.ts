@@ -9,6 +9,34 @@
 
 export type GateRole = 'ADMIN' | 'SCANNER';
 
+/**
+ * Members sign in with their phone, and the entry gate creates their account as
+ * `<phone>@punerimallus.com`. That ghost address — not their personal one — is the email the
+ * gate sees, so a volunteer added as "them@gmail.com" would never match.
+ *
+ * So the gate list is keyed on the same ghost address. An organiser can type either a phone
+ * number or an email, and a 10-digit number is turned into the identifier the account really
+ * has. Anyone who signed up with a real email address is unaffected.
+ */
+export function gateIdentifier(input: string): string | null {
+  const raw = String(input || '').trim().toLowerCase();
+  if (!raw) return null;
+
+  // A phone number, however it was typed: +91 98901 22274, 09890122274, 9890122274.
+  const digits = raw.replace(/[\s()+-]/g, '');
+  const tenDigits = /^(?:\+?91)?0?(\d{10})$/.exec(digits);
+  if (tenDigits) return `${tenDigits[1]}@punerimallus.com`;
+
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) return raw;
+  return null;
+}
+
+/** How to show a gate-list entry back to an organiser: a ghost address reads as the phone. */
+export function gateIdentifierLabel(email: string): string {
+  const ghost = /^(\d{10})@punerimallus\.com$/.exec(String(email || '').toLowerCase());
+  return ghost ? ghost[1] : email;
+}
+
 export interface GateActor {
   role: GateRole;
   email: string;

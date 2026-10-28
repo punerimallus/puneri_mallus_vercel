@@ -52,7 +52,7 @@ Nothing new is required. Two optional ones:
 | Name | Effect |
 |---|---|
 | `TICKET_QR_SECRET` | Key used to sign pass QR codes. If unset, one is derived from `SUPABASE_SERVICE_ROLE_KEY`, so signing always works — but rotating the service role key would then invalidate signatures on already-printed passes. Set this explicitly before an event you care about. |
-| `TICKET_QR_STRICT` | `true` makes the gate refuse passes with no signature at all (everything printed before this change). Leave unset until the last pre-change event has happened. |
+| `TICKET_QR_UNSIGNED_OK` | Leave unset. Unsigned QR codes are refused by default, which is correct because signing landed before sales opened, so an unsigned code is never a real pass. Setting it to `true` re-opens that door and should only ever be a temporary measure. |
 
 `RAZORPAY_WEBHOOK_SECRET` was already required but was not set in `.env.local`; without it every
 webhook is rejected as unsigned, which silently removes the safety net that fulfils a payment

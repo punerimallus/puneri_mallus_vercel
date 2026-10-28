@@ -129,15 +129,17 @@ export function buildIssuedTickets(order: PaymentOrder, allocations: Allocation[
     const prefix = line?.prefix ?? '';
     const name = line?.name ?? 'General';
     const groupSize = groupSizeOf(line?.groupSize);
-    // Newer orders carry the exact numbers; older ones were issued as the range ending at endSold.
-    const numbers = a.numbers && a.numbers.length === a.qty ? a.numbers : Array.from({ length: a.qty }, (_, i) => a.endSold - a.qty + 1 + i);
+    // Every pass in a category is the same width, fixed from its capacity at checkout.
+    const width = Math.max(3, Math.floor(Number(line?.numberWidth)) || 0);
+    // The reservation always records the exact numbers it took; there is no other source.
+    const numbers = a.numbers ?? [];
     for (const n of numbers) {
       tickets.push({
         // Stored so prices and voiding key off the category itself; renaming a category can no
         // longer leave a pass unpriced.
         categoryId: a.categoryId,
         categoryName: name,
-        ticketNumber: `${prefix}${String(n).padStart(3, '0')}`,
+        ticketNumber: `${prefix}${String(n).padStart(width, '0')}`,
         status: 'ISSUED',
         ...(groupSize > 1 ? { groupSize } : {}),
       });

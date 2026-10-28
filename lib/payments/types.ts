@@ -23,8 +23,14 @@ export interface CartLine {
   prefix: string;
   qty: number;
   unitPrice: number; // rupees, after member discount, before gateway fee
-  /** People admitted by one ticket of this category. Absent on older orders, which means 1. */
+  /** People admitted by one ticket of this category. Absent means 1. */
   groupSize?: number;
+  /**
+   * How many digits a pass number is padded to, fixed at checkout from the category's capacity
+   * so every pass in a category is the same width: GEN-001 at capacity 100, GEN-0001 at 1000.
+   * Absent means three.
+   */
+  numberWidth?: number;
 }
 
 export interface EventSnapshot {
@@ -51,10 +57,10 @@ export interface IssuedTicket {
 export interface Allocation {
   categoryId: string;
   qty: number;
-  /** The category's sold counter after this order took its seats. Older orders issued numbers as the range ending here. */
+  /** Seats in use in this category after the reservation took its share. Reporting only. */
   endSold: number;
-  /** The exact ticket numbers issued: the lowest ones nobody holds. Absent on orders from before numbers were reused. */
-  numbers?: number[];
+  /** The exact numbers reserved: the lowest ones nobody holds. Always written by the reservation. */
+  numbers: number[];
 }
 
 export interface PaymentOrder {

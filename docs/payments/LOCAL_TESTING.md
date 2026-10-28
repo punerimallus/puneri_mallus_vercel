@@ -29,9 +29,7 @@ actually experiences. To exercise the real webhook path either run a tunnel
 (`npx cloudflared tunnel --url http://localhost:3000`, then point the Razorpay test webhook at
 `<tunnel>/api/razorpay/webhook`) or test it on a Vercel preview deployment.
 
-**3. The eight existing test passes will now be refused at the gate.** `TICKET_QR_STRICT=true`
-is on, and those PDFs were emailed before QR signing existed, so they carry no signature. A
-`403 UNSIGNED` on an old pass is correct, not a bug. Issue a fresh pass to test the gate.
+**3. Any pass issued before QR signing is refused at the gate.** Unsigned codes are rejected by design, so a `403 UNSIGNED` on an old test pass is correct, not a bug. Issue a fresh pass to test the gate.
 
 Start with `npm run dev`. Sign in at `/auth/login`.
 

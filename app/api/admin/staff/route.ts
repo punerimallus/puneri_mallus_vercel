@@ -2,10 +2,10 @@ import { NextResponse } from 'next/server';
 import { checkAdminAccess, requireAdmin } from '@/lib/admin';
 import { supabaseAdmin } from '@/lib/payments/server';
 import { asMarkerDb, checkSchema } from '@/lib/payments/schema-check';
+import { gateIdentifier } from '@/lib/payments/staff';
 
 export const dynamic = 'force-dynamic';
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * The gate list: volunteers an admin trusts to scan passes, and nothing else.
@@ -42,11 +42,18 @@ export async function POST(req: Request) {
   if (!schema.ok) return NextResponse.json({ error: schema.error, schemaBehind: true }, { status: 503 });
 
   const body = await req.json().catch(() => ({}));
-  const email = String(body.email || '').trim().toLowerCase();
   const eventId = body.eventId ? String(body.eventId) : null;
   const note = body.note ? String(body.note).slice(0, 200) : null;
 
-  if (!EMAIL_RE.test(email)) return NextResponse.json({ error: 'Enter a valid email address.' }, { status: 400 });
+  // Accepts a phone number or an email. A phone becomes the `<phone>@punerimallus.com` address
+  // the account actually has, because that is what members who sign in by phone are known by.
+  const email = gateIdentifier(String(body.email || ''));
+  if (!email) {
+    return NextResponse.json(
+      { error: 'Enter their 10-digit mobile number, or the email address they sign in with.' },
+      { status: 400 },
+    );
+  }
 
   const COLS = 'id, email, role, event_id, active, note, added_by, created_at';
 

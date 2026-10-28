@@ -1,11 +1,11 @@
 // The guards added around ticketing: the schema check that stops us taking money against a
 // half-migrated database, the rate limiter, pass-QR signing, and who may scan at the gate.
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { checkSchema, resetSchemaCache, REQUIRED_MARKER } from '@/lib/payments/schema-check';
 import { RATE_RULES, rateLimit, rateKey, resetRateLimits } from '@/lib/rate-limit';
 import { signTicket, unsignedPassesAllowed, verifyTicketSignature } from '@/lib/payments/ticket-signature';
-import { canScanEvent, resolveGateActor, StaffDb } from '@/lib/payments/staff';
+import { canScanEvent, gateIdentifier, gateIdentifierLabel, resolveGateActor, StaffDb } from '@/lib/payments/staff';
 import { translateInventoryError, reservationMessage, ticketNumberValue } from '@/lib/payments/inventory';
 import { PointsUnavailableError, ReservationLostError, SoldOutError, TicketLimitError } from '@/lib/payments/types';
 
@@ -215,36 +215,61 @@ describe('reading the number off a pass', () => {
   });
 });
 
-describe('strict QR mode', () => {
-  const strict = () => {
-    process.env.TICKET_QR_STRICT = 'true';
-    return unsignedPassesAllowed();
-  };
-  const lenient = () => {
-    delete process.env.TICKET_QR_STRICT;
-    return unsignedPassesAllowed();
-  };
+describe('unsigned QR codes are refused', () => {
+  afterEach(() => { delete process.env.TICKET_QR_UNSIGNED_OK; });
 
-  it('is off unless explicitly turned on', () => {
-    expect(lenient()).toBe(true);
-    process.env.TICKET_QR_STRICT = 'false';
-    expect(unsignedPassesAllowed()).toBe(true);
-    delete process.env.TICKET_QR_STRICT;
+  it('refuses an unsigned pass by default', () => {
+    // Signing landed before sales opened, so an unsigned code is never a real pass. Accepting
+    // one would mean a forger could simply leave the signature off.
+    delete process.env.TICKET_QR_UNSIGNED_OK;
+    expect(unsignedPassesAllowed()).toBe(false);
   });
 
-  it('once on, an unsigned QR is no longer accepted', () => {
-    // Safe to turn on here because no unsigned pass was ever in circulation: signing landed
-    // before ticket sales opened.
-    expect(strict()).toBe(false);
-    delete process.env.TICKET_QR_STRICT;
+  it('can be re-opened only by an explicit escape hatch', () => {
+    process.env.TICKET_QR_UNSIGNED_OK = 'true';
+    expect(unsignedPassesAllowed()).toBe(true);
+    process.env.TICKET_QR_UNSIGNED_OK = 'false';
+    expect(unsignedPassesAllowed()).toBe(false);
   });
 
   it('a wrong signature is refused either way', () => {
     process.env.TICKET_QR_SECRET = 'test-qr-secret';
-    for (const set of [lenient, strict]) {
-      set();
+    for (const open of ['true', 'false']) {
+      process.env.TICKET_QR_UNSIGNED_OK = open;
       expect(verifyTicketSignature('b', 'T', 'deadbeefdeadbeef')).toBe('INVALID');
     }
-    delete process.env.TICKET_QR_STRICT;
+  });
+});
+
+describe('identifying a volunteer the way they actually sign in', () => {
+  it('turns a mobile number into the account the entry gate really creates', () => {
+    // GlobalEntryGate signs members up as `<phone>@punerimallus.com`, so that — not their
+    // personal address — is the email the gate compares against.
+    expect(gateIdentifier('9890122274')).toBe('9890122274@punerimallus.com');
+    expect(gateIdentifier('+91 98901 22274')).toBe('9890122274@punerimallus.com');
+    expect(gateIdentifier('09890122274')).toBe('9890122274@punerimallus.com');
+    expect(gateIdentifier('+919890122274')).toBe('9890122274@punerimallus.com');
+    expect(gateIdentifier(' 98901-22274 ')).toBe('9890122274@punerimallus.com');
+  });
+
+  it('leaves a real email alone, lower-cased', () => {
+    expect(gateIdentifier('Volunteer@Example.COM')).toBe('volunteer@example.com');
+  });
+
+  it('refuses anything that is neither', () => {
+    for (const bad of ['', '   ', 'not-an-email', '12345', '98901222741234', 'a@b']) {
+      expect(gateIdentifier(bad)).toBeNull();
+    }
+  });
+
+  it('shows a ghost address back as the plain number', () => {
+    expect(gateIdentifierLabel('9890122274@punerimallus.com')).toBe('9890122274');
+    expect(gateIdentifierLabel('volunteer@example.com')).toBe('volunteer@example.com');
+  });
+
+  it('round-trips: what an organiser types matches what the gate sees', () => {
+    const typedByOrganiser = gateIdentifier('+91 98901 22274')!;
+    const emailOnTheirAccount = '9890122274@punerimallus.com';
+    expect(typedByOrganiser).toBe(emailOnTheirAccount);
   });
 });

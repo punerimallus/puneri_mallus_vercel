@@ -130,7 +130,7 @@ function GateContent() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Enter' || phase !== 'ready' || !details) return;
       e.preventDefault();
-      if (needsOverride) return; // never let Enter silently override the gate window
+      if (needsOverride) return; // Enter must never silently override the gate window
       if (askFirst && mode === 'ask') admit(details.remaining); else admit();
     };
     window.addEventListener('keydown', onKey);
@@ -235,7 +235,7 @@ function GateContent() {
                   disabled={phase === 'admitting'}
                   className="w-full bg-amber-600 text-white py-5 rounded-2xl font-black uppercase tracking-widest text-sm active:scale-95 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
                 >
-                  {phase === 'admitting' ? <Loader2 className="animate-spin" size={18} /> : 'Admit anyway (admin override)'}
+                  {phase === 'admitting' ? <Loader2 className="animate-spin" size={18} /> : 'Yes, admit them'}
                 </button>
                 <button onClick={() => { setNeedsOverride(false); setMessage(''); }} className="text-xs font-bold uppercase tracking-widest text-zinc-500 hover:text-white underline">
                   Cancel

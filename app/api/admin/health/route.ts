@@ -37,8 +37,8 @@ export async function GET() {
     },
     qrSigning: {
       ok: !!(process.env.TICKET_QR_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY),
-      strict: process.env.TICKET_QR_STRICT === 'true',
-      why: 'Signed pass QR codes. Strict mode additionally refuses passes printed before signing existed.',
+      unsignedRefused: process.env.TICKET_QR_UNSIGNED_OK !== 'true',
+      why: 'Pass QR codes are signed, and an unsigned code is refused at the gate.',
     },
   });
 }
