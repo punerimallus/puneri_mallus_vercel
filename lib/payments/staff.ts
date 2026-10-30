@@ -100,6 +100,15 @@ export function canScanEvent(actor: GateActor, eventId: string | null | undefine
   return !!eventId && actor.eventId === eventId;
 }
 
+/**
+ * May this actor let part of a group in and leave the rest outside?
+ *
+ * Admins only. See ScanOptions.allowPartial in scan.ts for why.
+ */
+export function partialAdmitAllowed(actor: Pick<GateActor, 'role'>): boolean {
+  return actor.role === 'ADMIN';
+}
+
 /** Which events an event-scoped volunteer is limited to, for display. */
 export function scopeLabel(actor: GateActor): string {
   if (actor.role === 'ADMIN') return 'All events (admin)';

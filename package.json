@@ -20,6 +20,7 @@
     "firebase": "^12.11.0",
     "framer-motion": "^12.33.0",
     "jspdf": "^4.2.1",
+    "jsqr": "^1.4.0",
     "lucide-react": "^0.563.0",
     "mongodb": "^6.21.0",
     "mongoose": "^8.23.0",

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, use } from 'react'; 
+import { useState, useEffect, useMemo, useRef, use } from 'react';
 import { Mail, ArrowRight, Minus, Plus, Loader2, Ticket, Calendar, Clock, MapPin, Sparkles, Star } from 'lucide-react';
 import { useAlert } from '@/context/AlertContext';
 import { createBrowserClient } from '@supabase/ssr';
@@ -13,6 +13,8 @@ import { salesStatus } from '@/lib/events/sales';
 import { grossUpToPaise, MAX_GROUP_TICKETS_PER_ACCOUNT, MAX_TICKETS_PER_ACCOUNT } from '@/lib/payments/pricing';
 import { formatAmount, formatRupees } from '@/lib/payments/format';
 import { friendlyError } from '@/lib/user-errors';
+import VenueMap, { type MapZone } from '@/components/VenueMap';
+import { emptyLayout, normalizeLayout, normalizeZone, zoneColor, type VenueLayout } from '@/lib/events/venue-layout';
 
 export default function EventBookingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: eventId } = use(params);
@@ -42,7 +44,13 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
   const [whatsappServerOn, setWhatsappServerOn] = useState(false);
   const whatsappAvailable = whatsappServerOn && !!whatsappNumber;
   const [discountPercent, setDiscountPercent] = useState(0);
-  
+  // The venue map. Null until it loads, and it stays null for an event nobody has drawn one
+  // for — then the page looks exactly as it did before, with no gap where a map would be.
+  const [venueLayout, setVenueLayout] = useState<VenueLayout | null>(null);
+  // Which category the buyer last touched, so the map and its card point at each other.
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
   const { showAlert } = useAlert();
   const router = useRouter();
   
@@ -63,7 +71,17 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
         const sortedCategories = catData.sort((a, b) => a.price - b.price);
         setCategories(sortedCategories);
       }
-      
+
+      // The room around the zones (stage, doors). A missing row or a database without the table
+      // yet is not an error: there is simply no map, and the category list alone still sells.
+      const { data: layoutRow } = await supabase
+        .from('event_venue_layouts')
+        .select('cols, rows, features, plan_url, plan_opacity')
+        .eq('event_id', eventId)
+        .maybeSingle();
+      if (layoutRow) setVenueLayout(normalizeLayout(layoutRow));
+      else if (catData?.some((c) => c.zone)) setVenueLayout(emptyLayout());
+
       try {
         const res = await fetch('/api/events');
         const events = await res.json();
@@ -126,6 +144,30 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
   const singleTicketsInCart = totalTickets - groupTicketsInCart;
   const hasGroupCategory = categories.some((c) => isGroup(c.group_size));
 
+  // The zones to draw. Only categories an admin has actually placed appear here; anything
+  // unplaced still sells from the list below, it is just not on the plan.
+  const mapZones: MapZone[] = useMemo(() => {
+    if (!venueLayout) return [];
+    const out: MapZone[] = [];
+    // Index by price so a zone's colour is stable: dearest keeps its colour as stock changes.
+    categories.forEach((cat, i) => {
+      const zone = normalizeZone(cat.zone, venueLayout.cols, venueLayout.rows);
+      if (!zone) return;
+      const price = isMember && discountPercent > 0 ? cat.price - (cat.price * discountPercent) / 100 : cat.price;
+      out.push({
+        id: cat.id,
+        name: cat.name,
+        price,
+        cells: zone.cells,
+        color: zone.color || zoneColor(i),
+        left: seatsLeft(cat),
+        qty: cart[cat.id] || 0,
+        admits: groupSizeOf(cat.group_size),
+      });
+    });
+    return out;
+  }, [categories, venueLayout, cart, isMember, discountPercent]);
+
   const updateCart = (id: string, delta: number, remaining: number) => {
     if (salesClosed && delta > 0) { showAlert('Ticket sales for this event have closed.', 'error'); return; }
     const currentQty = cart[id] || 0;
@@ -148,6 +190,20 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
       }
     }
     setCart({ ...cart, [id]: newQty });
+  };
+
+  /**
+   * Tapping a zone on the map. The first tap adds one pass, so the map is a real way to buy
+   * rather than a picture; after that it only scrolls to the card, where the +/- control lives.
+   * Either way the card is brought into view, so the buyer sees the price they just committed to.
+   */
+  const pickZone = (id: string) => {
+    const cat = categories.find((c) => c.id === id);
+    if (!cat) return;
+    setActiveCategory(id);
+    const remaining = seatsLeft(cat) ?? Number.MAX_SAFE_INTEGER;
+    if (!(cart[id] || 0)) updateCart(id, 1, remaining);
+    cardRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
   // Decide what to show once the server knows the order's fate. Called after the
@@ -416,6 +472,10 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
                   </p>
                 </div>
 
+                {venueLayout && mapZones.length > 0 && (
+                  <VenueMap layout={venueLayout} zones={mapZones} onPick={pickZone} activeId={activeCategory} />
+                )}
+
                 <div className="space-y-3">
                   {categories.map(cat => {
                     const qty = cart[cat.id] || 0;
@@ -429,7 +489,12 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
                       : cat.price;
 
                     return (
-                      <div key={cat.id} className={`bg-black/60 backdrop-blur-md border p-4 sm:p-5 rounded-2xl flex items-center justify-between gap-3 sm:gap-4 transition-all duration-300 ${isSoldOut ? 'border-zinc-900 opacity-50 grayscale' : 'border-white/10 hover:border-white/30 hover:bg-white/[0.02] shadow-lg'}`}>
+                      <div
+                        key={cat.id}
+                        ref={(el) => { cardRefs.current[cat.id] = el; }}
+                        onPointerEnter={() => setActiveCategory(cat.id)}
+                        className={`bg-black/60 backdrop-blur-md border p-4 sm:p-5 rounded-2xl flex items-center justify-between gap-3 sm:gap-4 transition-all duration-300 ${isSoldOut ? 'border-zinc-900 opacity-50 grayscale' : activeCategory === cat.id ? 'border-white/40 bg-white/[0.04] shadow-lg' : 'border-white/10 hover:border-white/30 hover:bg-white/[0.02] shadow-lg'}`}
+                      >
                         {/* min-w-0 lets a long category name wrap instead of shoving the button
                             off the card, and both rows wrap rather than overflowing on a phone. */}
                         <div className="min-w-0 flex-1">

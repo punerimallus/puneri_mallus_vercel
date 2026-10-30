@@ -54,9 +54,26 @@ export async function GET(req: Request) {
         }
       }
 
-      return NextResponse.json({ 
-        categories: categories || [], 
-        bookings: enrichedBookings 
+      // Who admitted whom. scan_log is the append-only record the gate writes on every
+      // admission, so this is the only place that can answer "who let them in" — tickets_data
+      // keeps the count but not the person. Newest first, and capped: a busy gate writes one
+      // row per admission, and the dashboard only needs the recent history per booking.
+      const { data: scans } = await supabaseAdmin
+        .from('scan_log')
+        .select('booking_id, ticket_number, admitted, action, actor_email, actor_role, at')
+        .eq('event_id', eventId)
+        .order('at', { ascending: false })
+        .limit(5000);
+
+      const scansByBooking: Record<string, unknown[]> = {};
+      for (const s of scans || []) {
+        const key = String(s.booking_id);
+        (scansByBooking[key] ||= []).push(s);
+      }
+
+      return NextResponse.json({
+        categories: categories || [],
+        bookings: enrichedBookings.map((b) => ({ ...b, scans: scansByBooking[String(b.id)] || [] })),
       });
     }
 

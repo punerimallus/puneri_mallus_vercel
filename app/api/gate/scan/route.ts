@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { checkAdminAccess } from '@/lib/admin';
 import { applyScan, lookupTicket, ScanTicket } from '@/lib/payments/scan';
 import { loadBookingView, supabaseAdmin } from '@/lib/payments/server';
-import { canScanEvent, resolveGateActor, StaffDb } from '@/lib/payments/staff';
+import { canScanEvent, partialAdmitAllowed, resolveGateActor, StaffDb } from '@/lib/payments/staff';
 import { unsignedPassesAllowed, verifyTicketSignature } from '@/lib/payments/ticket-signature';
 import { eventDay, scanWindow } from '@/lib/events/sales';
 import { RATE_RULES, rateKey, rateLimit } from '@/lib/rate-limit';
@@ -95,7 +95,10 @@ export async function POST(req: Request) {
           ? { title: view.event.title, date: view.event.date, time: view.event.time, location: view.event.location }
           : null,
         gate,
-        actor: { role: actor.role, email: actor.email },
+        // canAdmitPartial drives the UI: a volunteer is never shown the "some are missing"
+        // route at all, rather than being offered it and refused. The server enforces it
+        // regardless, so a tampered client gains nothing.
+        actor: { role: actor.role, email: actor.email, canAdmitPartial: partialAdmitAllowed(actor) },
       });
     }
 
@@ -121,9 +124,16 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'REFUNDED! This booking was refunded and is no longer valid.' }, { status: 410 });
       }
 
-      const result = applyScan(booking.tickets_data || [], ticketNumber, count);
+      const result = applyScan(booking.tickets_data || [], ticketNumber, count, new Date(), {
+        allowPartial: partialAdmitAllowed(actor),
+      });
       if (!result.ok) {
-        const status = result.code === 'NOT_FOUND' ? 404 : result.code === 'REFUNDED' ? 410 : result.code === 'ALREADY_USED' ? 409 : 400;
+        const status =
+          result.code === 'NOT_FOUND' ? 404
+          : result.code === 'REFUNDED' ? 410
+          : result.code === 'ALREADY_USED' ? 409
+          : result.code === 'PARTIAL_NOT_ALLOWED' ? 403
+          : 400;
         return NextResponse.json({ error: result.message, code: result.code, progress: result.progress, gate }, { status });
       }
 

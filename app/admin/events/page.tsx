@@ -15,7 +15,8 @@ import TribeCalendar from '@/components/ui/TribeCalendar';
 import TribeTimePicker from '@/components/ui/TribeTimePicker';
 import { AnimatePresence, motion } from 'framer-motion';
 // 🔥 NEW: Import the TicketConfig component
-import TicketConfig from '@/components/admin/TicketConfig'; 
+import TicketConfig from '@/components/admin/TicketConfig';
+import VenueLayoutEditor from '@/components/admin/VenueLayoutEditor';
 import { parseDateOnly } from '@/lib/dob';
 
 interface TribeEvent {
@@ -47,6 +48,8 @@ export default function AdminEventsPage() {
   
   // 🔥 NEW: State for the Ticket Management Modal
   const [manageTicketsEvent, setManageTicketsEvent] = useState<TribeEvent | null>(null);
+  // Prices and the venue map are two jobs on the same event, so they share one modal.
+  const [ticketTab, setTicketTab] = useState<'tickets' | 'map'>('tickets');
   
   const { showAlert } = useAlert();
   
@@ -293,7 +296,22 @@ export default function AdminEventsPage() {
               <button onClick={() => setManageTicketsEvent(null)} className="absolute top-6 right-6 text-zinc-500 hover:text-white transition-colors">
                 <X size={24} />
               </button>
-              <TicketConfig eventId={manageTicketsEvent._id} eventTitle={manageTicketsEvent.title} />
+              <div className="flex gap-2 mb-8 p-1 bg-black/60 border border-white/10 rounded-2xl w-fit">
+                {([['tickets', 'Configure Tickets'], ['map', 'Venue Map']] as const).map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setTicketTab(key)}
+                    className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${ticketTab === key ? 'bg-brandRed text-white shadow-lg' : 'text-zinc-400 hover:text-white'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {ticketTab === 'tickets' ? (
+                <TicketConfig eventId={manageTicketsEvent._id} eventTitle={manageTicketsEvent.title} />
+              ) : (
+                <VenueLayoutEditor eventId={manageTicketsEvent._id} eventTitle={manageTicketsEvent.title} />
+              )}
             </motion.div>
           </div>
         )}
@@ -613,7 +631,7 @@ export default function AdminEventsPage() {
                     <div className="absolute top-4 right-4 z-40 flex gap-2 opacity-0 group-hover:opacity-100 transition-all scale-90 group-hover:scale-100 [@media(hover:none)]:opacity-100 [@media(hover:none)]:scale-100">
                       
                       {/* 🔥 NEW: Manage Tickets Button */}
-                      <button onClick={() => setManageTicketsEvent(event)} className="p-4 bg-black/80 backdrop-blur-md hover:bg-green-600 rounded-2xl transition-all border border-white/10 text-white">
+                      <button onClick={() => { setTicketTab('tickets'); setManageTicketsEvent(event); }} className="p-4 bg-black/80 backdrop-blur-md hover:bg-green-600 rounded-2xl transition-all border border-white/10 text-white">
                         <Ticket size={16}/>
                       </button>
 

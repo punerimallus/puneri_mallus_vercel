@@ -1,13 +1,14 @@
 "use client";
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { CheckCircle2, XCircle, AlertTriangle, Loader2, Minus, Plus, Users, ShieldCheck, ShieldAlert, Clock } from 'lucide-react';
+import Link from 'next/link';
+import { CheckCircle2, XCircle, AlertTriangle, Loader2, Minus, Plus, Users, ShieldCheck, ShieldAlert, Clock, ScanLine, Camera } from 'lucide-react';
 import { formatEventDate } from '@/lib/payments/format';
 
 type Details = { ticketNumber: string; categoryName: string; groupSize: number; admitted: number; remaining: number };
 type EventInfo = { title?: string; date?: string; time?: string; location?: string } | null;
 type Gate = { window: 'OPEN' | 'EARLY' | 'CLOSED' | 'UNKNOWN'; eventDay: string; signed: boolean };
-type Actor = { role: 'ADMIN' | 'SCANNER'; email: string };
+type Actor = { role: 'ADMIN' | 'SCANNER'; email: string; canAdmitPartial?: boolean };
 type Phase = 'loading' | 'ready' | 'admitting' | 'success' | 'used' | 'error' | 'blocked';
 
 function GateContent() {
@@ -137,17 +138,35 @@ function GateContent() {
     return () => window.removeEventListener('keydown', onKey);
   }, [phase, admit, askFirst, mode, details, needsOverride]);
 
+  // Reached /gate with no pass in the address — almost always someone opening the gate page
+  // directly rather than from a scan. Send them to the scanner instead of a dead end.
   if (!bid || !tno) {
     return (
-      <div className="flex flex-col items-center justify-center h-[80vh] text-center space-y-4 px-6">
-        <AlertTriangle size={64} className="text-brandRed" />
-        <h1 className="text-2xl font-black uppercase tracking-widest text-white">Invalid QR</h1>
-        <p className="text-zinc-500">Please scan a valid Puneri Mallus ticket.</p>
+      <div className="flex flex-col items-center justify-center min-h-[80vh] text-center space-y-5 px-6 max-w-sm mx-auto">
+        <ScanLine size={56} className="text-brandRed" />
+        <div className="space-y-2">
+          <h1 className="text-2xl font-black uppercase tracking-widest text-white">Gate Scanner</h1>
+          <p className="text-sm text-zinc-500 leading-relaxed">
+            No pass in this link. Open the scanner to read pass QR codes with your phone camera.
+          </p>
+        </div>
+        <Link
+          href="/gate/scanner"
+          className="w-full bg-brandRed text-white py-5 rounded-2xl font-black uppercase tracking-widest text-sm active:scale-95 transition-all shadow-[0_0_30px_rgba(255,0,0,0.3)] flex items-center justify-center gap-2"
+        >
+          <Camera size={16} /> Open scanner
+        </Link>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600 leading-relaxed">
+          Or point your phone camera app at a pass QR to open it here.
+        </p>
       </div>
     );
   }
 
   const isGroup = (details?.groupSize || 1) > 1;
+  // Splitting a group is admin-only. A volunteer is never shown the option, and the server
+  // refuses it regardless of what the page sends.
+  const canPartial = actor?.canAdmitPartial !== false;
 
   const WhoIsScanning = () => actor ? (
     <div className="w-full flex items-center justify-between gap-3 text-[10px] font-bold uppercase tracking-widest text-zinc-500">
@@ -252,9 +271,15 @@ function GateContent() {
                 <button onClick={() => admit(details.remaining)} disabled={phase === 'admitting'} className="w-full bg-green-600 text-white py-5 rounded-2xl font-black uppercase tracking-widest text-sm active:scale-95 transition-all shadow-[0_0_30px_rgba(34,197,94,0.3)] disabled:opacity-60 flex items-center justify-center gap-2">
                   {phase === 'admitting' ? <Loader2 className="animate-spin" size={18} /> : `Yes, all ${details.remaining} are here`}
                 </button>
-                <button onClick={() => { setCount(Math.max(1, details.remaining - 1)); setMode('partial'); }} disabled={phase === 'admitting'} className="w-full bg-white/5 border border-white/15 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs active:scale-95 transition-all disabled:opacity-60">
-                  No, some are missing
-                </button>
+                {canPartial ? (
+                  <button onClick={() => { setCount(Math.max(1, details.remaining - 1)); setMode('partial'); }} disabled={phase === 'admitting'} className="w-full bg-white/5 border border-white/15 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs active:scale-95 transition-all disabled:opacity-60">
+                    No, some are missing
+                  </button>
+                ) : (
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 leading-relaxed px-2">
+                    The whole group must enter together. If some are arriving later, send them to an organiser.
+                  </p>
+                )}
               </div>
             ) : askFirst ? (
               <div className="w-full space-y-4">

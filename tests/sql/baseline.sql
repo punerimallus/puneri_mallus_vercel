@@ -29,6 +29,11 @@ create table public.authorized_admins (
   email text primary key
 );
 
+-- Supabase ships auth.jwt(); plain Postgres does not, and the RLS policies in the venue-map
+-- migration are defined in terms of it. Stubbed so those policies can be created for real here.
+create schema if not exists auth;
+create or replace function auth.jwt() returns jsonb language sql stable as $$ select '{}'::jsonb $$;
+
 create table public.app_settings (
   id              integer primary key default 1,
   membership_price integer,

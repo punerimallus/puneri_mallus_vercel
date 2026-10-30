@@ -103,3 +103,78 @@ export function attendancePercent(a: Pick<Attendance, 'people' | 'admitted'>): n
   if (!a.people) return 0;
   return Math.round((a.admitted / a.people) * 100);
 }
+
+// --------------------------------------------------------------------------------------
+// Who admitted them
+//
+// tickets_data records how many went in, never who waved them through. That lives only in
+// scan_log, which the gate appends to on every admission. When a guest disputes an entry — or
+// a count looks wrong the morning after — the organiser's question is "who scanned this", and
+// this turns those rows into the answer.
+// --------------------------------------------------------------------------------------
+
+export interface ScanLogRow {
+  ticket_number?: string | null;
+  admitted?: number | null;
+  action?: string | null;
+  actor_email?: string | null;
+  actor_role?: string | null;
+  at?: string | null;
+}
+
+export interface AdmissionEntry {
+  ticketNumber: string;
+  admitted: number;
+  /** The volunteer's phone or the admin's email, ready to print. */
+  by: string;
+  role: 'ADMIN' | 'SCANNER' | 'UNKNOWN';
+  at: string | null;
+}
+
+/** A ghost gate address reads back as the phone number it was made from. */
+function actorLabel(email: string | null | undefined): string {
+  const raw = String(email || '').trim();
+  if (!raw) return 'Unknown';
+  const ghost = /^(\d{10})@punerimallus\.com$/i.exec(raw);
+  return ghost ? ghost[1] : raw;
+}
+
+/**
+ * The admissions on one booking, newest first.
+ *
+ * Only ADMIT rows count: scan_log is append-only and may grow other action types later, and a
+ * future row type must not be mistaken for somebody being let in.
+ */
+export function admissions(scans: ScanLogRow[] | null | undefined): AdmissionEntry[] {
+  const rows = Array.isArray(scans) ? scans : [];
+  return rows
+    .filter((s) => String(s.action || 'ADMIT').toUpperCase() === 'ADMIT')
+    .map((s) => ({
+      ticketNumber: String(s.ticket_number || ''),
+      admitted: Math.max(0, Math.floor(Number(s.admitted)) || 0),
+      by: actorLabel(s.actor_email),
+      role: (s.actor_role === 'ADMIN' ? 'ADMIN' : s.actor_role === 'SCANNER' ? 'SCANNER' : 'UNKNOWN') as AdmissionEntry['role'],
+      at: s.at ? String(s.at) : null,
+    }))
+    .sort((a, b) => (b.at || '').localeCompare(a.at || ''));
+}
+
+/**
+ * The people who worked this booking's entry, each with how many they let in.
+ *
+ * A group that trickled in past two volunteers has two names against it, which is exactly the
+ * detail that settles an argument about a miscount.
+ */
+export function admittedBy(scans: ScanLogRow[] | null | undefined): { by: string; role: AdmissionEntry['role']; admitted: number; at: string | null }[] {
+  const byPerson = new Map<string, { by: string; role: AdmissionEntry['role']; admitted: number; at: string | null }>();
+  for (const entry of admissions(scans)) {
+    const existing = byPerson.get(entry.by);
+    if (existing) {
+      existing.admitted += entry.admitted;
+      // admissions() is newest first, so the first time we see someone is their latest scan.
+    } else {
+      byPerson.set(entry.by, { by: entry.by, role: entry.role, admitted: entry.admitted, at: entry.at });
+    }
+  }
+  return [...byPerson.values()].sort((a, b) => (b.at || '').localeCompare(a.at || ''));
+}

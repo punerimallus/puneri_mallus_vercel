@@ -3,12 +3,12 @@ import { useState, useEffect } from 'react';
 import { 
   Ticket, Loader2, ArrowLeft, Users, 
   PauseCircle, PlayCircle, IndianRupee, ShieldCheck, Search, Mail,
-  DoorOpen, UserCheck, UserX, CircleDashed
+  DoorOpen, UserCheck, UserX, CircleDashed, ScanLine
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAlert } from '@/context/AlertContext';
 import { seatsInUse } from '@/lib/payments/seats';
-import { ATTENDANCE_LABEL, AttendanceState, attendancePercent, bookingAttendance, eventAttendance } from '@/lib/payments/attendance';
+import { ATTENDANCE_LABEL, AttendanceState, admittedBy, attendancePercent, bookingAttendance, eventAttendance, type ScanLogRow } from '@/lib/payments/attendance';
 
 export default function BoxOfficeDashboard() {
   const [events, setEvents] = useState<any[]>([]);
@@ -193,9 +193,17 @@ export default function BoxOfficeDashboard() {
             
             {/* INVENTORY CONTROL (PAUSE/RESUME) */}
             <div className="space-y-6">
-              <h3 className="text-2xl font-black uppercase italic tracking-tighter flex items-center gap-3">
-                <ShieldCheck className="text-brandRed" size={24} /> Inventory Control
-              </h3>
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <h3 className="text-2xl font-black uppercase italic tracking-tighter flex items-center gap-3">
+                  <ShieldCheck className="text-brandRed" size={24} /> Inventory Control
+                </h3>
+                <a
+                  href="/gate/scanner"
+                  className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white bg-brandRed px-4 py-3 rounded-xl hover:bg-white hover:text-black transition-all shadow-lg"
+                >
+                  <ScanLine size={14} /> Open gate scanner
+                </a>
+              </div>
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {dashboardData.categories.map((cat: any) => (
@@ -362,7 +370,7 @@ export default function BoxOfficeDashboard() {
                           <div className="flex items-center gap-1"><IndianRupee size={12}/>{booking.amount_paid}</div>
                         </td>
                         <td className="p-6">
-                          <DoorCell door={booking.door} />
+                          <DoorCell door={booking.door} scans={booking.scans} />
                         </td>
                         <td className="p-6">
                           <span className="font-mono text-[10px] text-zinc-500 block">{booking.razorpay_payment_id}</span>
@@ -401,7 +409,8 @@ export default function BoxOfficeDashboard() {
  * It shows people rather than passes, because a group pass is one pass but several people and
  * can be half admitted — "1 of 5 in" is the thing an organiser at the gate needs to see.
  */
-function DoorCell({ door }: { door: ReturnType<typeof bookingAttendance> }) {
+function DoorCell({ door, scans }: { door: ReturnType<typeof bookingAttendance>; scans?: ScanLogRow[] }) {
+  const workedBy = admittedBy(scans);
   const tone =
     door.state === 'ALL_IN' ? 'text-green-500 border-green-500/30 bg-green-500/10'
     : door.state === 'PARTLY_IN' ? 'text-sky-400 border-sky-400/30 bg-sky-400/10'
@@ -419,6 +428,25 @@ function DoorCell({ door }: { door: ReturnType<typeof bookingAttendance> }) {
         <span className="block text-[9px] text-zinc-500 font-bold uppercase tracking-widest mt-1.5">
           {door.admitted} of {door.people} in
           {door.remaining > 0 ? ` · ${door.remaining} to come` : ''}
+        </span>
+      )}
+
+      {/* Who waved them in. Only scan_log knows this, so without it a disputed entry has no
+          answer at all. Several names appear when a group trickled in past different staff. */}
+      {workedBy.length > 0 && (
+        <span className="block mt-2 space-y-1">
+          {workedBy.map((w) => (
+            <span key={w.by} className="flex items-center gap-1.5 text-[9px] font-bold text-zinc-400" title={w.at ? new Date(w.at).toLocaleString('en-IN') : undefined}>
+              <UserCheck size={9} className={w.role === 'ADMIN' ? 'text-brandRed shrink-0' : 'text-sky-400 shrink-0'} />
+              <span className="truncate max-w-[130px]">{w.by}</span>
+              <span className="text-zinc-600 shrink-0">+{w.admitted}</span>
+            </span>
+          ))}
+          {workedBy[0]?.at && (
+            <span className="block text-[9px] text-zinc-600 font-bold">
+              {new Date(workedBy[0].at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true })}
+            </span>
+          )}
         </span>
       )}
     </>

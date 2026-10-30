@@ -319,3 +319,91 @@ describe('two gates at once', () => {
     expect(row.tickets_data[0].admitted).toBe(3);
   });
 });
+
+// Splitting a group — letting some in and leaving the rest outside — is an admin action.
+// The page hides it from volunteers; these prove the SERVER refuses it, so a volunteer
+// posting the request by hand gains nothing.
+describe('no partial group entry for volunteers', () => {
+  const asVolunteer = () => {
+    isAdmin = false;
+    signedIn = { id: 'u_vol', email: 'volunteer@example.com' };
+    staffRows = [{ email: 'volunteer@example.com', role: 'SCANNER', event_id: null, active: true }];
+  };
+  const groupRow = (admitted = 0) =>
+    fresh([{ categoryName: 'FRIENDS GROUP', ticketNumber: 'G', status: 'ISSUED', groupSize: 5, admitted }]);
+
+  it('refuses a volunteer admitting only some of a group', async () => {
+    row = groupRow();
+    asVolunteer();
+    const r = await post({ ...ids, ticketNumber: 'G', count: 2 });
+    expect(r.status).toBe(403);
+    expect(r.body.code).toBe('PARTIAL_NOT_ALLOWED');
+    expect(r.body.error).toMatch(/whole group/i);
+    // Nobody went in, and no admission was logged.
+    expect(row.tickets_data[0].admitted ?? 0).toBe(0);
+    expect(scanLog).toHaveLength(0);
+  });
+
+  it('lets a volunteer admit the whole group', async () => {
+    row = groupRow();
+    asVolunteer();
+    const r = await post({ ...ids, ticketNumber: 'G', count: 5 });
+    expect(r.status).toBe(200);
+    expect(row.tickets_data[0].status).toBe('CHECKED_IN');
+    expect(scanLog[0]).toMatchObject({ admitted: 5, actor_role: 'SCANNER' });
+  });
+
+  it('lets a volunteer admit the whole group when no count is sent', async () => {
+    row = groupRow();
+    asVolunteer();
+    const r = await post({ ...ids, ticketNumber: 'G' });
+    expect(r.status).toBe(200);
+    expect(row.tickets_data[0].admitted).toBe(5);
+  });
+
+  it('lets a volunteer take the remainder of a group an admin already split', async () => {
+    row = groupRow(2);
+    asVolunteer();
+    const r = await post({ ...ids, ticketNumber: 'G', count: 3 });
+    expect(r.status).toBe(200);
+    expect(row.tickets_data[0].admitted).toBe(5);
+  });
+
+  it('still refuses a volunteer splitting what is left of that group', async () => {
+    row = groupRow(2);
+    asVolunteer();
+    const r = await post({ ...ids, ticketNumber: 'G', count: 1 });
+    expect(r.status).toBe(403);
+    expect(r.body.code).toBe('PARTIAL_NOT_ALLOWED');
+    expect(row.tickets_data[0].admitted).toBe(2);
+  });
+
+  it('does not restrict a volunteer on an ordinary single pass', async () => {
+    row = fresh([{ categoryName: 'GENERAL', ticketNumber: 'A', status: 'ISSUED' }]);
+    asVolunteer();
+    expect((await post({ ...ids, ticketNumber: 'A', count: 1 })).status).toBe(200);
+  });
+
+  it('still lets an admin split a group', async () => {
+    row = groupRow();
+    const r = await post({ ...ids, ticketNumber: 'G', count: 2 });
+    expect(r.status).toBe(200);
+    expect(row.tickets_data[0].admitted).toBe(2);
+    expect(row.tickets_data[0].status).toBe('ISSUED');
+    expect(scanLog[0]).toMatchObject({ admitted: 2, actor_role: 'ADMIN' });
+  });
+
+  it('tells the page which role it is, so the split option is never offered to a volunteer', async () => {
+    row = groupRow();
+    asVolunteer();
+    const look = await post({ ...ids, ticketNumber: 'G', action: 'lookup' });
+    expect(look.status).toBe(200);
+    expect(look.body.actor).toMatchObject({ role: 'SCANNER', canAdmitPartial: false });
+  });
+
+  it('tells an admin they may split', async () => {
+    row = groupRow();
+    const look = await post({ ...ids, ticketNumber: 'G', action: 'lookup' });
+    expect(look.body.actor).toMatchObject({ role: 'ADMIN', canAdmitPartial: true });
+  });
+});
