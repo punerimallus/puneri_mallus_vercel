@@ -25,12 +25,16 @@ export const metadata: Metadata = {
     description: 'Join the ultimate community for Malayalees in Pune and PCMC. Connect with verified businesses, professionals, and fellow Mallus.',
     url: '/', 
     siteName: 'Puneri Mallus',
+    // og-image.png, not logo_main.png: the logo has a transparent background and a WHITE
+    // "puneri" wordmark, so WhatsApp and the rest composited it onto their own white card and
+    // half the name vanished. og-image.png is the same mark on black at the 1200x630 every
+    // platform wants. Rebuild it with scripts/make-og-image.mjs if the logo changes.
     images: [
       {
-        url: '/logo_main.png',
-        width: 552,
-        height: 472,
-        alt: 'Puneri Mallus Community Banner',
+        url: '/og-image.png',
+        width: 1200,
+        height: 630,
+        alt: 'Puneri Mallus — The Hub for Malayalees in Pune',
       },
     ],
     locale: 'en_IN',
@@ -40,7 +44,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Puneri Mallus',
     description: 'The professional hub for Malayalees in Pune and PCMC.',
-    images: ['/logo_main.png'],
+    images: ['/og-image.png'],
   },
 };
 
