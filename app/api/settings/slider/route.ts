@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongodb';
 import { createClient } from '@supabase/supabase-js';
 import { requireAdmin } from '@/lib/admin';
+import { heroStoragePath, orphanedAssets } from '@/lib/ui/hero-slides';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -32,20 +33,15 @@ export async function POST(request: Request) {
     const oldSettings = await db.collection("site_settings").findOne({ type: "slider" });
     const oldSlides = oldSettings?.slides || [];
 
-    // 2. Map new URLs for comparison
-    const newMediaUrls = new Set(slides.map((s: any) => s.mediaUrl));
-
-    // 3. Find slides that were in the old list but aren't in the new one
-    const orphans = oldSlides.filter((oldS: any) => oldS.mediaUrl && !newMediaUrls.has(oldS.mediaUrl));
+    // 2/3. Files nothing points at any more. Counts the phone cut as well as the wide one,
+    // and keeps anything another slide still uses — see orphanedAssets for why both matter.
+    const orphans = orphanedAssets(oldSlides, slides);
 
     if (orphans.length > 0) {
-      const filesToRemove = orphans.map((o: any) => {
-        const fileName = o.mediaUrl.split('/').pop();
-        // Path matches hero-slider folder in assets bucket
-        return `hero-slider/${fileName}`;
-      });
-
-      await supabase.storage.from('assets').remove(filesToRemove);
+      const filesToRemove = orphans
+        .map((url) => heroStoragePath(url))
+        .filter((p): p is string => p !== null);
+      if (filesToRemove.length > 0) await supabase.storage.from('assets').remove(filesToRemove);
     }
 
     

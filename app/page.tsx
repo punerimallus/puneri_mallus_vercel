@@ -9,6 +9,7 @@ import {
 import EventCard from '@/components/EventCard';
 import DynamicTribeAd from '@/components/Popup';
 import LazyVideo from '@/components/ui/LazyVideo';
+import { MOBILE_QUERY, isVideoAsset, slideAsset } from '@/lib/ui/hero-slides';
 import { ArrowRight } from 'lucide-react';
 
 // COMPACT LASER DIVIDER
@@ -99,7 +100,24 @@ export default function Home() {
     return () => clearInterval(timer);
   }, [slides]);
 
-  const isVideo = (url: string) => url?.match(/\.(mp4|webm|ogg|mov)/i) || url?.includes("video");
+  /**
+   * Whether to load each slide's phone cut.
+   *
+   * Picked in JavaScript rather than with two elements and a CSS class, because a hidden
+   * <img> is still downloaded and sending a phone BOTH files is the opposite of the point.
+   * Safe to decide here: the slides themselves arrive from a fetch, so nothing in this hero is
+   * server rendered and the viewport is already known before a slide first paints.
+   */
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(MOBILE_QUERY).matches,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(MOBILE_QUERY);
+    const onChange = () => setIsMobile(mq.matches);
+    onChange();
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
 
   if (loading) return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center">
@@ -134,6 +152,8 @@ export default function Home() {
         <section className="relative h-screen w-full overflow-hidden bg-[#030303] z-20 flex flex-col items-center justify-center">
           {slides.length > 0 && slides.map((slide, index) => {
             const isActive = index === currentSlide;
+            // The phone cut when there is one and we are on a phone, the wide one otherwise.
+            const asset = slideAsset(slide, isMobile);
             
             return (
               <div
@@ -146,15 +166,15 @@ export default function Home() {
                 }`}
               >
                 <div className="absolute inset-0 z-0">
-                  {isVideo(slide.mediaUrl) ? (
+                  {isVideoAsset(asset) ? (
                     <SlideVideo
-                      src={slide.mediaUrl}
+                      src={asset}
                       active={isActive}
                       className="w-full h-full object-cover transition-opacity duration-700"
                       style={{ opacity: Math.min(((slide.visibility || 60) + 20) / 100, 1), objectPosition: `50% ${slide.vOffset || 50}%` }}
                     />
                   ) : (
-                    <Image src={slide.mediaUrl} alt="Slide" fill
+                    <Image src={asset} alt="Slide" fill
                       sizes="100vw"
                       quality={80}
                       className="object-cover transition-opacity duration-700"

@@ -4,19 +4,24 @@ import {
   Save, ImageIcon, Loader2, ArrowLeft, 
   Upload, Trash2, Plus, Info, Link as LinkIcon,
   Type, MousePointer2, Film, ArrowUp, ArrowDown,
-  GripVertical, Eye, X
+  GripVertical, Eye, X, Smartphone, Monitor
 } from 'lucide-react';
 import Link from 'next/link';
 import { createBrowserClient } from '@supabase/ssr';
 import { logAdminActivity } from '@/app/admin/action';
 import { useAlert } from '@/context/AlertContext';
 import TribeConfirm from '@/components/TribeConfirm';
+import { hasMobileAsset, isVideoAsset } from '@/lib/ui/hero-slides';
+
+/** The two artwork slots a slide can carry. */
+type Slot = 'mediaUrl' | 'mobileUrl';
 
 export default function SliderAdmin() {
   const [slides, setSlides] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
+  /** Which slide, and which of its two assets, is mid-upload. */
+  const [uploading, setUploading] = useState<{ idx: number; slot: Slot } | null>(null);
   const [previewIdx, setPreviewIdx] = useState<number | null>(null);
   
   const { showAlert } = useAlert();
@@ -50,26 +55,37 @@ export default function SliderAdmin() {
     setSlides(newSlides);
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, index: number, slot: Slot = 'mediaUrl') => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 15 * 1024 * 1024) {
       showAlert("Master asset exceeds 15MB. Please compress for performance.", "error");
       return;
     }
-    setUploadingIdx(index);
-    const fileName = `hero-${Date.now()}.${file.name.split('.').pop()}`;
+    setUploading({ idx: index, slot });
+    const tag = slot === 'mobileUrl' ? 'mobile' : 'hero';
+    const fileName = `${tag}-${Date.now()}.${file.name.split('.').pop()}`;
     const filePath = `hero-slider/${fileName}`;
     
     const { error } = await supabase.storage.from('assets').upload(filePath, file);
     
     if (!error) {
       const { data } = supabase.storage.from('assets').getPublicUrl(filePath);
-      updateSlide(index, 'mediaUrl', data.publicUrl);
+      updateSlide(index, slot, data.publicUrl);
       await logAdminActivity(`Slider Asset: ${fileName}`, "SLIDER_UPDATE");
-      showAlert("Visual Asset Synchronized", "success");
+      showAlert(slot === 'mobileUrl' ? "Phone cut synchronized" : "Visual Asset Synchronized", "success");
+    } else {
+      showAlert("Upload failed. Please try again.", "error");
     }
-    setUploadingIdx(null);
+    // Picking the same file twice in a row fires no change event unless the input is cleared.
+    e.target.value = '';
+    setUploading(null);
+  };
+
+  /** Drops the phone cut so the slide falls back to the wide asset everywhere. */
+  const clearMobile = (index: number) => {
+    updateSlide(index, 'mobileUrl', '');
+    showAlert("Phone cut removed. This slide now uses the wide asset everywhere.", "info");
   };
 
   const updateSlide = (index: number, key: string, value: any) => {
@@ -82,7 +98,7 @@ export default function SliderAdmin() {
 
   const addSlide = () => {
     setSlides([...slides, { 
-      mediaUrl: '', title: '', subtitle: '', description: '', 
+      mediaUrl: '', mobileUrl: '', title: '', subtitle: '', description: '', 
       buttonText: '', buttonLink: '', visibility: 60, vOffset: 50 
     }]);
   };
@@ -121,7 +137,7 @@ export default function SliderAdmin() {
     }
   };
 
-  const isVideo = (url: string) => url?.match(/\.(mp4|webm|ogg|mov)/i) || url?.includes("video");
+  const isVideo = isVideoAsset;
 
   if (loading) return (
     <div className="min-h-screen bg-black flex items-center justify-center">
@@ -191,8 +207,11 @@ export default function SliderAdmin() {
                       : <img src={slide.mediaUrl} className="w-full h-full object-cover" style={{ objectPosition: `50% ${slide.vOffset || 50}%` }} />
                     ) : <div className="absolute inset-0 flex items-center justify-center text-zinc-900"><ImageIcon size={48} /></div>}
                   </div>
+                  <span className="absolute top-3 left-3 z-10 flex items-center gap-1.5 bg-black/70 border border-white/10 px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest text-zinc-300 pointer-events-none">
+                    <Monitor size={10} className="text-brandRed" /> Tablet &amp; desktop
+                  </span>
                   <button onClick={() => setPreviewIdx(idx)} className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 font-black uppercase text-[10px] tracking-widest"><Eye size={20} /> Preview</button>
-                  {uploadingIdx === idx && <div className="absolute inset-0 bg-black/90 flex items-center justify-center"><Loader2 className="animate-spin text-brandRed" /></div>}
+                  {uploading?.idx === idx && uploading.slot === 'mediaUrl' && <div className="absolute inset-0 bg-black/90 flex items-center justify-center"><Loader2 className="animate-spin text-brandRed" /></div>}
                 </div>
 
                 <div className="bg-black/40 p-5 rounded-[24px] border border-white/5 space-y-5">
@@ -210,6 +229,57 @@ export default function SliderAdmin() {
                   <Upload size={14} /> <span className="text-[10px] font-black uppercase tracking-widest">Swap Asset</span>
                   <input type="file" className="hidden" accept="image/*,video/*" onChange={(e) => handleFileUpload(e, idx)} />
                 </label>
+
+                {/* The phone cut.
+                    Optional per slide: without one the wide asset is used at every size, which
+                    is how every existing slide already behaves. It exists because a wide image
+                    on a 390px screen is cropped to roughly its middle third by object-cover,
+                    and that is usually not where the subject is. Only the phone downloads it. */}
+                <div className={`rounded-[24px] border p-5 space-y-4 transition-all ${hasMobileAsset(slide) ? 'border-brandRed/30 bg-brandRed/[0.04]' : 'border-white/5 bg-black/40'}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-zinc-400">
+                      <Smartphone size={12} className="text-brandRed" /> Phone cut
+                    </span>
+                    <span className={`text-[8px] font-black uppercase tracking-widest ${hasMobileAsset(slide) ? 'text-brandRed' : 'text-zinc-600'}`}>
+                      {hasMobileAsset(slide) ? 'In use' : 'Using wide'}
+                    </span>
+                  </div>
+
+                  {hasMobileAsset(slide) && (
+                    <div className="relative w-full aspect-[9/16] max-h-56 mx-auto bg-black rounded-2xl border border-white/10 overflow-hidden">
+                      {isVideo(slide.mobileUrl)
+                        ? <video src={slide.mobileUrl} autoPlay muted loop playsInline className="w-full h-full object-cover" />
+                        : <img src={slide.mobileUrl} className="w-full h-full object-cover" alt="Phone cut" />}
+                      {uploading?.idx === idx && uploading.slot === 'mobileUrl' && <div className="absolute inset-0 bg-black/90 flex items-center justify-center"><Loader2 className="animate-spin text-brandRed" /></div>}
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <label className="flex-1 flex items-center justify-center gap-2 py-3 bg-zinc-900 border border-white/5 rounded-xl cursor-pointer hover:bg-white hover:text-black transition-all">
+                      {uploading?.idx === idx && uploading.slot === 'mobileUrl'
+                        ? <Loader2 size={13} className="animate-spin" />
+                        : <Upload size={13} />}
+                      <span className="text-[9px] font-black uppercase tracking-widest">
+                        {hasMobileAsset(slide) ? 'Replace' : 'Add phone image'}
+                      </span>
+                      <input type="file" className="hidden" accept="image/*,video/*" onChange={(e) => handleFileUpload(e, idx, 'mobileUrl')} />
+                    </label>
+                    {hasMobileAsset(slide) && (
+                      <button
+                        type="button"
+                        onClick={() => clearMobile(idx)}
+                        title="Use the wide asset on phones too"
+                        className="px-3 py-3 bg-zinc-900 border border-white/5 rounded-xl text-zinc-500 hover:text-white hover:bg-brandRed hover:border-brandRed transition-all"
+                      >
+                        <X size={13} />
+                      </button>
+                    )}
+                  </div>
+
+                  <p className="text-[8px] font-bold uppercase tracking-widest text-zinc-600 leading-relaxed">
+                    Shown below 768px only. Portrait suits it best. Leave empty to use the wide asset everywhere.
+                  </p>
+                </div>
               </div>
 
               <div className="flex-1 space-y-8">
