@@ -521,7 +521,7 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
             </div>
 
             <div className="min-w-0 flex-1 space-y-3 md:space-y-4">
-              <h1 className="text-xl sm:text-2xl md:text-4xl font-black uppercase italic tracking-tighter text-white leading-[0.95] drop-shadow-lg break-words">
+              <h1 className="event-title text-xl sm:text-2xl md:text-4xl font-black uppercase italic tracking-tighter text-white leading-[0.95] drop-shadow-lg break-words">
                 {eventData?.title || 'Exclusive Event'}
               </h1>
 

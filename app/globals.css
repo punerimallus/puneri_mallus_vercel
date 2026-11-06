@@ -61,6 +61,25 @@ body::before {
   }
 }
 
+/* Event titles: tight letters, readable words.
+ *
+ * Titles are set in heavy italic with `tracking-tighter`, which is -0.05em on EVERY character
+ * including the space between words. On the site's own headings that is the intended look,
+ * because they are one or two short words chosen to fit. An event title is typed by an admin
+ * and is often three or four words, and at -0.05em "JOB KURIAN LIVE" closes up until it reads
+ * as one word.
+ *
+ * Typing extra spaces in the admin form does not help: HTML collapses any run of whitespace to
+ * a single space before it is ever painted. So the gap has to be given back in CSS, and only
+ * to the gap - word-spacing moves the spaces without loosening the letters, which keeps the
+ * tight look the rest of the site uses.
+ *
+ * Applied to the three places an event title is rendered: the events list, the event card and
+ * the booking page. */
+.event-title {
+  word-spacing: 0.14em;
+}
+
 /* The next-phase warning above the box office (lib/events/sale-phase.ts).
  *
  * A text-shadow rather than a box-shadow, a blur filter or a backdrop-filter. The two mobile

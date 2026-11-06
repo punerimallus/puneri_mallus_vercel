@@ -13,6 +13,33 @@
 // against it, and making the rule cleverer here would silently re-flow descriptions that read
 // correctly today.
 
+/** Most points printed on a pass. Beyond this the "good to know" box runs into the footer. */
+export const MAX_TICKET_NOTES = 4;
+
+/** Longest point printed on a pass, before it is cut short. */
+export const MAX_TICKET_NOTE_LENGTH = 150;
+
+/**
+ * The event's own points, as they go onto the printed pass.
+ *
+ * The standing rules on a ticket are the same for every show. What differs is the thing
+ * somebody actually needs on the night - when the doors open, what the entry policy is - and
+ * that only exists in the description the admin wrote. So it is carried onto the pass.
+ *
+ * Capped on both counts because this is free text landing in a fixed-height box on an A4 page:
+ * an admin writing ten points, or one very long one, must not be able to push the box into the
+ * footer. The PDF clamps again when it lays the box out; this is the cheap first cut.
+ */
+export function ticketNotes(raw: unknown): string[] {
+  return descriptionBullets(raw)
+    .slice(0, MAX_TICKET_NOTES)
+    .map((point) =>
+      point.length > MAX_TICKET_NOTE_LENGTH
+        ? `${point.slice(0, MAX_TICKET_NOTE_LENGTH - 1).trimEnd()}…`
+        : point,
+    );
+}
+
 /** The non-empty, trimmed points of a description, in order. */
 export function descriptionBullets(raw: unknown): string[] {
   if (raw === null || raw === undefined) return [];

@@ -111,6 +111,7 @@ export async function getEventSnapshot(eventId: string): Promise<EventSnapshot |
     date: doc.date,
     time: doc.time,
     location: doc.location,
+    description: doc.description,
     memberPoints: Number(doc.memberPoints) || 0,
     nonMemberPoints: Number(doc.nonMemberPoints) || 0,
     memberDiscount: Number(doc.memberDiscount) || 0,

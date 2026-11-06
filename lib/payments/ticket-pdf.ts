@@ -5,11 +5,12 @@ import { admitsLabel, groupSizeOf, isGroup } from './groups';
 import { buildReceipt, buildScanUrl, formatEventDate, formatEventTime, formatIst, formatRupees, pdfSafe } from './format';
 import { TERMS, termsNumber } from '../events/terms';
 import { PDF_SUPPORT_LINE, SUPPORT_EMAIL, SUPPORT_PHONE } from '../events/support';
+import { ticketNotes } from '../events/description';
 
 export interface TicketPdfInput {
   bookingId: string;
   purchaserEmail: string;
-  event: { title?: string; date?: string; time?: string; location?: string } | null;
+  event: { title?: string; date?: string; time?: string; location?: string; description?: string } | null;
   tickets: { categoryName: string; ticketNumber: string; unitPrice: number; status?: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED'; groupSize?: number; admitted?: number }[];
   pointsApplied: number;
   logoBase64: string | null;
@@ -270,8 +271,37 @@ export async function buildTicketPdf(input: TicketPdfInput): Promise<jsPDF> {
 
     y += cardH + 11;
 
-    // Good to know
-    const boxH = 12 + RULES.length * 6;
+    // Good to know: the standing rules, then this event's own points.
+    //
+    // The rules above are true of every show. What is not is the thing a ticket holder
+    // actually needs on the night - when entry starts, what the door policy is - and that only
+    // exists in the description the admin wrote, so it is printed here too.
+    //
+    // The font is set before anything is measured. wrap() asks the document how wide a string
+    // is and the document answers for whatever font happens to be current, so measuring under
+    // the label's bold 7pt would size every line wrongly.
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+
+    const rules = isGroup(ticket.groupSize)
+      ? RULES.map((r, i) => (i === 1 ? `Group ticket: admits ${groupSizeOf(ticket.groupSize)} people together on one scan. Non-refundable, non-transferable.` : r))
+      : RULES;
+    const points = [...rules, ...ticketNotes(event?.description).map(pdfSafe).filter(Boolean)];
+
+    // Unlike the hand-written rules, an event's points are free text and will wrap. Carry-over
+    // lines are indented so they hang under the sentence rather than under its number.
+    const bodyLines: { text: string; x: number }[] = [];
+    points.forEach((point, i) => {
+      const [first, ...rest] = wrap(doc, `${i + 1}.  ${point}`, CW - 12, 3);
+      bodyLines.push({ text: first, x: M + 6 });
+      for (const carried of rest) bodyLines.push({ text: carried, x: M + 12.5 });
+    });
+
+    // The last guard: whatever was written, the box stops short of the footer rule at 281.
+    const room = Math.max(0, Math.floor((273 - y - 12) / 6));
+    const shown = bodyLines.slice(0, room);
+
+    const boxH = 12 + shown.length * 6;
     doc.setFillColor(...PANEL);
     doc.setDrawColor(...LINE);
     doc.setLineWidth(0.3);
@@ -280,10 +310,7 @@ export async function buildTicketPdf(input: TicketPdfInput): Promise<jsPDF> {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8.5);
     doc.setTextColor(55, 65, 81);
-    const rules = isGroup(ticket.groupSize)
-      ? RULES.map((r, i) => (i === 1 ? `Group ticket: admits ${groupSizeOf(ticket.groupSize)} people together on one scan. Non-refundable, non-transferable.` : r))
-      : RULES;
-    rules.forEach((rule, i) => doc.text(`${i + 1}.  ${rule}`, M + 6, y + 15 + i * 6));
+    shown.forEach((line, i) => doc.text(line.text, line.x, y + 15 + i * 6));
 
     footer(doc, ref, index + 1, totalPages);
   }

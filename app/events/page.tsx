@@ -262,7 +262,7 @@ export default function EventsPage() {
                   </div>
 
                   <div className="p-8 space-y-6">
-                    <h2 className={`text-2xl md:text-3xl font-black italic uppercase tracking-tighter leading-[0.9]  ${!item.isUpcoming ? 'text-zinc-500' : 'text-white'}`}>
+                    <h2 className={`event-title text-2xl md:text-3xl font-black italic uppercase tracking-tighter leading-[0.9] ${!item.isUpcoming ? 'text-zinc-500' : 'text-white'}`}>
                       {item.title || "Untitled Event"}
                     </h2>
 

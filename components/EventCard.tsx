@@ -191,7 +191,7 @@ export default function EventCard({
             </div>
 
             <div className="space-y-1">
-              <h3 className="text-2xl md:text-3xl font-black uppercase italic leading-none tracking-tighter text-white group-hover:text-brandRed transition-colors duration-500">
+              <h3 className="event-title text-2xl md:text-3xl font-black uppercase italic leading-none tracking-tighter text-white group-hover:text-brandRed transition-colors duration-500">
                 {title}
               </h3>
               <div className="flex items-center gap-2 text-zinc-500">

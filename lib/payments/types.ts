@@ -38,6 +38,8 @@ export interface EventSnapshot {
   date?: string;
   time?: string;
   location?: string;
+  /** The admin's own points about the event. Printed on the pass; see ticketNotes(). */
+  description?: string;
   memberPoints?: number;
   nonMemberPoints?: number;
   memberDiscount?: number;

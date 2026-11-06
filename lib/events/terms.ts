@@ -24,7 +24,6 @@ export const TERMS: readonly string[] = [
   'The organizer is not responsible for loss, theft, or damage to personal belongings.',
   "Parking at the venue is at the owner's risk.",
   'All attendees must follow venue safety and crowd control instructions.',
-  'Those who opt for Sr. Citizen tickets need to carry valid age proof.',
 ] as const;
 
 /** "01.", "02." ... so the screen and the printed page number them the same way. */

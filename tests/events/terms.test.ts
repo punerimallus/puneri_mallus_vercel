@@ -9,7 +9,11 @@ import { CHILD_TICKET_AGE, TERMS, TERMS_VERSION, acceptTerms, termsNumber } from
 
 describe('the terms', () => {
   it('has every clause the printed card carries', () => {
-    expect(TERMS).toHaveLength(10);
+    // An exact count, on purpose: this list is rendered in two places and printed on every
+    // pass, so a clause disappearing by accident should fail here rather than at a gate. The
+    // Sr. Citizen age-proof clause was removed deliberately; update the number when the
+    // wording changes on purpose.
+    expect(TERMS).toHaveLength(9);
   });
 
   it('charges for children above eight, which is the change from the printed card', () => {
@@ -26,9 +30,9 @@ describe('the terms', () => {
     expect(TERMS.some((t) => /non-refundable/i.test(t) && /non-transferable/i.test(t))).toBe(true);
   });
 
-  it('still covers entry, security, belongings, parking and senior proof', () => {
+  it('still covers entry, security, belongings and parking', () => {
     const all = TERMS.join(' ').toLowerCase();
-    for (const topic of ['valid ticket', 'security checks', 'belongings', 'parking', 'age proof']) {
+    for (const topic of ['valid ticket', 'security checks', 'belongings', 'parking']) {
       expect(all).toContain(topic);
     }
   });

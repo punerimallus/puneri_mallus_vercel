@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import { buildTicketPdf, generateTicketPdf, TicketPdfInput } from '@/lib/payments/ticket-pdf';
 import { TERMS } from '@/lib/events/terms';
 import { SUPPORT_EMAIL, SUPPORT_PHONE } from '@/lib/events/support';
+import { MAX_TICKET_NOTES } from '@/lib/events/description';
 
 const base: TicketPdfInput = {
   bookingId: '7f3c2a10-5b9e-4c1d-9a6e-2d8f0b1c4e77',
@@ -227,5 +228,96 @@ describe('the logo sits on a black panel', () => {
     const calls = captureHeader();
     await buildTicketPdf({ ...base, logoBase64: null });
     expect(calls.some((c) => c.op === 'roundedRect' && c.fill === '0,0,0')).toBe(false);
+  });
+});
+
+
+describe("the event's own points, on the pass", () => {
+  // The standing rules are true of every show. When the doors open is not, and it is the one
+  // thing a ticket holder needs on the night, so it has to come off the event itself.
+  const JOB_KURIAN =
+    '-The date is set, the venue is locked, and the stage is ready.\n- Entry starts at 5.30pm\n '
+    + '-Catch @jobkurian live on Saturday, January 9, 2027, at Phoenix Avenue of Stars. '
+    + 'Get ready for an unforgettable night of music and vibes! \u{1F3B5}\u{26A1}';
+
+  const withDescription = (description?: string): TicketPdfInput =>
+    ({ ...base, event: { ...base.event!, description } });
+
+  const textOf = async (input: TicketPdfInput) => {
+    const { drawn } = captureText();
+    await buildTicketPdf(input);
+    return drawn.join(' ').replace(/\s+/g, ' ');
+  };
+
+  it('prints the entry time the admin wrote', async () => {
+    expect(await textOf(withDescription(JOB_KURIAN))).toContain('Entry starts at 5.30pm');
+  });
+
+  it('prints it on every pass, not just the first', async () => {
+    // People print one page and hand the other to a friend.
+    const text = await textOf(withDescription('- Entry starts at 5.30pm'));
+    expect(text.split('Entry starts at 5.30pm').length - 1).toBe(base.tickets.length);
+  });
+
+  it('keeps the standing rules as well', async () => {
+    const text = await textOf(withDescription(JOB_KURIAN));
+    expect(text).toContain('non-refundable, non-transferable');
+    expect(text).toContain('valid Government ID');
+  });
+
+  it('numbers the event points after the rules', async () => {
+    const text = await textOf(withDescription('- Entry starts at 5.30pm'));
+    // One space, not the two that are drawn: textOf collapses runs of whitespace.
+    expect(text).toContain('6. Entry starts at 5.30pm');
+  });
+
+  it('drops emoji rather than printing boxes', async () => {
+    // jsPDF's built-in fonts are Latin-1; anything outside it renders as filled rectangles.
+    const text = await textOf(withDescription(JOB_KURIAN));
+    expect(text).toContain('unforgettable night of music and vibes!');
+    expect(text).not.toMatch(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u);
+  });
+
+  it('changes nothing for an event with no description', async () => {
+    const text = await textOf(withDescription(undefined));
+    expect(text).toContain('GOOD TO KNOW');
+    // The five standing rules and nothing after them. Asserted on the fifth rule's wording
+    // rather than on the absence of a '6.', which also matches money and dates elsewhere.
+    expect(text).toContain('5. Management reserves the right of admission');
+    expect(text).not.toContain('Entry starts at');
+  });
+
+  it('survives an admin who writes an essay', async () => {
+    // Free text in a fixed-height box on an A4 page: the cap and the clamp both have to hold,
+    // or the list runs through the footer and off the bottom of the page.
+    const essay = Array.from({ length: 12 }, (_, i) => `Point ${i + 1} ` + 'x'.repeat(300)).join(' - ');
+    const doc = await buildTicketPdf(withDescription(essay));
+    expect(doc.getNumberOfPages()).toBe(base.tickets.length + 2);
+  });
+
+  it('prints at most the few points that fit', async () => {
+    const many = Array.from({ length: 9 }, (_, i) => `Note ${i + 1}`).join(' - ');
+    const text = await textOf(withDescription(many));
+    expect(text).toContain('Note 1');
+    expect(text).not.toContain(`Note ${MAX_TICKET_NOTES + 1}`);
+  });
+
+  it('keeps the box above the footer rule, however much is written', async () => {
+    // The clamp is the only thing standing between a chatty admin and a panel drawn over the
+    // booking reference, so it is measured rather than trusted. Every full-width panel in the
+    // page body has to finish before the rule the footer draws at y=281.
+    const panelsEndBefore = async (description?: string) => {
+      shapes.length = 0;
+      await buildTicketPdf(withDescription(description));
+      const panels = shapes.filter((s) => s.op === 'roundedRect' && s.args[0] === 16 && s.args[2] === 178);
+      expect(panels.length).toBeGreaterThan(0);
+      return Math.max(...panels.map((s) => s.args[1] + s.args[3]));
+    };
+
+    expect(await panelsEndBefore(undefined)).toBeLessThanOrEqual(281);
+    const long = Array.from({ length: 4 }, (_, i) => `Point ${i + 1} ` + 'word '.repeat(28)).join(' - ');
+    expect(await panelsEndBefore(long)).toBeLessThanOrEqual(281);
+    const essay = Array.from({ length: 20 }, (_, i) => `Point ${i + 1} ` + 'x'.repeat(200)).join(' - ');
+    expect(await panelsEndBefore(essay)).toBeLessThanOrEqual(281);
   });
 });
