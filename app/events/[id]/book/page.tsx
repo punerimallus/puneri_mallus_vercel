@@ -71,8 +71,10 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
   // Which category the buyer last touched, so the map and its card point at each other.
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [venueOpen, setVenueOpen] = useState(false);
-  // Collapsed on a phone by default - see the block that renders it for why.
-  const [detailsOpen, setDetailsOpen] = useState(false);
+  // Open by default: these points are the answer to "what actually is this event", and a
+  // buyer should not have to find a tap to read them. The fold stays so a long description can
+  // be put away on a phone, where this column sits above the box office.
+  const [detailsOpen, setDetailsOpen] = useState(true);
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   // The box office column, and the pane that scrolls inside it on a desktop. Both have to be
   // put back to the top when the step changes; see the effect below.
@@ -562,12 +564,13 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
               Under the venue rather than above it because the venue is a control, not a line of
               text, and pushing it down the column makes it read as part of this list.
 
-              Open on a desktop, folded on a phone. The comment at the top of this column
-              explains the shape it is in: the poster was shrunk to a thumbnail precisely so the
-              date, the venue and the box office all land in the first screenful at 390px. A
-              six-point list expanded here costs about 250px and undoes that, putting the first
-              thing a buyer can act on back below the fold. Folded, the heading still says the
-              details are there, and one tap opens them. */}
+              Measured rather than guessed. Side by side (md and up) this column is stretched to
+              match the box office beside it and already carries 150-270px of dead space, so the
+              list costs nothing there and is simply always shown. Stacked on a phone the column
+              hugs its content, so the list is real height: three points cost about 130px and
+              move the box office heading from y=546 to y=685, which still clears the fold on a
+              844px screen. It is open by default and can be folded away, which is what a long
+              description on a small screen needs. */}
           {details.length > 0 && (
             <div className="relative z-10 mt-4 md:mt-6 md:pt-6 md:border-t md:border-white/10">
               <button
