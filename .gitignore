@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Source artwork for scripts/make-boxoffice-bg.mjs, not shipped.
+# The script's OUTPUT (public/events/boxoffice-bg*.jpg) is committed and is what the site
+# serves. This is the 1.1 MB original it was cut from: too heavy for the repo, and anything
+# under public/ is publicly downloadable. Keep your copy locally to regenerate the backgrounds.
+/public/JOB KURIAN.jpg.jpeg

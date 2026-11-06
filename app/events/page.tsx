@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { ctaLabel, eventTarget } from '@/lib/events/cta';
+import { saleHeadline } from '@/lib/events/sale-phase';
 
 const FILTERS = [
     { id: 'UPCOMING', label: 'Upcoming Event' },
@@ -263,6 +264,15 @@ export default function EventsPage() {
                     <h2 className={`text-2xl md:text-3xl font-black italic uppercase tracking-tighter leading-[0.9]  ${!item.isUpcoming ? 'text-zinc-500' : 'text-white'}`}>
                       {item.title || "Untitled Event"}
                     </h2>
+
+                    {/* Which selling phase is on, set from the box office. Only while the event
+                        is still ahead: on a past one it would read as a sale still running. */}
+                    {item.isUpcoming && saleHeadline(item.salesHeadline) && (
+                      <span className="inline-flex items-center gap-2 bg-brandRed/15 border border-brandRed/30 text-brandRed text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full">
+                        <span className="w-1.5 h-1.5 rounded-full bg-brandRed animate-pulse" />
+                        {saleHeadline(item.salesHeadline)}
+                      </span>
+                    )}
 
                     <AnimatePresence>
                       {isExpanded && (

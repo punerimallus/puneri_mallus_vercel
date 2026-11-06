@@ -4,6 +4,7 @@ import { ObjectId } from 'mongodb';
 import { createClient } from '@supabase/supabase-js';
 import { requireAdmin } from '@/lib/admin';
 import { ctaLabel } from '@/lib/events/cta';
+import { goLiveAt, phaseAlert, saleHeadline } from '@/lib/events/sale-phase';
 
 // 🔥 ADD THIS LINE to stop Next.js from trying to statically compile the DB query
 export const dynamic = 'force-dynamic';
@@ -29,7 +30,10 @@ export async function POST(request: Request) {
     const db = client.db("punerimallus");
     const data = await request.json();
 
-    const { _id, ...eventData } = data;
+    // isUpcoming / isSaleLive are worked out fresh by /api/events on every read. They arrive
+    // back here only because the admin screens post an event object they fetched, and storing a
+    // stale copy of a computed field is how "it says upcoming but it isn't" starts.
+    const { _id, isUpcoming: _isUpcoming, isSaleLive: _isSaleLive, ...eventData } = data;
 
     const sanitizedEvent = {
       ...eventData,
@@ -42,6 +46,11 @@ export async function POST(request: Request) {
       memberPoints: Number(eventData.memberPoints) || 0,
       nonMemberPoints: Number(eventData.nonMemberPoints) || 0,
       buttonLabel: ctaLabel(eventData.buttonLabel),
+      // Normalised rather than trusted: the box office owns these two, and an event form
+      // posting a fetched copy back must not be able to corrupt a schedule by round-tripping it.
+      salesHeadline: saleHeadline(eventData.salesHeadline),
+      phaseAlert: phaseAlert(eventData.phaseAlert),
+      goLiveAt: goLiveAt(eventData.goLiveAt),
       updated_at: new Date()
     };
 

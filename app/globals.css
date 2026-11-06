@@ -61,6 +61,39 @@ body::before {
   }
 }
 
+/* The next-phase warning above the box office (lib/events/sale-phase.ts).
+ *
+ * A text-shadow rather than a box-shadow, a blur filter or a backdrop-filter. The two mobile
+ * blocks above strip the latter two for scroll performance, so anything built from them would
+ * simply vanish on the phones most buyers use. A text glow costs nothing to paint and survives
+ * both rules intact.
+ *
+ * The pulse is decorative. The prefers-reduced-motion block above stops it and leaves the
+ * static glow, which is where the information is. */
+.phase-alert-text {
+  color: #ff3b3b;
+  text-shadow: 0 0 6px rgba(255, 0, 0, 0.75), 0 0 18px rgba(255, 0, 0, 0.45);
+  animation: phase-alert-pulse 2.4s ease-in-out infinite;
+}
+
+/* The icon beside it. An SVG ignores text-shadow, so its glow has to come from a filter -
+ * cheap at this size, and not caught by the blur rules above, which only target empty divs. */
+.phase-alert-icon {
+  color: #ff3b3b;
+  filter: drop-shadow(0 0 5px rgba(255, 0, 0, 0.8));
+  animation: phase-alert-icon-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes phase-alert-icon-pulse {
+  0%, 100% { filter: drop-shadow(0 0 5px rgba(255, 0, 0, 0.8)); }
+  50%      { filter: drop-shadow(0 0 9px rgba(255, 0, 0, 1)); }
+}
+
+@keyframes phase-alert-pulse {
+  0%, 100% { text-shadow: 0 0 6px rgba(255, 0, 0, 0.75), 0 0 18px rgba(255, 0, 0, 0.45); }
+  50%      { text-shadow: 0 0 11px rgba(255, 0, 0, 0.95), 0 0 30px rgba(255, 0, 0, 0.6); }
+}
+
 html[data-intro="seen"] .intro-overlay {
   display: none;
 }

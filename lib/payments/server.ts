@@ -313,6 +313,29 @@ export const fulfilmentDeps: FulfilmentDeps = {
     const profile = (await must(
       db.from('profiles').select('email, phone_number').eq('id', order.user_id).maybeSingle(),
     )) as { email: string | null; phone_number: string | null } | null;
+
+    // payments.user_id is a NOT NULL foreign key to profiles(id), so with no profile row this
+    // insert raises and takes the whole fulfilment down with it - after the card was charged,
+    // and before the passes are emailed. The checkout refuses this case up front, so reaching
+    // here means the profile was deleted between paying and fulfilling.
+    //
+    // Delivering the tickets matters more than the ledger row. payment_orders already holds
+    // the payment id, the amount and the status, so nothing about the money is lost; what is
+    // missing is one row in the admin's reporting view. It is skipped loudly rather than
+    // silently: an alert goes out, and ledger_recorded stays false so it can be added by hand.
+    if (!profile) {
+      console.error('LEDGER_SKIPPED_NO_PROFILE:', {
+        orderId: order.razorpay_order_id, paymentId, userId: order.user_id, amount: order.base_amount,
+      });
+      await sendAdminPaymentAlert(
+        'Payment not recorded in the ledger',
+        `Order ${order.razorpay_order_id} (payment ${paymentId}, Rs.${order.base_amount}) was delivered, but the buyer `
+        + `has no profile row so it could not be written to the payments ledger. Add it by hand if you need the figure to `
+        + `reconcile. User id: ${order.user_id}.`,
+      ).catch(() => undefined);
+      return;
+    }
+
     const ledgerRow = {
       user_id: order.user_id,
       email: order.receipt_email || profile?.email,

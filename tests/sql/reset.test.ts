@@ -14,12 +14,16 @@ import { freshDb, items, seedCategory, seedUser, MIGRATION } from './pg';
 
 const ROOT = join(import.meta.dirname ?? __dirname, '..', '..');
 const DROP_LEGACY = join(ROOT, 'supabase', 'migrations', '20261029_drop_legacy_ticketing.sql');
+const COMP_PASSES = join(ROOT, 'supabase', 'migrations', '20261106_comp_passes.sql');
+const ACCESS_PASS = join(ROOT, 'supabase', 'migrations', '20261107_access_pass.sql');
 const RESET = join(ROOT, 'scripts', 'reset-ticketing.sql');
 
 /** A database carrying both migrations and a realistic spread of data. */
 async function messyDb() {
   const f = await freshDb();
   await f.db.exec(readFileSync(DROP_LEGACY, 'utf8'));
+  await f.db.exec(readFileSync(COMP_PASSES, 'utf8'));
+  await f.db.exec(readFileSync(ACCESS_PASS, 'utf8'));
 
   const cat = await seedCategory(f, { eventId: 'evt_live', name: 'GENERAL', prefix: 'GEN-', capacity: 100 });
   const buyer = await seedUser(f, 250);
@@ -63,7 +67,38 @@ async function messyDb() {
     [booking],
   );
 
-  return { f, cat, buyer, other };
+  // Complimentary passes: an ACCESS PASS category, two grants against it, and the seats they
+  // hold. Without these the reset was only ever tested on sold tickets, and a VIP guest list
+  // left behind on a "clean" database is a guest list that lets people in on the night.
+  const access = await seedCategory(f, {
+    eventId: 'evt_live', name: 'ACCESS PASS', prefix: 'AP-', capacity: 100, price: 0,
+  });
+  await f.db.query(`update event_ticket_categories set comp_only = true where id = $1`, [access]);
+  await f.val('select reserve_order_inventory($1,null,$2::jsonb,0,900,7,2)', ['comp_vip', items([[access, 2]])]);
+  await f.val('select confirm_order_inventory($1)', ['comp_vip']);
+
+  for (const [n, who] of [[1, 'Chief Guest'], [2, 'Sponsor']] as [number, string][]) {
+    const compBooking = await f.val<string>(
+      `insert into ticket_bookings (event_id, email, amount_paid, tickets_data, status, source, issued_by)
+       values ('evt_live', $1, 0, $2::jsonb, 'CONFIRMED', 'COMP', 'admin@punerimallus.com') returning id`,
+      [
+        `guest${n}@example.com`,
+        JSON.stringify([{ categoryId: access, categoryName: 'ACCESS PASS', ticketNumber: `AP-00${n}`, status: 'ISSUED' }]),
+      ],
+    );
+    await f.db.query(
+      `insert into comp_ticket_grants (booking_id, event_id, guest_name, guest_email, reason, passes, admits, face_value, issued_by)
+       values ($1,'evt_live',$2,$3,'VIP',1,1,0,'admin@punerimallus.com')`,
+      [compBooking, who, `guest${n}@example.com`],
+    );
+    await f.db.query(
+      `insert into scan_log (booking_id, ticket_number, event_id, admitted, action, actor_email, actor_role)
+       values ($1,$2,'evt_live',1,'ADMIT','gate@x.com','SCANNER')`,
+      [compBooking, `AP-00${n}`],
+    );
+  }
+
+  return { f, cat, buyer, other, access };
 }
 
 describe('reset-ticketing.sql', () => {
@@ -83,6 +118,9 @@ describe('reset-ticketing.sql', () => {
     expect(await f.val('select count(*) from inventory_reservations')).toBe(0);
     expect(await f.val('select count(*) from scan_log')).toBe(0);
     expect(await f.val('select coalesce(sum(sold), 0) from event_ticket_categories')).toBe(0);
+    // Complimentary passes go with everything else: the register, the bookings and the seats.
+    expect(await f.val('select count(*) from comp_ticket_grants')).toBe(0);
+    expect(await f.val(`select count(*) from ticket_bookings where source = 'COMP'`)).toBe(0);
     expect(await f.val('select coalesce(sum(issued_total), 0) from event_ticket_categories')).toBe(0);
     await f.close();
   });
@@ -147,6 +185,61 @@ describe('reset-ticketing.sql', () => {
     const cat = await seedCategory(f, { capacity: 10 });
     await f.val('select reserve_order_inventory($1,$2,$3::jsonb,0,900,7,2)', ['r1', await seedUser(f), items([[cat, 1]])]);
     await f.db.exec(readFileSync(RESET, 'utf8'));
+    expect(await f.val('select count(*) from ticket_numbers')).toBe(0);
+    await f.close();
+  });
+
+  it('clears the complimentary guest list as thoroughly as the sold tickets', async () => {
+    // The script leans on a cascade to do this, so it is worth proving rather than reading: a
+    // grant surviving a reset is somebody who can still walk in on the night.
+    const { f } = await messyDb();
+    expect(await f.val('select count(*) from comp_ticket_grants')).toBe(2);
+    expect(await f.val(`select count(*) from ticket_bookings where source = 'COMP'`)).toBe(2);
+
+    await f.db.exec(readFileSync(RESET, 'utf8'));
+
+    expect(await f.val('select count(*) from comp_ticket_grants')).toBe(0);
+    expect(await f.val(`select count(*) from ticket_bookings where source = 'COMP'`)).toBe(0);
+    expect(await f.val('select count(*) from ticket_numbers')).toBe(0);
+    await f.close();
+  });
+
+  it('keeps the ACCESS PASS category itself, with its seats back', async () => {
+    // Deleting it would mean re-creating it by hand before the next comp could be issued, and
+    // it is a configured category rather than test data.
+    const { f, access } = await messyDb();
+    await f.db.exec(readFileSync(RESET, 'utf8'));
+
+    const row = await f.one<{ name: string; sold: number; comp_only: boolean; capacity: number; issued_total: number }>(
+      `select name, sold, comp_only, capacity, issued_total from event_ticket_categories where id = $1`,
+      [access],
+    );
+    expect(row).toMatchObject({ name: 'ACCESS PASS', sold: 0, comp_only: true, capacity: 100, issued_total: 0 });
+    await f.close();
+  });
+
+  it('gives the next complimentary pass number AP-001 again', async () => {
+    const { f, access } = await messyDb();
+    await f.db.exec(readFileSync(RESET, 'utf8'));
+
+    const alloc = await f.val<{ numbers: number[] }[]>(
+      'select reserve_order_inventory($1,null,$2::jsonb,0,900,7,2) as a',
+      ['comp_fresh', items([[access, 1]])],
+    );
+    expect(alloc[0].numbers).toEqual([1]);
+    await f.close();
+  });
+
+  it('does not fail on a database that never had the comp migration', async () => {
+    // The guarded DO block in the script exists for exactly this: naming a missing table in a
+    // plain DELETE fails when the statement is parsed, whatever branch it sits in.
+    const f = await freshDb();
+    const cat = await seedCategory(f, { capacity: 10 });
+    await f.val('select reserve_order_inventory($1,$2,$3::jsonb,0,900,7,2)', ['r1', await seedUser(f), items([[cat, 1]])]);
+    expect(await f.val(`select to_regclass('public.comp_ticket_grants') is null`)).toBe(true);
+
+    await f.db.exec(readFileSync(RESET, 'utf8')); // must not throw
+
     expect(await f.val('select count(*) from ticket_numbers')).toBe(0);
     await f.close();
   });

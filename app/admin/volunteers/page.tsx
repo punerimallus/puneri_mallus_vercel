@@ -73,7 +73,7 @@ export default function GateVolunteersPage() {
   useEffect(() => {
     load();
     // The event list is only used to scope a volunteer to one show; failing to load it is not fatal.
-    fetch('/api/events')
+    fetch('/api/events?scope=admin')
       .then((r) => (r.ok ? r.json() : []))
       .then((d) => setEvents(Array.isArray(d) ? d : d?.events || []))
       .catch(() => setEvents([]));

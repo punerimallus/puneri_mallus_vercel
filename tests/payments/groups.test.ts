@@ -89,7 +89,7 @@ describe('group ticket PDF', () => {
     const qr = vi.spyOn(QRCode, 'toDataURL');
     const doc = await buildTicketPdf({ ...input, tickets: [{ categoryName: 'GROUP OF 5', ticketNumber: 'G5-003', unitPrice: 2000, groupSize: 5 }] });
     const all = drawn.join('\n');
-    expect(doc.getNumberOfPages()).toBe(2); // one ticket page + receipt
+    expect(doc.getNumberOfPages()).toBe(3); // one ticket page + receipt + terms
     expect(qr).toHaveBeenCalledTimes(1);
     expect(all).toContain('5 People');
     expect(all).toContain('One scan admits all 5');

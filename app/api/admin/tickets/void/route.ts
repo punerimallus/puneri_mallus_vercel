@@ -3,6 +3,7 @@ import { checkAdminAccess } from '@/lib/admin';
 import { supabaseAdmin } from '@/lib/payments/server';
 import { asMarkerDb, checkSchema } from '@/lib/payments/schema-check';
 import { ticketNumberValue, voidTicketNumber } from '@/lib/payments/inventory';
+import { isCompReservation } from '@/lib/payments/comp';
 import { IssuedTicket } from '@/lib/payments/types';
 
 export const dynamic = 'force-dynamic';
@@ -67,17 +68,10 @@ export async function POST(req: Request) {
 
   // Now give the seat and the number back, so the next buyer can have them.
   let seatFreed = false;
-  const { data: order } = await db
-    .from('payment_orders')
-    .select('reservation_id')
-    .eq('booking_id', bookingId)
-    .limit(1)
-    .maybeSingle();
-
-  const reservationId = (order as { reservation_id?: string } | null)?.reservation_id;
-  if (reservationId && pass.categoryId) {
-    const number = ticketNumberValue(ticketNumber, prefixOf(ticketNumber));
-    if (number !== null) {
+  const number = pass.categoryId ? ticketNumberValue(ticketNumber, prefixOf(ticketNumber)) : null;
+  if (pass.categoryId && number !== null) {
+    const reservationId = await findReservation(db, bookingId, pass.categoryId, number);
+    if (reservationId) {
       try {
         seatFreed = await voidTicketNumber(
           { rpc: (fn, args) => db.rpc(fn, args) },
@@ -115,4 +109,41 @@ export async function POST(req: Request) {
 function prefixOf(ticketNumber: string): string {
   const m = /^(.*?)(\d+)$/.exec(ticketNumber);
   return m ? m[1] : '';
+}
+
+/**
+ * Which reservation is holding this pass's number.
+ *
+ * payment_orders is asked first because that is the authoritative link for a sale. A
+ * complimentary pass has no row there at all - its seats were reserved by the admin, not by a
+ * checkout - so voiding one used to find nothing and leave the seat held for ever.
+ *
+ * The number row is the fallback, but only for a comp hold. Reading an id off the very row we
+ * are about to delete would make void_ticket_number's reservation check vacuous, so a pass
+ * whose seat had been resold in the meantime would evict the buyer now holding it. For a sale
+ * payment_orders is authoritative and a missing row means the seat must be checked by hand.
+ */
+async function findReservation(
+  db: { from: (t: string) => any },
+  bookingId: string,
+  categoryId: string,
+  number: number,
+): Promise<string | null> {
+  const { data: order } = await db
+    .from('payment_orders')
+    .select('reservation_id')
+    .eq('booking_id', bookingId)
+    .limit(1)
+    .maybeSingle();
+  const fromOrder = (order as { reservation_id?: string } | null)?.reservation_id;
+  if (fromOrder) return fromOrder;
+
+  const { data: held } = await db
+    .from('ticket_numbers')
+    .select('reservation_id')
+    .eq('category_id', categoryId)
+    .eq('number', number)
+    .maybeSingle();
+  const holder = (held as { reservation_id?: string } | null)?.reservation_id ?? null;
+  return isCompReservation(holder) ? holder : null;
 }

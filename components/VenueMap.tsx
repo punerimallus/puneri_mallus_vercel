@@ -39,6 +39,13 @@ export interface MapZone {
    * Rs.1200 and a single at Rs.1200 are otherwise the same label for very different things.
    */
   admits?: number;
+  /**
+   * The category exists but is not on sale yet (an admin has it paused). Drawn like a sold-out
+   * zone - unavailable, same hatch - but labelled so a buyer knows the room has a VIP block
+   * coming rather than one that has already gone. The price is deliberately withheld: it is not
+   * decided until the phase opens.
+   */
+  comingSoon?: boolean;
 }
 
 interface Props {
@@ -146,7 +153,10 @@ export default function VenueMap({ layout, zones, onPick, activeId }: Props) {
           {/* One group per category. The whole group is the tap target. */}
           {drawn.map((z) => {
             const state = zoneState(z.left);
-            const soldOut = state === 'sold-out';
+            const comingSoon = !!z.comingSoon;
+            // Both mean "you cannot have this one", so everything downstream - the hatch, the
+            // greying, the cursor, the disabled role - is shared. Only the wording differs.
+            const soldOut = state === 'sold-out' || comingSoon;
             const selected = z.qty > 0;
             const active = activeId === z.id;
             const runs = rowRuns(z.cells);
@@ -178,9 +188,11 @@ export default function VenueMap({ layout, zones, onPick, activeId }: Props) {
                 opacity={soldOut ? 0.75 : 1}
               >
                 <title>
-                  {`${z.name} — ₹${formatAmount(z.price)}${
-                    soldOut ? ' — sold out' : state === 'filling' ? ` — only ${z.left} left` : ''
-                  }`}
+                  {comingSoon
+                    ? `${z.name} — coming soon`
+                    : `${z.name} — ₹${formatAmount(z.price)}${
+                        soldOut ? ' — sold out' : state === 'filling' ? ` — only ${z.left} left` : ''
+                      }`}
                 </title>
 
                 {runs.map((r, i) => (
@@ -239,11 +251,13 @@ export default function VenueMap({ layout, zones, onPick, activeId }: Props) {
                     strokeWidth={0.09 * u}
                     paintOrder="stroke"
                   >
-                    {soldOut
-                      ? 'SOLD OUT'
-                      : admits > 1
-                        ? `₹${formatAmount(z.price)} · ${admits} people`
-                        : `₹${formatAmount(z.price)}`}
+                    {comingSoon
+                      ? 'COMING SOON'
+                      : soldOut
+                        ? 'SOLD OUT'
+                        : admits > 1
+                          ? `₹${formatAmount(z.price)} · ${admits} people`
+                          : `₹${formatAmount(z.price)}`}
                   </text>
                 </g>
 
@@ -305,6 +319,9 @@ export default function VenueMap({ layout, zones, onPick, activeId }: Props) {
           { label: 'Available', cls: 'bg-white/30 border-white/50' },
           { label: 'Few left', cls: 'bg-orange-500/40 border-orange-500' },
           { label: 'Sold out', cls: 'bg-zinc-800 border-zinc-700' },
+          // Only listed when one is actually drawn: a legend entry for something not on the plan
+          // just sends people looking for it.
+          ...(drawn.some((z) => z.comingSoon) ? [{ label: 'Coming soon', cls: 'bg-zinc-800 border-zinc-600' }] : []),
           { label: 'In your cart', cls: 'bg-white border-white' },
         ].map((l) => (
           <span key={l.label} className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-zinc-500">

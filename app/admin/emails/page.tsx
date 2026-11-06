@@ -63,7 +63,7 @@ export default function EmailStudio() {
     } catch { /* a draft is a convenience only */ }
     loadStatus();
     loadHistory();
-    fetch('/api/events').then((r) => r.json()).then((list) => {
+    fetch('/api/events?scope=admin').then((r) => r.json()).then((list) => {
       if (Array.isArray(list)) setEvents(list.map((e: any) => ({ id: String(e._id || e.id), title: String(e.title || e.name || 'Event') })));
     }).catch(() => {});
   }, []);

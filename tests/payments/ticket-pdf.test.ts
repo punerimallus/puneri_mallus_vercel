@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import QRCode from 'qrcode';
 import { buildTicketPdf, generateTicketPdf, TicketPdfInput } from '@/lib/payments/ticket-pdf';
+import { TERMS } from '@/lib/events/terms';
+import { SUPPORT_EMAIL, SUPPORT_PHONE } from '@/lib/events/support';
 
 const base: TicketPdfInput = {
   bookingId: '7f3c2a10-5b9e-4c1d-9a6e-2d8f0b1c4e77',
@@ -64,9 +66,40 @@ function captureText() {
 afterEach(() => { vi.restoreAllMocks(); drawn.length = 0; shapes.length = 0; });
 
 describe('ticket PDF', () => {
-  it('has one page per pass plus a receipt', async () => {
+  it('has one page per pass, then a receipt, then the terms', async () => {
     const doc = await buildTicketPdf(base);
-    expect(doc.getNumberOfPages()).toBe(3);
+    expect(doc.getNumberOfPages()).toBe(base.tickets.length + 2);
+  });
+
+  it('prints the same terms the buyer accepted at checkout, word for word', async () => {
+    // The screen and the pass both render lib/events/terms.ts. If they can ever disagree, the
+    // wording somebody actually agreed to is the one that loses an argument at the door.
+    const { drawn } = captureText();
+    await buildTicketPdf(base);
+    // Joined on spaces, not newlines: a long clause is word-wrapped across several draws, and
+    // asserting on the unwrapped sentence is the point — it is the wording that must survive.
+    const all = drawn.join(' ').replace(/\s+/g, ' ');
+    for (const term of TERMS) expect(all).toContain(term);
+    expect(all).toContain('TERMS & CONDITIONS');
+    // The one clause that differs from the card printed for the venue.
+    expect(all).toContain('above the age of 8');
+  });
+
+  it('prints a number to ring on every single page', async () => {
+    // By the time someone needs it they are usually at a gate with a problem, and the website
+    // is not what they have in their hand. One per page, so whichever page they print works.
+    const { drawn } = captureText();
+    const doc = await buildTicketPdf(base);
+    const onEveryPage = drawn.filter((t) => typeof t === 'string' && t.includes(SUPPORT_PHONE));
+    expect(onEveryPage.length).toBeGreaterThanOrEqual(doc.getNumberOfPages());
+    expect(drawn.join(' ')).toContain(SUPPORT_EMAIL);
+  });
+
+  it('numbers the terms page as the last page', async () => {
+    const { drawn } = captureText();
+    const doc = await buildTicketPdf(base);
+    const pages = doc.getNumberOfPages();
+    expect(drawn.join('\n')).toContain(`Page ${pages} of ${pages}`);
   });
 
   it('prints each ticket number, a valid status, and the exact receipt total', async () => {
@@ -117,7 +150,7 @@ describe('ticket PDF', () => {
   it('still builds without payment details (older bookings) and derives the receipt', async () => {
     const { drawn } = captureText();
     const doc = await buildTicketPdf({ ...base, payment: undefined, pointsApplied: 0 });
-    expect(doc.getNumberOfPages()).toBe(3);
+    expect(doc.getNumberOfPages()).toBe(base.tickets.length + 2);
     expect(drawn.join('\n')).toContain('TOTAL PAID');
   });
 

@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { seatsInUse } from '@/lib/payments/seats';
-import { Loader2, Plus, Save, Trash2, Ticket, Users } from 'lucide-react';
+import { Gift, Loader2, Plus, Save, Trash2, Ticket, Users } from 'lucide-react';
 import { useAlert } from '@/context/AlertContext';
 import { createBrowserClient } from '@supabase/ssr';
 import { MAX_GROUP_SIZE } from '@/lib/payments/groups';
@@ -18,6 +18,8 @@ type Category = {
   released?: number;
   /** 1 or missing = ordinary ticket. 2+ = one QR that admits that many people. '' while the admin is still typing. */
   group_size?: number | '';
+  /** Created by the box office for complimentary passes; never listed on the public page. */
+  comp_only?: boolean | null;
 };
 
 const isGroupRow = (c: Category) => c.group_size === '' || Number(c.group_size) > 1;
@@ -102,6 +104,14 @@ export default function TicketConfig({ eventId, eventTitle }: { eventId: string,
               {group && (
                 <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-brandRed">
                   <Users size={14} /> Group ticket: one QR code admits the whole group, and they can enter together or in parts
+                </div>
+              )}
+              {/* The access pass is created by the box office and is not for sale. Saying so
+                  here is what stops someone deleting it on a tidy-up and wondering later why
+                  complimentary passes stopped working. */}
+              {cat.comp_only && (
+                <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-amber-400">
+                  <Gift size={14} /> Complimentary passes only — never shown to buyers. Leave it here.
                 </div>
               )}
               <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">

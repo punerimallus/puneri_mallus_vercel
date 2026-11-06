@@ -19,6 +19,14 @@ interface EventCardProps {
   location?: string;
   mapUrl?: string;
   ticketUrl?: string;
+  /** The phase banner an admin set in the box office, e.g. "Early bird tickets are live". */
+  salesHeadline?: string | null;
+  /**
+   * Whether tapping anywhere on the card opens the event. On by default, because that is what
+   * a visitor expects. The admin event list turns it off: those cards sit under a half-filled
+   * edit form, and a stray tap that navigates away loses the work in it.
+   */
+  cardLink?: boolean;
 }
 
 export default function EventCard({ 
@@ -34,7 +42,9 @@ export default function EventCard({
   time, 
   location, 
   mapUrl,
-  ticketUrl 
+  ticketUrl,
+  salesHeadline,
+  cardLink = true,
 }: EventCardProps) {
   const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, mins: 0, secs: 0 });
   const [isLive, setIsLive] = useState(false);
@@ -71,6 +81,16 @@ export default function EventCard({
   }, [date, time, isUpcoming]);
 
   const safeSrc = image || "/about/placeholder.jpeg";
+
+  // Worked out once so the whole-card link and the Secure Spot button can never disagree about
+  // where this card goes.
+  const isInternal = ticketUrl === 'INTERNAL';
+  const href = isInternal && eventId ? `/events/${eventId}/book` : (ticketUrl || "/events");
+  const linkProps = {
+    href,
+    target: isInternal ? "_self" : "_blank",
+    rel: isInternal ? "" : "noopener noreferrer",
+  };
   const dateParts = date?.split(/[\s,]+/) || []; 
   const month = dateParts[0] || "---";
   const day = dateParts[1] || "--";
@@ -117,7 +137,7 @@ export default function EventCard({
           <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/20 to-transparent z-20 pointer-events-none" />
           
           {/* 4. LOGO BADGE */}
-          <div className="absolute top-5 right-5 z-30">
+          <div className="pointer-events-none absolute top-5 right-5 z-30">
             <div className="relative w-14 h-14 flex items-center justify-center">
               <div className={`absolute inset-0 rounded-full blur-lg transition-opacity duration-700 ${isUpcoming ? 'bg-brandRed opacity-40 group-hover:opacity-80' : 'bg-zinc-600 opacity-20'}`} />
               <div className={`relative w-full h-full rounded-full border-2 overflow-hidden flex items-center justify-center backdrop-blur-md shadow-2xl transition-all ${
@@ -134,7 +154,7 @@ export default function EventCard({
 
           {/* 5. COUNTDOWN OVERLAY */}
           {isUpcoming && isLive && (
-            <div className="absolute inset-0 bg-black/70 flex items-center justify-center backdrop-blur-md opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition-all duration-700 z-40">
+            <div className="pointer-events-none absolute inset-0 bg-black/70 flex items-center justify-center backdrop-blur-md opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition-all duration-700 z-40">
               <div className="text-center">
                 <p className="text-[10px] tracking-[.4em] text-brandRed mb-5 uppercase font-black">Syncing Pulse</p>
                 <div className="flex gap-4 text-white font-black italic text-4xl tracking-tighter">
@@ -177,6 +197,13 @@ export default function EventCard({
                  <Clock size={12} className="text-brandRed" />
                  <span className="text-[9px] font-black uppercase tracking-widest">{time}</span>
               </div>
+              {/* Which phase is on. Only on upcoming cards: on a past one it would read as a
+                  sale that is still running. */}
+              {isUpcoming && salesHeadline && (
+                <span className="inline-flex items-center gap-1.5 mt-2 bg-brandRed/15 border border-brandRed/30 text-brandRed text-[8px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full">
+                  <span className="w-1 h-1 rounded-full bg-brandRed animate-pulse" /> {salesHeadline}
+                </span>
+              )}
             </div>
           </div>
 
@@ -206,7 +233,7 @@ export default function EventCard({
           )}
 
           {/* FOOTER */}
-          <div className="mt-auto space-y-4">
+          <div className="relative z-40 mt-auto space-y-4">
             {location && (
               <div className="flex items-center justify-between bg-white/5 p-3 px-4 rounded-xl border border-white/5 backdrop-blur-md">
                 <div className="flex items-center gap-3 flex-1">
@@ -234,12 +261,7 @@ export default function EventCard({
 
             {/* 🔥 UPDATED SECURE SPOT BUTTON */}
             {isUpcoming && (
-              <Link 
-                href={ticketUrl === 'INTERNAL' && eventId ? `/events/${eventId}/book` : (ticketUrl || "/events")} 
-                target={ticketUrl === 'INTERNAL' ? "_self" : "_blank"} 
-                rel={ticketUrl === 'INTERNAL' ? "" : "noopener noreferrer"} 
-                className="block group/btn"
-              >
+              <Link {...linkProps} className="block group/btn">
                 <button className="w-full py-4 bg-brandRed text-white font-black uppercase text-[9px] tracking-[0.3em] hover:bg-white hover:text-black transition-all rounded-2xl shadow-xl active:scale-95 flex items-center justify-center gap-2">
                   Secure Spot <Zap size={12} />
                 </button>
@@ -247,6 +269,18 @@ export default function EventCard({
             )}
           </div>
         </div>
+
+        {/* Tapping anywhere on an upcoming card opens it. Previously only the Secure Spot button
+            did, so on a phone - where the whole card looks like one big button - most taps did
+            nothing at all. Kept as an overlay anchor rather than wrapping the card, because the
+            card already contains links (the map, the button) and an anchor cannot nest. */}
+        {isUpcoming && cardLink && (
+          <Link
+            {...linkProps}
+            aria-label={`View ${title}`}
+            className="absolute inset-0 z-30 rounded-[45px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brandRed"
+          />
+        )}
       </div>
     </motion.div>
   );

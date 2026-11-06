@@ -5,6 +5,7 @@ const categories: TicketCategory[] = [
   { id: 'vip', name: 'VIP', prefix: 'VIP', price: 1000, capacity: 10, sold: 8, active: true },
   { id: 'ga', name: 'General', prefix: 'GA', price: 300, capacity: null, sold: 0, active: true },
   { id: 'old', name: 'Early Bird', prefix: 'EB', price: 100, capacity: 50, sold: 0, active: false },
+  { id: 'ap', name: 'ACCESS PASS', prefix: 'AP-', price: 0, capacity: 100, sold: 0, active: true, comp_only: true },
 ];
 
 const base = {
@@ -52,8 +53,28 @@ describe('quoteEventCart', () => {
     [{ ga: 0 }, /at least one/],
     [{ old: 1 }, /no longer on sale/],
     [{ vip: 3 }, /sold out/],
+    [{ ap: 1 }, /Invalid category/],
   ])('rejects tampered or invalid cart %j', (cart, msg) => {
     expect(() => quoteEventCart({ ...base, cart })).toThrow(msg);
+  });
+
+  it('will not sell a complimentary-pass category at any quantity, beside anything else', () => {
+    // The hole this closes: an ACCESS PASS is free and active, so without this the cart below
+    // totals Rs.300, clears the Rs.1 gateway minimum, and admits five people for nothing. Its
+    // id reaches the browser with every other category, so the booking page hiding the row is
+    // presentation, not a control.
+    expect(() => quoteEventCart({ ...base, cart: { ga: 1, ap: 5 } })).toThrow(/Invalid category/);
+    expect(() => quoteEventCart({ ...base, cart: { ap: 1 } })).toThrow(/Invalid category/);
+    // Zero is still zero: an untouched stepper must not trip over this.
+    expect(quoteEventCart({ ...base, cart: { ga: 1, ap: 0 } }).total).toBe(300);
+  });
+
+  it('keeps selling categories that predate the comp_only column', () => {
+    // Older rows arrive without the field at all; undefined must read as "sellable".
+    const legacy: TicketCategory[] = [{ id: 'g', name: 'G', prefix: 'G', price: 200, capacity: null, sold: 0, active: true }];
+    expect(quoteEventCart({ ...base, categories: legacy, cart: { g: 1 } }).total).toBe(200);
+    const explicit: TicketCategory[] = [{ ...legacy[0], comp_only: null }];
+    expect(quoteEventCart({ ...base, categories: explicit, cart: { g: 1 } }).total).toBe(200);
   });
 
   it('rejects a missing or non-object cart', () => {

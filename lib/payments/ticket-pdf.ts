@@ -3,6 +3,8 @@ import { LOGO_DATA_URI } from './logo-data';
 import QRCode from 'qrcode';
 import { admitsLabel, groupSizeOf, isGroup } from './groups';
 import { buildReceipt, buildScanUrl, formatEventDate, formatEventTime, formatIst, formatRupees, pdfSafe } from './format';
+import { TERMS, termsNumber } from '../events/terms';
+import { PDF_SUPPORT_LINE, SUPPORT_EMAIL, SUPPORT_PHONE } from '../events/support';
 
 export interface TicketPdfInput {
   bookingId: string;
@@ -120,7 +122,9 @@ function footer(doc: Doc, bookingRef: string, page: number, pages: number) {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(...MUTED);
-  doc.text('Need help?  hello@punerimallus.com   |   punerimallus.com', M, 287);
+  // The phone number belongs here, on every page: by the time someone needs it they are usually
+  // at a gate with a problem, and the website is not what they have in their hand.
+  doc.text(PDF_SUPPORT_LINE, M, 287);
   doc.text(`Booking ${bookingRef}   |   Page ${page} of ${pages}`, W - M, 287, { align: 'right' });
 }
 
@@ -132,13 +136,14 @@ const wrap = (doc: Doc, text: string, width: number, maxLines: number): string[]
   return cut;
 };
 
-/** Builds the e-ticket PDF: one page per pass, then a payment summary. */
+/** Builds the e-ticket PDF: one page per pass, then a payment summary, then the terms. */
 export async function buildTicketPdf(input: TicketPdfInput): Promise<jsPDF> {
   const { bookingId, purchaserEmail, event, tickets, pointsApplied, logoBase64, baseUrl, payment, signTicket } = input;
   const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
   const ref = bookingId.split('-')[0].toUpperCase();
   const issued = payment?.paidAt ? formatIst(payment.paidAt) : formatIst(new Date());
-  const totalPages = tickets.length + 1;
+  // One page per pass, then the receipt, then the terms everyone agreed to at checkout.
+  const totalPages = tickets.length + 2;
 
   const title = pdfSafe(event?.title || 'Puneri Mallus Event').toUpperCase();
   const venue = pdfSafe(event?.location || 'Venue to be announced');
@@ -396,6 +401,62 @@ export async function buildTicketPdf(input: TicketPdfInput): Promise<jsPDF> {
   doc.setFontSize(8);
   doc.setTextColor(...MUTED);
   doc.text('This receipt confirms your booking. The convenience fee covers payment-gateway charges and applicable taxes.', M, y + 44);
+
+  footer(doc, ref, totalPages - 1, totalPages);
+
+  // ---- terms and conditions ---------------------------------------------------------------------------
+  // The same list, word for word, that the buyer ticked to accept before the box office opened
+  // (lib/events/terms.ts). Printing a second, hand-maintained copy here is how the pass ends up
+  // contradicting what somebody actually agreed to - which is the version that loses an
+  // argument at the door.
+  doc.addPage();
+  header(doc, logoBase64, 'TERMS & CONDITIONS', `Booking ${ref}`);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(...MUTED);
+  doc.text('By purchasing this ticket you accepted the following. Please read them before you travel.', M, 54);
+
+  let ty = 64;
+  TERMS.forEach((term, i) => {
+    const lines = wrap(doc, pdfSafe(term), CW - 11, 3);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(...RED);
+    doc.text(termsNumber(i), M, ty);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...INK);
+    doc.text(lines, M + 11, ty, { lineHeightFactor: 1.3 });
+    ty += lines.length * 4.8 + 4.4;
+  });
+
+  ty += 4;
+  doc.setFillColor(...PANEL);
+  doc.setDrawColor(...LINE);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(M, ty, CW, 22, 2.5, 2.5, 'FD');
+  label(doc, 'AT THE GATE', M + 6, ty + 8);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(55, 65, 81);
+  doc.text('Show the QR code on the pass pages of this PDF. A screenshot is fine - it does not have to be printed.', M + 6, ty + 15);
+
+  ty += 30;
+  doc.setFillColor(...PANEL);
+  doc.setDrawColor(...LINE);
+  doc.roundedRect(M, ty, CW, 24, 2.5, 2.5, 'FD');
+  label(doc, 'ANY QUESTIONS', M + 6, ty + 8);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(...INK);
+  doc.text(SUPPORT_PHONE, M + 6, ty + 16);
+  // Measured while the bold face is still set — getTextWidth reads the CURRENT font, so moving
+  // this below the setFont would lay the email over the end of the number.
+  const phoneWidth = doc.getTextWidth(SUPPORT_PHONE);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(55, 65, 81);
+  doc.text(`or email ${SUPPORT_EMAIL}`, M + 6 + phoneWidth + 5, ty + 16);
 
   footer(doc, ref, totalPages, totalPages);
   return doc;

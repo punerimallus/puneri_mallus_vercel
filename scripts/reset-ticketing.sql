@@ -4,7 +4,8 @@
 -- It is wrapped in a transaction: if any statement fails, nothing is applied.
 --
 -- WHAT IT REMOVES  (all of it is test data)
---   ticket_bookings              every booking
+--   ticket_bookings              every booking, sold and complimentary alike
+--   comp_ticket_grants           the register of who was given free passes
 --   scan_log                     the admission history for those bookings
 --   payment_orders               EVENT_TICKET orders only
 --   ticket_numbers               every seat held
@@ -21,6 +22,15 @@
 --                         and raise, so Razorpay would retry it indefinitely and keep alerting
 --                         you. These rows are what stop that. Leave them.
 --   payment_orders (LIFETIME / MART), memberships, profiles  -- untouched.
+--   event_ticket_categories  The categories themselves survive; only their counters are reset
+--                         (step 4). That includes the comp-only ACCESS PASS, which is what you
+--                         want -- it keeps its capacity and its comp_only flag, and comes back
+--                         with every seat available, so there is nothing to re-create by hand.
+--
+-- TO CONFIRM THE COMPS AFTERWARDS, if you want it in the result grid rather than the notice:
+--   select count(*) from public.comp_ticket_grants;                              -- 0
+--   select name, sold, comp_only from public.event_ticket_categories
+--    where comp_only;                                        -- ACCESS PASS, 0, true
 
 begin;
 
@@ -43,6 +53,33 @@ delete from public.inventory_reservations;
 -- 3. Orders and bookings --------------------------------------------------------------------
 -- Only EVENT_TICKET orders. Membership and Mart orders are a different product and stay.
 delete from public.payment_orders where payment_type = 'EVENT_TICKET';
+
+-- Complimentary grants first, then the bookings they hang off.
+--
+-- comp_ticket_grants.booking_id cascades, so deleting the bookings alone would already take
+-- these with them. It is spelled out anyway for two reasons: a reader of this script should not
+-- have to go and look up a foreign key to find out the VIP guest list is about to be erased,
+-- and if that cascade is ever tightened to RESTRICT the booking delete below would start
+-- failing and roll the whole reset back. Deleting in this order never depends on it.
+--
+-- Wrapped in a DO block because this script also has to run on a database that predates the
+-- comp migration: a bare `delete from public.comp_ticket_grants` naming a table that does not
+-- exist fails when the statement is PARSED, before any branch could skip it. The notice prints
+-- how many were removed, since the verification query at the end cannot reference the table
+-- for the same reason.
+do $$
+declare
+  n integer := 0;
+begin
+  if to_regclass('public.comp_ticket_grants') is not null then
+    delete from public.comp_ticket_grants;
+    get diagnostics n = row_count;
+    raise notice 'comp_ticket_grants: % complimentary grant(s) removed', n;
+  else
+    raise notice 'comp_ticket_grants: table not present, nothing to remove';
+  end if;
+end $$;
+
 delete from public.ticket_bookings;
 
 -- 3b. The admission history ------------------------------------------------------------

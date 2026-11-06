@@ -58,11 +58,31 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: SCHEMA_BEHIND_MESSAGE }, { status: 503 });
     }
 
-    const { data: profile } = await db
+    const { data: profile, error: profileErr } = await db
       .from('profiles')
       .select('email, is_member, loyalty_points, loyalty_points_held, mart_unlocked, phone_number, dob')
       .eq('id', user.id)
       .maybeSingle();
+
+    // A signed-in account is not the same thing as a profile row, and every product's ledger
+    // entry points at profiles(id). Without one, `payments` rejects the insert on its foreign
+    // key - but only during fulfilment, which happens AFTER Razorpay has taken the money. The
+    // buyer ends up charged, with passes sitting in the database they never receive, and an
+    // order that never reaches FULFILLED.
+    //
+    // So it is checked here, before the order exists. Refusing costs someone one trip through
+    // onboarding; the alternative costs them a refund.
+    if (profileErr) {
+      console.error('PROFILE_UNREADABLE:', profileErr.message);
+      throw new PaymentInputError('We could not read your account just now. Please try again in a moment.', 503);
+    }
+    if (!profile) {
+      console.error('CHECKOUT_WITHOUT_PROFILE:', { userId: user.id, email: user.email });
+      throw new PaymentInputError(
+        'Please finish setting up your profile before booking - it only takes a moment. Nothing has been charged.',
+        409,
+      );
+    }
 
     // Pricing comes from app_settings. If we cannot read it we must NOT fall back to the
     // hardcoded defaults: that would quietly sell at the wrong price and bypass the admin's

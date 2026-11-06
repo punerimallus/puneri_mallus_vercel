@@ -45,6 +45,8 @@ export interface TicketCategory {
   released?: number | null;
   active?: boolean | null;
   group_size?: number | null;
+  /** Complimentary-pass categories (the ACCESS PASS). Never sellable. Absent before that migration. */
+  comp_only?: boolean | null;
 }
 
 export interface EventCartInput {
@@ -92,6 +94,13 @@ export function quoteEventCart(input: EventCartInput): EventCartQuote {
 
     const cat = categories.find((c) => String(c.id) === categoryId);
     if (!cat) throw new PaymentInputError('Invalid category selected');
+    // A comp-only category is free and `active` (the reservation needs it active to issue from),
+    // so nothing else here would stop it: a cart of one paid pass plus five ACCESS PASSes clears
+    // the minimum-amount check and walks five people in for nothing. The booking page hides these
+    // rows, but it hands every category id to the browser, so hiding is not a control. Refused
+    // with the same words as an unknown id — a buyer never meets this, and it tells a prodder
+    // nothing about what exists.
+    if (cat.comp_only === true) throw new PaymentInputError('Invalid category selected');
     if (cat.active === false) throw new PaymentInputError(`"${cat.name}" is no longer on sale.`);
     if (cat.capacity != null && seatsInUse(cat) + qty > cat.capacity) {
       throw new PaymentInputError(`Oops! "${cat.name}" is sold out. Someone just bought the last ones.`, 409);

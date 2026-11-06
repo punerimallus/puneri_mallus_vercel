@@ -3,33 +3,25 @@ import { useState, useEffect } from 'react';
 import { 
   Ticket, Loader2, ArrowLeft, Users, 
   PauseCircle, PlayCircle, IndianRupee, ShieldCheck, Search, Mail,
-  DoorOpen, UserCheck, UserX, CircleDashed, ScanLine
+  DoorOpen, UserCheck, UserX, CircleDashed, ScanLine, Gift
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAlert } from '@/context/AlertContext';
 import { seatsInUse } from '@/lib/payments/seats';
 import { ATTENDANCE_LABEL, AttendanceState, admittedBy, attendancePercent, bookingAttendance, eventAttendance, type ScanLogRow } from '@/lib/payments/attendance';
+import CompPassIssuer from '@/components/admin/CompPassIssuer';
+import SalePhaseControl from '@/components/admin/SalePhaseControl';
 
 export default function BoxOfficeDashboard() {
   const [events, setEvents] = useState<any[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
-  const [dashboardData, setDashboardData] = useState<{ categories: any[], bookings: any[] } | null>(null);
+  const [dashboardData, setDashboardData] = useState<{ categories: any[], bookings: any[], grants?: any[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   // Who has come through the door: All, or one of the attendance states.
   const [doorFilter, setDoorFilter] = useState<'ALL' | AttendanceState>('ALL');
   const { showAlert } = useAlert();
-
-  useEffect(() => {
-    fetch('/api/admin/boxoffice')
-      .then(res => res.json())
-      .then(data => {
-        setEvents(data.events || []);
-        if (data.events?.length > 0) fetchDashboard(data.events[0]._id);
-        setLoading(false);
-      });
-  }, []);
 
   const fetchDashboard = async (eventId: string) => {
     setRefreshing(true);
@@ -44,6 +36,20 @@ export default function BoxOfficeDashboard() {
       setRefreshing(false);
     }
   };
+
+  // Pulled out of the effect so saving a schedule can re-read the events without a full reload;
+  // otherwise the card keeps showing the go-live time that was just replaced.
+  const fetchEvents = async (selectFirst = false) => {
+    const data = await fetch('/api/admin/boxoffice').then((r) => r.json()).catch(() => ({}));
+    setEvents(data.events || []);
+    if (selectFirst && data.events?.length > 0) fetchDashboard(data.events[0]._id);
+    return data.events || [];
+  };
+
+  useEffect(() => {
+    fetchEvents(true).finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const toggleCategoryStatus = async (categoryId: string, currentStatus: boolean) => {
     try {
@@ -186,6 +192,10 @@ export default function BoxOfficeDashboard() {
           </div>
         </div>
 
+        {/* GO LIVE & PHASES — deliberately above the per-event dashboard, because it is about
+            which events the public can see at all rather than about one event's stock. */}
+        <SalePhaseControl events={events} onSaved={() => fetchEvents()} />
+
         {refreshing && !dashboardData ? (
           <div className="py-20 flex justify-center"><Loader2 className="animate-spin text-brandRed" size={32}/></div>
         ) : dashboardData && (
@@ -235,6 +245,16 @@ export default function BoxOfficeDashboard() {
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* COMPLIMENTARY PASSES */}
+            <div className="pt-8 border-t border-white/5">
+              <CompPassIssuer
+                eventId={selectedEventId!}
+                categories={dashboardData.categories}
+                grants={dashboardData.grants || []}
+                onIssued={() => selectedEventId && fetchDashboard(selectedEventId)}
+              />
             </div>
 
             {/* AT THE DOOR */}
@@ -330,6 +350,11 @@ export default function BoxOfficeDashboard() {
                         <td className="p-6">
                           <span className="text-white uppercase tracking-wider block mb-1">{booking.full_name}</span>
                           <span className="text-[10px] text-zinc-500 block">{booking.email}</span>
+                          {booking.comp && (
+                            <span className="mt-1.5 inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-amber-400 border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 rounded-full">
+                              <Gift size={8} /> Comp · {booking.comp.reason}
+                            </span>
+                          )}
                         </td>
                         <td className="p-6">
                           <span className="bg-brandRed/10 text-brandRed border border-brandRed/20 px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-widest inline-block">
@@ -373,7 +398,9 @@ export default function BoxOfficeDashboard() {
                           <DoorCell door={booking.door} scans={booking.scans} />
                         </td>
                         <td className="p-6">
-                          <span className="font-mono text-[10px] text-zinc-500 block">{booking.razorpay_payment_id}</span>
+                          <span className="font-mono text-[10px] text-zinc-500 block">
+                            {booking.comp ? `Issued by ${booking.comp.issued_by}` : booking.razorpay_payment_id}
+                          </span>
                           <span className="text-[9px] text-zinc-600 block mt-1">{new Date(booking.created_at).toLocaleDateString('en-IN')}</span>
                         </td>
                         <td className="p-6">

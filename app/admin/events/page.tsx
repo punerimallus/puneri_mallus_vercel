@@ -94,7 +94,7 @@ export default function AdminEventsPage() {
   const fetchFromMongo = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/events');
+      const res = await fetch('/api/events?scope=admin');
       const data = await res.json();
       setEvents(data);
     } catch (error) {
@@ -641,7 +641,7 @@ export default function AdminEventsPage() {
                       <button onClick={() => startEdit(event)} className="p-4 bg-black/80 backdrop-blur-md hover:bg-blue-600 rounded-2xl transition-all border border-white/10 text-white"><Edit3 size={16}/></button>
                       <button onClick={() => {setEventToDelete({id: event._id, title: event.title}); setConfirmOpen(true);}} className="p-4 bg-black/80 backdrop-blur-md hover:bg-red-600 rounded-2xl transition-all border border-white/10 text-white"><Trash2 size={16}/></button>
                     </div>
-                    <EventCard {...event} eventId={event._id} isUpcoming={true} />
+                    <EventCard {...event} eventId={event._id} isUpcoming={true} cardLink={false} />
                   </div>
                 ))}
               </div>
