@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Clock, MapPin, ExternalLink, Zap, ChevronRight, History } from 'lucide-react';
+import { descriptionBullets } from '@/lib/events/description';
 
 interface EventCardProps {
   eventId?: string; // 🔥 REQUIRED FOR INTERNAL ROUTING
@@ -210,9 +211,7 @@ export default function EventCard({
           {showDescription && description && (
             <div className="mb-8 relative pl-2">
               <ul className="space-y-3">
-                {description.split('-').map((segment, idx) => {
-                  const trimmed = segment.trim();
-                  if (!trimmed) return null;
+                {descriptionBullets(description).map((trimmed, idx) => {
                   return (
                     <motion.li 
                       key={idx} 

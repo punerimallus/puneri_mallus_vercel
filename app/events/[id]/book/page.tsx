@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo, useRef, use } from 'react';
-import { Mail, ArrowRight, Minus, Plus, Loader2, Ticket, Calendar, Clock, MapPin, Sparkles, Star, ShieldCheck, TrendingUp, ChevronRight, Hourglass, Phone, MessageSquare, Crown, AlarmClock } from 'lucide-react';
+import { Mail, ArrowRight, Minus, Plus, Loader2, Ticket, Calendar, Clock, MapPin, Sparkles, Star, ShieldCheck, TrendingUp, ChevronRight, Hourglass, Phone, MessageSquare, Crown, AlarmClock, Info } from 'lucide-react';
 import { useAlert } from '@/context/AlertContext';
 import { createBrowserClient } from '@supabase/ssr';
 import { useRouter } from 'next/navigation';
@@ -20,6 +20,7 @@ import { TERMS, termsNumber } from '@/lib/events/terms';
 import { PHASE_NOTICE, phaseAlert, saleHeadline } from '@/lib/events/sale-phase';
 import { HELP_NOTE, SUPPORT_PHONE, SUPPORT_TEL_HREF, SUPPORT_WHATSAPP_HREF, VIP_ENQUIRY } from '@/lib/events/support';
 import { onSale, sortForSale } from '@/lib/events/catalogue';
+import { descriptionBullets } from '@/lib/events/description';
 import { publiclyListed } from '@/lib/payments/comp';
 
 /** Roughly the height of the fixed navbar, so a step heading is not scrolled under it. */
@@ -70,6 +71,8 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
   // Which category the buyer last touched, so the map and its card point at each other.
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [venueOpen, setVenueOpen] = useState(false);
+  // Collapsed on a phone by default - see the block that renders it for why.
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   // The box office column, and the pane that scrolls inside it on a desktop. Both have to be
   // put back to the top when the step changes; see the effect below.
@@ -177,6 +180,7 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
   const headline = saleHeadline(eventData?.salesHeadline);
   const nextPhase = phaseAlert(eventData?.phaseAlert);
   const venueName = eventData?.location || 'Venue TBA';
+  const details = descriptionBullets(eventData?.description);
 
   // Group tickets and single tickets have their own per-account limits (the server enforces them too).
   const groupTicketsInCart = categories.reduce((n, c) => n + (isGroup(c.group_size) ? cart[c.id] || 0 : 0), 0);
@@ -551,6 +555,53 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
               <ChevronRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
             </span>
           </button>
+
+          {/* What the event actually is: the same points the events page lists, from the same
+              field, so there is one place to edit them and the two screens cannot disagree.
+
+              Under the venue rather than above it because the venue is a control, not a line of
+              text, and pushing it down the column makes it read as part of this list.
+
+              Open on a desktop, folded on a phone. The comment at the top of this column
+              explains the shape it is in: the poster was shrunk to a thumbnail precisely so the
+              date, the venue and the box office all land in the first screenful at 390px. A
+              six-point list expanded here costs about 250px and undoes that, putting the first
+              thing a buyer can act on back below the fold. Folded, the heading still says the
+              details are there, and one tap opens them. */}
+          {details.length > 0 && (
+            <div className="relative z-10 mt-4 md:mt-6 md:pt-6 md:border-t md:border-white/10">
+              <button
+                type="button"
+                onClick={() => setDetailsOpen((v) => !v)}
+                aria-expanded={detailsOpen}
+                className="md:hidden w-full flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] px-4 py-3 transition-all active:scale-[0.98]"
+              >
+                <span className="flex items-center gap-2.5 min-w-0">
+                  <Info size={14} className="text-brandRed shrink-0" />
+                  <span className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-200">Event details</span>
+                </span>
+                <ChevronRight
+                  size={14}
+                  className={`shrink-0 text-brandRed transition-transform ${detailsOpen ? 'rotate-90' : ''}`}
+                />
+              </button>
+
+              <p className="hidden md:flex items-center gap-2 text-[8px] font-black uppercase tracking-[0.25em] text-zinc-500 mb-4">
+                <Info size={11} className="text-brandRed" /> Event details
+              </p>
+
+              <ul className={`${detailsOpen ? 'block' : 'hidden'} md:block space-y-2.5 md:space-y-3 mt-3 md:mt-0`}>
+                {details.map((point, i) => (
+                  <li key={i} className="flex items-start gap-3">
+                    <span className="mt-[7px] shrink-0 w-1.5 h-1.5 rounded-full bg-brandRed shadow-[0_0_8px_#FF0000]" />
+                    <span className="min-w-0 text-[11px] md:text-xs text-zinc-300 font-medium italic leading-relaxed break-words">
+                      {point}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
 
         {/* RIGHT COLUMN: BOX OFFICE FLOW */}

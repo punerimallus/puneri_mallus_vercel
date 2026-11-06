@@ -9,6 +9,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { ctaLabel, eventTarget } from '@/lib/events/cta';
 import { saleHeadline } from '@/lib/events/sale-phase';
+import { descriptionBullets } from '@/lib/events/description';
 
 const FILTERS = [
     { id: 'UPCOMING', label: 'Upcoming Event' },
@@ -289,10 +290,7 @@ export default function EventsPage() {
                           </div>
 
                           <div className="space-y-3 pl-1">
-                            {item.description?.split('-').map((segment: string, idx: number) => {
-                              const trimmed = segment.trim();
-                              if (!trimmed) return null;
-
+                            {descriptionBullets(item.description).map((trimmed: string, idx: number) => {
                               return (
                                 <div key={idx} className="flex items-start gap-3 group/item">
                                   <div className="mt-2 shrink-0">
