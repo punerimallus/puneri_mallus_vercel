@@ -90,27 +90,34 @@ body::before {
  * The pulse is decorative. The prefers-reduced-motion block above stops it and leaves the
  * static glow, which is where the information is. */
 .phase-alert-text {
-  color: #ff3b3b;
-  text-shadow: 0 0 6px rgba(255, 0, 0, 0.75), 0 0 18px rgba(255, 0, 0, 0.45);
-  animation: phase-alert-pulse 2.4s ease-in-out infinite;
+  color: var(--pa-text, #ff3b3b);
+  text-shadow:
+    0 0 calc(6px * var(--pa-glow, 1)) rgba(var(--pa-glow-rgb, 255, 0, 0), 0.75),
+    0 0 calc(18px * var(--pa-glow, 1)) rgba(var(--pa-glow-rgb, 255, 0, 0), 0.45);
+  animation: var(--pa-anim, phase-alert-blink) var(--pa-speed, 1.5s) ease-in-out infinite;
 }
 
 /* The icon beside it. An SVG ignores text-shadow, so its glow has to come from a filter -
  * cheap at this size, and not caught by the blur rules above, which only target empty divs. */
 .phase-alert-icon {
-  color: #ff3b3b;
-  filter: drop-shadow(0 0 5px rgba(255, 0, 0, 0.8));
-  animation: phase-alert-icon-pulse 2.4s ease-in-out infinite;
+  color: var(--pa-text, #ff3b3b);
+  filter: drop-shadow(0 0 calc(5px * var(--pa-glow, 1)) rgba(var(--pa-glow-rgb, 255, 0, 0), 0.8));
+  animation: var(--pa-anim, phase-alert-blink) var(--pa-speed, 1.5s) ease-in-out infinite;
 }
 
-@keyframes phase-alert-icon-pulse {
-  0%, 100% { filter: drop-shadow(0 0 5px rgba(255, 0, 0, 0.8)); }
-  50%      { filter: drop-shadow(0 0 9px rgba(255, 0, 0, 1)); }
-}
-
-@keyframes phase-alert-pulse {
-  0%, 100% { text-shadow: 0 0 6px rgba(255, 0, 0, 0.75), 0 0 18px rgba(255, 0, 0, 0.45); }
-  50%      { text-shadow: 0 0 11px rgba(255, 0, 0, 0.95), 0 0 30px rgba(255, 0, 0, 0.6); }
+/* One keyframe for the text and the icon, so they blink together rather than drifting apart.
+ *
+ * Opacity, not visibility: it fades to --pa-dim and back, which reads as a blink while staying
+ * legible the whole way through. A hard on/off at this size is a strobe, and a buyer trying to
+ * read a price warning should not have to wait for it to come back.
+ *
+ * The slowest cycle is 2.4s and the quickest 0.9s, so even at its fastest this is about 1.1Hz -
+ * well under the 3Hz flash threshold. The prefers-reduced-motion block above stops it outright
+ * for anyone who has asked for that, leaving the colour and the glow, which is where the
+ * information actually is. */
+@keyframes phase-alert-blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: var(--pa-dim, 0.4); }
 }
 
 html[data-intro="seen"] .intro-overlay {

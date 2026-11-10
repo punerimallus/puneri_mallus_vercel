@@ -4,7 +4,7 @@ import { ObjectId } from 'mongodb';
 import { createClient } from '@supabase/supabase-js';
 import { requireAdmin } from '@/lib/admin';
 import { ctaLabel } from '@/lib/events/cta';
-import { goLiveAt, phaseAlert, saleHeadline } from '@/lib/events/sale-phase';
+import { goLiveAt, phaseAlert, phaseAlertStyle, saleHeadline } from '@/lib/events/sale-phase';
 
 // 🔥 ADD THIS LINE to stop Next.js from trying to statically compile the DB query
 export const dynamic = 'force-dynamic';
@@ -50,6 +50,7 @@ export async function POST(request: Request) {
       // posting a fetched copy back must not be able to corrupt a schedule by round-tripping it.
       salesHeadline: saleHeadline(eventData.salesHeadline),
       phaseAlert: phaseAlert(eventData.phaseAlert),
+      phaseAlertStyle: phaseAlertStyle(eventData.phaseAlertStyle),
       goLiveAt: goLiveAt(eventData.goLiveAt),
       updated_at: new Date()
     };

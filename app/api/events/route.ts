@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongodb';
 import { checkAdminAccess } from '@/lib/admin';
-import { goLiveAt, isSaleLive, phaseAlert, saleHeadline } from '@/lib/events/sale-phase';
+import { goLiveAt, isSaleLive, phaseAlert, phaseAlertStyle, saleHeadline } from '@/lib/events/sale-phase';
 
 // Define the interface locally
 interface TribeEvent {
@@ -48,6 +48,7 @@ export async function GET(request: Request) {
           goLiveAt: goLiveAt(event.goLiveAt),
           salesHeadline: saleHeadline(event.salesHeadline),
           phaseAlert: phaseAlert(event.phaseAlert),
+          phaseAlertStyle: phaseAlertStyle(event.phaseAlertStyle),
           isSaleLive: live,
         };
       })

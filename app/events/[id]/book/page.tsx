@@ -17,7 +17,7 @@ import VenueMap, { type MapZone } from '@/components/VenueMap';
 import VenuePanel from '@/components/VenuePanel';
 import { emptyLayout, normalizeLayout, normalizeZone, zoneColor, type VenueLayout } from '@/lib/events/venue-layout';
 import { TERMS, termsNumber } from '@/lib/events/terms';
-import { PHASE_NOTICE, phaseAlert, saleHeadline } from '@/lib/events/sale-phase';
+import { PHASE_NOTICE, alertCssVars, phaseAlert, phaseAlertStyle, saleHeadline } from '@/lib/events/sale-phase';
 import { HELP_NOTE, SUPPORT_PHONE, SUPPORT_TEL_HREF, SUPPORT_WHATSAPP_HREF, VIP_ENQUIRY } from '@/lib/events/support';
 import { onSale, sortForSale } from '@/lib/events/catalogue';
 import { descriptionBullets } from '@/lib/events/description';
@@ -181,6 +181,9 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
   const feeAmount = chargePaise / 100 - totalPrice;
   const headline = saleHeadline(eventData?.salesHeadline);
   const nextPhase = phaseAlert(eventData?.phaseAlert);
+  // Colour, glow and blink, all chosen in the box office. The vars drive the same CSS the
+  // preview there uses, so what an admin approves is literally what a buyer sees.
+  const nextPhaseVars = alertCssVars(phaseAlertStyle(eventData?.phaseAlertStyle));
   const venueName = eventData?.location || 'Venue TBA';
   const details = descriptionBullets(eventData?.description);
 
@@ -633,7 +636,7 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
               Loud on purpose: it is the only thing on this screen that costs the buyer money
               if they put the decision off, so it is sized and coloured to be read first. */}
           {nextPhase && (
-            <div className="shrink-0 border-b border-brandRed/30 bg-black/50 px-4 sm:px-6 py-3 sm:py-4">
+            <div className="shrink-0 border-b border-brandRed/30 bg-black/50 px-4 sm:px-6 py-3 sm:py-4" style={nextPhaseVars as React.CSSProperties}>
               <div className="flex items-center justify-center gap-2 sm:gap-2.5">
                 <AlarmClock className="phase-alert-icon shrink-0 w-4 h-4 sm:w-5 sm:h-5" strokeWidth={2.5} />
                 <p className="phase-alert-text text-center font-black uppercase italic tracking-tight leading-tight text-base sm:text-lg md:text-xl">

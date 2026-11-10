@@ -5,7 +5,7 @@
 // everyone trying to buy. Everything unreadable has to fall OPEN, never closed.
 
 import { describe, expect, it } from 'vitest';
-import { MAX_HEADLINE, MAX_PHASE_ALERT, PHASE_ALERT_IDEAS, PHASE_NOTICE, fromLocalInput, goLiveAt, isSaleLive, phaseAlert, saleHeadline, scheduleLabel, toLocalInput } from '@/lib/events/sale-phase';
+import { ALERT_COLOURS, ALERT_INTENSITIES, ALERT_SPEEDS, DEFAULT_ALERT_STYLE, MAX_HEADLINE, MAX_PHASE_ALERT, PHASE_ALERT_IDEAS, PHASE_NOTICE, alertCssVars, fromLocalInput, goLiveAt, isSaleLive, phaseAlert, phaseAlertStyle, saleHeadline, scheduleLabel, toLocalInput } from '@/lib/events/sale-phase';
 
 describe('saleHeadline', () => {
   it('keeps what the admin typed', () => {
@@ -182,5 +182,115 @@ describe('the next-phase warning', () => {
     // Three separate controls on one form; setting one must not imply anything about the others.
     expect(phaseAlert('Phase 2 starts in 48 hours')).not.toBe(saleHeadline('Phase 1 is live'));
     expect(isSaleLive(null)).toBe(true);
+  });
+});
+
+
+describe('how the next-phase warning is painted', () => {
+  it('defaults to the red steady blink that shipped before it was configurable', () => {
+    // Every event already in the database has no style saved at all, so this is what they get.
+    expect(phaseAlertStyle(undefined)).toEqual(DEFAULT_ALERT_STYLE);
+    expect(phaseAlertStyle(null)).toEqual(DEFAULT_ALERT_STYLE);
+    expect(phaseAlertStyle({})).toEqual(DEFAULT_ALERT_STYLE);
+    expect(DEFAULT_ALERT_STYLE).toEqual({ colour: 'red', speed: 'steady', intensity: 'normal' });
+  });
+
+  it('keeps what the admin chose', () => {
+    expect(phaseAlertStyle({ colour: 'cyan', speed: 'fast', intensity: 'strong' }))
+      .toEqual({ colour: 'cyan', speed: 'fast', intensity: 'strong' });
+  });
+
+  it('accepts the American spelling of colour, since that is what a form will send', () => {
+    expect(phaseAlertStyle({ color: 'gold' }).colour).toBe('gold');
+  });
+
+  it('falls back per field rather than throwing the whole style away', () => {
+    // A warning painted in the default colour is useful. A warning that failed to render
+    // because one field was unreadable is not, and this banner exists to stop people paying
+    // more than they had to.
+    const style = phaseAlertStyle({ colour: 'puce', speed: 'fast', intensity: 'nuclear' });
+    expect(style).toEqual({ colour: 'red', speed: 'fast', intensity: 'normal' });
+  });
+
+  it('survives whatever shape the database hands back', () => {
+    for (const junk of ['a string', 42, [], true]) {
+      expect(phaseAlertStyle(junk)).toEqual(DEFAULT_ALERT_STYLE);
+    }
+  });
+
+  it('is not case sensitive about the stored values', () => {
+    expect(phaseAlertStyle({ colour: 'GOLD', speed: 'Slow', intensity: 'SOFT' }))
+      .toEqual({ colour: 'gold', speed: 'slow', intensity: 'soft' });
+  });
+
+  it('never blinks fast enough to be a flash hazard', () => {
+    // The threshold that matters is 3Hz. The quickest option here is one cycle in 0.9s.
+    const rates = Object.values(ALERT_SPEEDS).map((s) => s.seconds).filter((s) => s > 0);
+    expect(Math.min(...rates)).toBeGreaterThanOrEqual(0.7);
+    for (const seconds of rates) expect(1 / seconds).toBeLessThan(3);
+  });
+
+  it('offers an off switch as well as three rates', () => {
+    expect(ALERT_SPEEDS.off.seconds).toBe(0);
+    expect(Object.keys(ALERT_SPEEDS)).toEqual(['off', 'slow', 'steady', 'fast']);
+  });
+
+  it('never dims the text to nothing mid-blink', () => {
+    // It has to stay readable through the whole cycle; a hard on/off is a strobe, and someone
+    // reading a price warning should not have to wait for it to come back.
+    for (const level of Object.values(ALERT_INTENSITIES)) {
+      expect(level.dim).toBeGreaterThan(0.15);
+      expect(level.dim).toBeLessThan(1);
+      expect(level.glow).toBeGreaterThan(0);
+    }
+  });
+
+  it('offers only colours that are bright on a black card', () => {
+    for (const [key, colour] of Object.entries(ALERT_COLOURS)) {
+      expect(colour.text).toMatch(/^#[0-9a-f]{6}$/i);
+      expect(colour.glow).toMatch(/^\d{1,3}, \d{1,3}, \d{1,3}$/);
+      expect(colour.label.length).toBeGreaterThan(2);
+      // Rough luminance: every option must be well clear of the background it sits on.
+      const [r, g, b] = [1, 3, 5].map((i) => parseInt(colour.text.slice(i, i + 2), 16));
+      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      expect(luminance, `${key} is too dark to read on black`).toBeGreaterThan(0.45);
+    }
+  });
+});
+
+describe('alertCssVars', () => {
+  it('hands the whole look to CSS as custom properties', () => {
+    const vars = alertCssVars({ colour: 'cyan', speed: 'slow', intensity: 'strong' });
+    expect(vars['--pa-text']).toBe(ALERT_COLOURS.cyan.text);
+    expect(vars['--pa-glow-rgb']).toBe(ALERT_COLOURS.cyan.glow);
+    expect(vars['--pa-speed']).toBe('2.4s');
+    expect(vars['--pa-glow']).toBe(String(ALERT_INTENSITIES.strong.glow));
+    expect(vars['--pa-dim']).toBe(String(ALERT_INTENSITIES.strong.dim));
+  });
+
+  it('turns the animation off rather than running it for zero seconds', () => {
+    // A zero-duration animation still applies its first keyframe, which would leave the text
+    // stuck at the dimmed opacity - permanently half-faded instead of simply not blinking.
+    expect(alertCssVars({ ...DEFAULT_ALERT_STYLE, speed: 'off' })['--pa-anim']).toBe('none');
+    expect(alertCssVars({ ...DEFAULT_ALERT_STYLE, speed: 'off' })['--pa-speed']).toBe('0s');
+    expect(alertCssVars(DEFAULT_ALERT_STYLE)['--pa-anim']).toBe('phase-alert-blink');
+  });
+
+  it('produces a value for every property the stylesheet reads', () => {
+    const vars = alertCssVars(DEFAULT_ALERT_STYLE);
+    for (const key of ['--pa-text', '--pa-glow-rgb', '--pa-glow', '--pa-dim', '--pa-speed', '--pa-anim']) {
+      expect(vars[key], `${key} is missing`).toBeTruthy();
+    }
+  });
+
+  it('works for every combination on offer, so no choice can break the banner', () => {
+    for (const colour of Object.keys(ALERT_COLOURS)) {
+      for (const speed of Object.keys(ALERT_SPEEDS)) {
+        for (const intensity of Object.keys(ALERT_INTENSITIES)) {
+          const vars = alertCssVars(phaseAlertStyle({ colour, speed, intensity }));
+          expect(Object.values(vars).every((v) => typeof v === 'string' && v.length > 0)).toBe(true);
+        }
+      }
+    }
   });
 });

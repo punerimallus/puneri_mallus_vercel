@@ -10,7 +10,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlarmClock, CalendarClock, Check, Loader2, Megaphone, Radio, Rocket } from 'lucide-react';
 import { useAlert } from '@/context/AlertContext';
-import { MAX_HEADLINE, MAX_PHASE_ALERT, PHASE_ALERT_IDEAS, fromLocalInput, isSaleLive, phaseAlert, saleHeadline, scheduleLabel, toLocalInput } from '@/lib/events/sale-phase';
+import {
+  ALERT_COLOURS, ALERT_INTENSITIES, ALERT_SPEEDS, DEFAULT_ALERT_STYLE, MAX_HEADLINE, MAX_PHASE_ALERT,
+  PHASE_ALERT_IDEAS, alertCssVars, fromLocalInput, isSaleLive, phaseAlert, phaseAlertStyle, saleHeadline,
+  scheduleLabel, toLocalInput, type AlertColour, type AlertIntensity, type AlertSpeed, type PhaseAlertStyle,
+} from '@/lib/events/sale-phase';
 
 interface AdminEvent {
   _id: string;
@@ -20,6 +24,7 @@ interface AdminEvent {
   goLiveAt?: string | null;
   salesHeadline?: string | null;
   phaseAlert?: string | null;
+  phaseAlertStyle?: unknown;
 }
 
 const HEADLINE_IDEAS = ['Early bird tickets are live', 'Phase 1 is live', 'Phase 2 — prices up 15%', 'Final release'];
@@ -28,6 +33,7 @@ export default function SalePhaseControl({ events, onSaved }: { events: AdminEve
   const [openId, setOpenId] = useState<string | null>(null);
   const [headline, setHeadline] = useState('');
   const [nextPhase, setNextPhase] = useState('');
+  const [alertStyle, setAlertStyle] = useState<PhaseAlertStyle>(DEFAULT_ALERT_STYLE);
   const [scheduled, setScheduled] = useState(false);
   const [when, setWhen] = useState('');
   const [saving, setSaving] = useState(false);
@@ -41,6 +47,7 @@ export default function SalePhaseControl({ events, onSaved }: { events: AdminEve
     if (!selected) return;
     setHeadline(selected.salesHeadline || '');
     setNextPhase(selected.phaseAlert || '');
+    setAlertStyle(phaseAlertStyle(selected.phaseAlertStyle));
     setScheduled(!!selected.goLiveAt && !isSaleLive(selected.goLiveAt));
     setWhen(toLocalInput(selected.goLiveAt));
   }, [selected]);
@@ -63,6 +70,7 @@ export default function SalePhaseControl({ events, onSaved }: { events: AdminEve
           eventId: selected._id,
           salesHeadline: saleHeadline(headline),
           phaseAlert: phaseAlert(nextPhase),
+          phaseAlertStyle: alertStyle,
           goLiveAt,
         }),
       });
@@ -195,14 +203,82 @@ export default function SalePhaseControl({ events, onSaved }: { events: AdminEve
                         </button>
                       )}
                     </div>
-                    {nextPhase.trim() && (
-                      <div className="mt-2 rounded-xl border border-brandRed/30 bg-black/60 px-3 py-3">
-                        <p className="text-[8px] font-black uppercase tracking-widest text-zinc-600 mb-1.5">Preview</p>
-                        <p className="phase-alert-text text-center font-black uppercase italic tracking-tight leading-tight text-base">
-                          {phaseAlert(nextPhase)}
-                        </p>
+                    {/* Colour, blink and glow.
+                        Named options rather than a colour picker and a number box: every choice
+                        here is legible on the black card, and the quickest blink is about 1.1Hz,
+                        nowhere near the 3Hz that is an actual seizure risk. */}
+                    <div className="mt-3 space-y-4 rounded-2xl border border-white/10 bg-black/50 p-4">
+                      <div className="space-y-2">
+                        <span className="text-[8px] font-black uppercase tracking-widest text-zinc-600">Colour</span>
+                        <div className="flex flex-wrap gap-2">
+                          {(Object.keys(ALERT_COLOURS) as AlertColour[]).map((key) => (
+                            <button
+                              key={key}
+                              type="button"
+                              title={ALERT_COLOURS[key].label}
+                              aria-label={ALERT_COLOURS[key].label}
+                              aria-pressed={alertStyle.colour === key}
+                              onClick={() => setAlertStyle((v) => ({ ...v, colour: key }))}
+                              className={`w-8 h-8 rounded-xl border-2 transition-all active:scale-90 ${alertStyle.colour === key ? 'border-white scale-110' : 'border-white/10 hover:border-white/40'}`}
+                              style={{ backgroundColor: ALERT_COLOURS[key].text }}
+                            />
+                          ))}
+                        </div>
                       </div>
-                    )}
+
+                      <div className="space-y-2">
+                        <span className="text-[8px] font-black uppercase tracking-widest text-zinc-600">Blink</span>
+                        <div className="grid grid-cols-4 gap-1.5">
+                          {(Object.keys(ALERT_SPEEDS) as AlertSpeed[]).map((key) => (
+                            <button
+                              key={key}
+                              type="button"
+                              aria-pressed={alertStyle.speed === key}
+                              onClick={() => setAlertStyle((v) => ({ ...v, speed: key }))}
+                              className={`py-2.5 rounded-lg border text-[8px] font-black uppercase tracking-widest transition-all ${alertStyle.speed === key ? 'bg-brandRed/15 border-brandRed/50 text-white' : 'bg-zinc-950 border-white/10 text-zinc-500 hover:border-white/30'}`}
+                            >
+                              {ALERT_SPEEDS[key].label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <span className="text-[8px] font-black uppercase tracking-widest text-zinc-600">Glow</span>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {(Object.keys(ALERT_INTENSITIES) as AlertIntensity[]).map((key) => (
+                            <button
+                              key={key}
+                              type="button"
+                              aria-pressed={alertStyle.intensity === key}
+                              onClick={() => setAlertStyle((v) => ({ ...v, intensity: key }))}
+                              className={`py-2.5 rounded-lg border text-[8px] font-black uppercase tracking-widest transition-all ${alertStyle.intensity === key ? 'bg-brandRed/15 border-brandRed/50 text-white' : 'bg-zinc-950 border-white/10 text-zinc-500 hover:border-white/30'}`}
+                            >
+                              {ALERT_INTENSITIES[key].label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* The real thing: the same classes and the same variables the booking
+                          page uses, on the same black, so it blinks here exactly as it will
+                          there. A preview built a second way is one that eventually lies. */}
+                      <div className="rounded-xl border border-white/10 bg-black px-3 py-4" style={alertCssVars(alertStyle) as React.CSSProperties}>
+                        <p className="text-[8px] font-black uppercase tracking-widest text-zinc-600 mb-2">Live preview</p>
+                        {nextPhase.trim() ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <AlarmClock className="phase-alert-icon shrink-0 w-4 h-4" strokeWidth={2.5} />
+                            <p className="phase-alert-text text-center font-black uppercase italic tracking-tight leading-tight text-base">
+                              {phaseAlert(nextPhase)}
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="text-center text-[9px] font-bold uppercase tracking-widest text-zinc-700 py-2">
+                            Type a warning above to see it
+                          </p>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                   <div className="space-y-3">

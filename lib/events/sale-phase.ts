@@ -47,6 +47,102 @@ export function phaseAlert(raw: unknown): string | null {
   return clean || null;
 }
 
+/**
+ * How the next-phase warning is painted: its colour, how hard it glows, and how it blinks.
+ *
+ * Named options rather than free input. An admin picking a hex code can land on something that
+ * disappears against the black card, and a free blink rate can be set fast enough to be a
+ * genuine accessibility problem - anything above about 3Hz is a seizure risk. Every option here
+ * is legible on black and the quickest of them is a little over 1Hz.
+ *
+ * The values are handed to CSS as custom properties (see alertCssVars) so one rule in
+ * globals.css paints both the live banner and the preview in the box office. A preview that
+ * builds the look a second way is a preview that eventually lies.
+ */
+
+export const ALERT_COLOURS = {
+  red:   { label: 'Red',   text: '#ff3b3b', glow: '255, 0, 0' },
+  amber: { label: 'Amber', text: '#ffb020', glow: '255, 149, 0' },
+  gold:  { label: 'Gold',  text: '#ffd84d', glow: '255, 196, 0' },
+  green: { label: 'Green', text: '#39d98a', glow: '0, 214, 110' },
+  cyan:  { label: 'Cyan',  text: '#3ad8ff', glow: '0, 183, 255' },
+  pink:  { label: 'Pink',  text: '#ff5ec4', glow: '255, 0, 150' },
+  white: { label: 'White', text: '#ffffff', glow: '255, 255, 255' },
+} as const;
+
+export type AlertColour = keyof typeof ALERT_COLOURS;
+
+/**
+ * Blink rates, in seconds for a full cycle.
+ *
+ * `steady` is the default and is the one that reads as "look at me" without being a strobe.
+ * Even `fast` is one cycle a second, nowhere near the 3Hz flash threshold.
+ */
+export const ALERT_SPEEDS = {
+  off:    { label: 'No blink', seconds: 0 },
+  slow:   { label: 'Slow',     seconds: 2.4 },
+  steady: { label: 'Steady',   seconds: 1.5 },
+  fast:   { label: 'Fast',     seconds: 0.9 },
+} as const;
+
+export type AlertSpeed = keyof typeof ALERT_SPEEDS;
+
+/** How hard it glows, and how far the blink dips. Never to zero: it stays readable mid-blink. */
+export const ALERT_INTENSITIES = {
+  soft:   { label: 'Soft',   glow: 0.6, dim: 0.6 },
+  normal: { label: 'Normal', glow: 1,   dim: 0.4 },
+  strong: { label: 'Strong', glow: 1.7, dim: 0.22 },
+} as const;
+
+export type AlertIntensity = keyof typeof ALERT_INTENSITIES;
+
+export interface PhaseAlertStyle {
+  colour: AlertColour;
+  speed: AlertSpeed;
+  intensity: AlertIntensity;
+}
+
+/** What an event with nothing chosen looks like: the red steady blink shipped before this. */
+export const DEFAULT_ALERT_STYLE: PhaseAlertStyle = { colour: 'red', speed: 'steady', intensity: 'normal' };
+
+const pick = <T extends string>(raw: unknown, allowed: Record<string, unknown>, fallback: T): T => {
+  const key = String(raw ?? '').trim().toLowerCase();
+  return (Object.prototype.hasOwnProperty.call(allowed, key) ? key : fallback) as T;
+};
+
+/**
+ * The style an event has chosen, with anything unrecognised falling back to the default.
+ *
+ * Never throws and never returns a partial object: this drives a banner on the page where
+ * tickets are sold, and a half-read style would paint an invisible warning rather than no
+ * warning at all - which is the worse of the two failures.
+ */
+export function phaseAlertStyle(raw: unknown): PhaseAlertStyle {
+  const value = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  return {
+    colour: pick(value.colour ?? value.color, ALERT_COLOURS, DEFAULT_ALERT_STYLE.colour),
+    speed: pick(value.speed, ALERT_SPEEDS, DEFAULT_ALERT_STYLE.speed),
+    intensity: pick(value.intensity, ALERT_INTENSITIES, DEFAULT_ALERT_STYLE.intensity),
+  };
+}
+
+/** The custom properties globals.css reads. Spread onto the element's `style`. */
+export function alertCssVars(style: PhaseAlertStyle): Record<string, string> {
+  const colour = ALERT_COLOURS[style.colour];
+  const speed = ALERT_SPEEDS[style.speed];
+  const intensity = ALERT_INTENSITIES[style.intensity];
+  return {
+    '--pa-text': colour.text,
+    '--pa-glow-rgb': colour.glow,
+    '--pa-glow': String(intensity.glow),
+    '--pa-dim': String(intensity.dim),
+    '--pa-speed': `${speed.seconds}s`,
+    // `none` rather than a zero duration: a zero-duration animation still applies its first
+    // keyframe, which would leave the text stuck at the dimmed opacity.
+    '--pa-anim': speed.seconds > 0 ? 'phase-alert-blink' : 'none',
+  };
+}
+
 /** The headline an admin typed, tidied, or null when they have not set one. */
 export function saleHeadline(raw: unknown): string | null {
   const clean = String(raw ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_HEADLINE);

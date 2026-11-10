@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { ObjectId } from 'mongodb';
 import clientPromise from '@/lib/mongodb';
 import { checkAdminAccess } from '@/lib/admin';
-import { goLiveAt, phaseAlert, saleHeadline } from '@/lib/events/sale-phase';
+import { goLiveAt, phaseAlert, phaseAlertStyle, saleHeadline } from '@/lib/events/sale-phase';
 
 export const dynamic = 'force-dynamic';
 
@@ -114,6 +114,7 @@ export async function GET(req: Request) {
         goLiveAt: goLiveAt(e.goLiveAt),
         salesHeadline: saleHeadline(e.salesHeadline),
         phaseAlert: phaseAlert(e.phaseAlert),
+        phaseAlertStyle: phaseAlertStyle(e.phaseAlertStyle),
       })),
     });
 
@@ -126,7 +127,7 @@ export async function GET(req: Request) {
  * Two different switches, both of which an admin flips from the box office:
  *
  *   { categoryId, active }                  pause or resume one ticket category
- *   { eventId, salesHeadline?, phaseAlert?, goLiveAt? }
+ *   { eventId, salesHeadline?, phaseAlert?, phaseAlertStyle?, goLiveAt? }
  *                                           the phase banner, the next-phase warning, and
  *                                           when the event goes on sale
  *
@@ -149,6 +150,7 @@ export async function PATCH(req: Request) {
       const patch: Record<string, unknown> = {};
       if ('salesHeadline' in body) patch.salesHeadline = saleHeadline(body.salesHeadline);
       if ('phaseAlert' in body) patch.phaseAlert = phaseAlert(body.phaseAlert);
+      if ('phaseAlertStyle' in body) patch.phaseAlertStyle = phaseAlertStyle(body.phaseAlertStyle);
       if ('goLiveAt' in body) patch.goLiveAt = goLiveAt(body.goLiveAt);
       if (Object.keys(patch).length === 0) return NextResponse.json({ error: 'Nothing to change.' }, { status: 400 });
 
