@@ -3,6 +3,10 @@ module.exports = {
   content: [
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
+    // Helpers in lib/ return class names too (see lib/ui/community-stats.ts). Without this
+    // Tailwind never sees them and silently emits no rule — which looks like a layout bug, not
+    // a missing class, because anything also used under app/ or components/ still works.
+    "./lib/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
     extend: {

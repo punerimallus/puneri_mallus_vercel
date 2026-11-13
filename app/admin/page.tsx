@@ -28,6 +28,14 @@ export default function AdminPortal() {
       color: "from-brandRed/20"
     },
     {
+      title: "Community Numbers",
+      desc: "The figures under the hero: how many people the community is, events hosted, circles.",
+      icon: <Users className="text-brandRed" size={32} />,
+      link: "/admin/community-stats",
+      status: "Live",
+      color: "from-brandRed/20"
+    },
+    {
       title: "Promotions & Ads",
       desc: "Manage partner ads, popup banners, and promotional alerts.",
       icon: <Megaphone className="text-brandRed" size={32} />,

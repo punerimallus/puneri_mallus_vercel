@@ -10,6 +10,7 @@ import EventCard from '@/components/EventCard';
 import DynamicTribeAd from '@/components/Popup';
 import LazyVideo from '@/components/ui/LazyVideo';
 import { MOBILE_QUERY, isVideoAsset, slideAsset } from '@/lib/ui/hero-slides';
+import { communityStats, statSpanClass, statsGridClass, type CommunityStat } from '@/lib/ui/community-stats';
 import { ArrowRight } from 'lucide-react';
 
 // COMPACT LASER DIVIDER
@@ -40,8 +41,20 @@ export default function Home() {
   const [slides, setSlides] = useState<any[]>([]);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [upcoming, setUpcoming] = useState<any[]>([]);
+  /** The figures under the hero. Empty until an admin sets them, and then nothing renders. */
+  const [stats, setStats] = useState<CommunityStat[]>([]);
   const [past, setPast] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Fetched on its own rather than alongside the hero and the events. It is the least
+  // important thing on the page and it must not be able to take the other two down with
+  // it: inside that Promise.all, one failed request loses the whole landing page.
+  useEffect(() => {
+    fetch('/api/settings/community-stats')
+      .then((r) => r.json())
+      .then((d) => setStats(communityStats(d?.stats)))
+      .catch(() => setStats([]));
+  }, []);
 
   useEffect(() => {
     const fetchHomePulse = async () => {
@@ -222,6 +235,29 @@ export default function Home() {
             </div>
           )}
         </section>
+
+        {/* WHO WE ARE, IN NUMBERS
+            Set in Admin -> Community Numbers. Renders nothing at all when no figures are
+            saved, which is how it ships: a community site that invents its own headcount is
+            worse than one that does not mention it. */}
+        {stats.length > 0 && (
+          <section className="relative z-20 border-y border-white/10 bg-gradient-to-r from-brandRed/[0.07] via-transparent to-brandRed/[0.07]">
+            <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+              <div className={`grid gap-6 sm:gap-10 text-center ${statsGridClass(stats.length)}`}>
+                {stats.map((stat, i) => (
+                  <div key={i} className={`min-w-0 ${statSpanClass(stats.length, i)}`}>
+                    <p className="text-3xl sm:text-5xl md:text-6xl font-black italic uppercase tracking-tighter leading-none text-white drop-shadow-[0_0_25px_rgba(255,0,0,0.25)]">
+                      {stat.value}
+                    </p>
+                    <p className="mt-2 sm:mt-3 text-[9px] sm:text-[11px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-zinc-400 break-words">
+                      {stat.label}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
 
         <LaserDivider />
 
