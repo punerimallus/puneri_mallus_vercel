@@ -74,6 +74,7 @@ export async function proxy(request: NextRequest) {
       { path: '/api/settings/slider', methods: ['GET'] },
       { path: '/api/settings/gallery', methods: ['GET'] },
       { path: '/api/settings/social', methods: ['GET'] },
+      { path: '/api/settings/community-stats', methods: ['GET'] },
       
       // 💸 Razorpay server-to-server calls (no user session). Both routes verify their own
       // credentials: the webhook checks X-Razorpay-Signature, reconcile checks CRON_SECRET or admin.
