@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { useAlert } from '@/context/AlertContext';
 import { seatsInUse } from '@/lib/payments/seats';
 import { ATTENDANCE_LABEL, AttendanceState, admittedBy, attendancePercent, bookingAttendance, eventAttendance, type ScanLogRow } from '@/lib/payments/attendance';
+import { ALL_TYPES, ledgerTypeCounts, matchesType } from '@/lib/payments/ledger';
 import CompPassIssuer from '@/components/admin/CompPassIssuer';
 import SalePhaseControl from '@/components/admin/SalePhaseControl';
 
@@ -19,6 +20,8 @@ export default function BoxOfficeDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  /** Which ticket type the ledger is showing. ALL_TYPES means every type. */
+  const [typeFilter, setTypeFilter] = useState<string>(ALL_TYPES);
   // Who has come through the door: All, or one of the attendance states.
   const [doorFilter, setDoorFilter] = useState<'ALL' | AttendanceState>('ALL');
   const { showAlert } = useAlert();
@@ -150,6 +153,10 @@ export default function BoxOfficeDashboard() {
     REFUNDED: withAttendance.filter((b: any) => b.door.state === 'REFUNDED').length,
   };
 
+  // Seeded from the event's own categories so a type with no sales still shows, reading zero,
+  // rather than the chips rearranging themselves as the night goes on.
+  const typeCounts = ledgerTypeCounts(dashboardData?.bookings || [], dashboardData?.categories || []);
+
   const q = searchQuery.trim().toLowerCase();
   const filteredBookings = withAttendance.filter((b: any) => {
     const matchesSearch = !q
@@ -158,6 +165,8 @@ export default function BoxOfficeDashboard() {
       // Searching by pass number is how you find one person at a busy gate.
       || (b.tickets_data || []).some((t: any) => String(t.ticketNumber).toLowerCase().includes(q));
     if (!matchesSearch) return false;
+    // A booking can hold more than one type, so it appears under each of them.
+    if (!matchesType(b, typeFilter)) return false;
     // "All" hides refunded bookings; they have their own filter.
     if (doorFilter === 'ALL') return b.door.state !== 'REFUNDED';
     return b.door.state === doorFilter;
@@ -331,6 +340,33 @@ export default function BoxOfficeDashboard() {
                   </button>
                 ))}
               </div>
+
+              {/* Which ticket type. Its own row rather than mixed in with the door states
+                  above: they answer different questions and an admin uses them together —
+                  "REGULAR, still outside" is the one you want when a queue forms. */}
+              {typeCounts.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-[8px] font-black uppercase tracking-[0.25em] text-zinc-600 ml-1 flex items-center gap-2">
+                    <Ticket size={11} className="text-brandRed" /> Ticket type
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {[{ name: ALL_TYPES, count: (dashboardData?.bookings || []).length }, ...typeCounts].map((type) => (
+                      <button
+                        key={type.name}
+                        onClick={() => setTypeFilter(type.name)}
+                        className={`px-4 py-2.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 ${
+                          typeFilter === type.name
+                            ? 'bg-brandRed border-brandRed text-white'
+                            : 'bg-zinc-950 border-white/10 text-zinc-400 hover:border-white/25'
+                        }`}
+                      >
+                        {type.name === ALL_TYPES ? 'All types' : type.name}{' '}
+                        <span className="opacity-60">{type.count}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="bg-zinc-950 border border-white/10 rounded-[30px] overflow-hidden shadow-2xl overflow-x-auto">
                 <table className="w-full text-left border-collapse min-w-[900px]">
