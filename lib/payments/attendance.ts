@@ -1,9 +1,11 @@
 // Who has actually walked through the gate.
 //
 // The box office could say what was sold but not what had turned up, which is the question an
-// organiser actually asks on the night. Counting is less obvious than it looks: a group pass is
-// one pass but several people, and it can be half admitted, so "tickets scanned" and "people
-// inside" are different numbers and both matter.
+// organiser actually asks on the night.
+//
+// Counting is less obvious than it looks: a group pass is one pass but several people, and it
+// can be half admitted, so "tickets scanned" and "people inside" are different numbers and both
+// matter.
 //
 // Kept free of React and database code so the arithmetic can be tested on its own.
 
@@ -14,7 +16,7 @@ export type AttendanceState = 'NOT_ARRIVED' | 'PARTLY_IN' | 'ALL_IN' | 'REFUNDED
 export interface Attendance {
   /** Passes that still count (refunded ones are excluded). */
   passes: number;
-  /** People those passes admit in total — a group pass of five counts five. */
+  /** People those passes admit in total — a group pass of eight counts eight. */
   people: number;
   /** People who have gone in. */
   admitted: number;
@@ -50,6 +52,7 @@ export function bookingAttendance(
   let passesScanned = 0;
   for (const t of live) {
     const p = progressOf(t);
+    // A group pass is one pass but several people, which is why these are different numbers.
     people += p.groupSize;
     admitted += p.admitted;
     if (p.remaining === 0) passesScanned += 1;
@@ -129,7 +132,19 @@ export interface AdmissionEntry {
   by: string;
   role: 'ADMIN' | 'SCANNER' | 'UNKNOWN';
   at: string | null;
+  /** Let in from the box office without a QR, rather than scanned at the gate. */
+  manual: boolean;
 }
+
+/**
+ * Actions that mean a person went in.
+ *
+ * ADMIT is the gate scanner. MANUAL is the box office letting somebody in whose pass is lost or
+ * never arrived — a real admission, so it has to be counted, and a distinguishable one, so the
+ * morning after it is clear which entries an organiser vouched for rather than scanned. VOID
+ * and anything added later are not admissions and must never be read as one.
+ */
+const ADMITTING = new Set(['ADMIT', 'MANUAL']);
 
 /** A ghost gate address reads back as the phone number it was made from. */
 function actorLabel(email: string | null | undefined): string {
@@ -142,19 +157,20 @@ function actorLabel(email: string | null | undefined): string {
 /**
  * The admissions on one booking, newest first.
  *
- * Only ADMIT rows count: scan_log is append-only and may grow other action types later, and a
- * future row type must not be mistaken for somebody being let in.
+ * Only admitting rows count: scan_log is append-only and may grow other action types later, and
+ * a future row type must not be mistaken for somebody being let in.
  */
 export function admissions(scans: ScanLogRow[] | null | undefined): AdmissionEntry[] {
   const rows = Array.isArray(scans) ? scans : [];
   return rows
-    .filter((s) => String(s.action || 'ADMIT').toUpperCase() === 'ADMIT')
+    .filter((s) => ADMITTING.has(String(s.action || 'ADMIT').toUpperCase()))
     .map((s) => ({
       ticketNumber: String(s.ticket_number || ''),
       admitted: Math.max(0, Math.floor(Number(s.admitted)) || 0),
       by: actorLabel(s.actor_email),
       role: (s.actor_role === 'ADMIN' ? 'ADMIN' : s.actor_role === 'SCANNER' ? 'SCANNER' : 'UNKNOWN') as AdmissionEntry['role'],
       at: s.at ? String(s.at) : null,
+      manual: String(s.action || '').toUpperCase() === 'MANUAL',
     }))
     .sort((a, b) => (b.at || '').localeCompare(a.at || ''));
 }
@@ -162,18 +178,24 @@ export function admissions(scans: ScanLogRow[] | null | undefined): AdmissionEnt
 /**
  * The people who worked this booking's entry, each with how many they let in.
  *
- * A group that trickled in past two volunteers has two names against it, which is exactly the
- * detail that settles an argument about a miscount.
+ * A booking whose party arrived in ones and twos past different volunteers has all their names
+ * against it, which is exactly the detail that settles an argument about a miscount.
  */
-export function admittedBy(scans: ScanLogRow[] | null | undefined): { by: string; role: AdmissionEntry['role']; admitted: number; at: string | null }[] {
-  const byPerson = new Map<string, { by: string; role: AdmissionEntry['role']; admitted: number; at: string | null }>();
+export function admittedBy(
+  scans: ScanLogRow[] | null | undefined,
+): { by: string; role: AdmissionEntry['role']; admitted: number; at: string | null; manual: boolean }[] {
+  const byPerson = new Map<string, { by: string; role: AdmissionEntry['role']; admitted: number; at: string | null; manual: boolean }>();
   for (const entry of admissions(scans)) {
     const existing = byPerson.get(entry.by);
     if (existing) {
       existing.admitted += entry.admitted;
+      // One person may have scanned some and waved the rest in by hand. Marked if ANY were by
+      // hand: the flag is there to prompt a second look, so it should not be washed out by a
+      // scan that happened to come after.
+      existing.manual = existing.manual || entry.manual;
       // admissions() is newest first, so the first time we see someone is their latest scan.
     } else {
-      byPerson.set(entry.by, { by: entry.by, role: entry.role, admitted: entry.admitted, at: entry.at });
+      byPerson.set(entry.by, { by: entry.by, role: entry.role, admitted: entry.admitted, at: entry.at, manual: entry.manual });
     }
   }
   return [...byPerson.values()].sort((a, b) => (b.at || '').localeCompare(a.at || ''));

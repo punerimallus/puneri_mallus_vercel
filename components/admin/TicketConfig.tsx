@@ -1,10 +1,9 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { seatsInUse } from '@/lib/payments/seats';
-import { Gift, Loader2, Plus, Save, Trash2, Ticket, Users } from 'lucide-react';
+import { Gift, Loader2, Plus, Save, Trash2, Ticket } from 'lucide-react';
 import { useAlert } from '@/context/AlertContext';
 import { createBrowserClient } from '@supabase/ssr';
-import { MAX_GROUP_SIZE } from '@/lib/payments/groups';
 import { onEnter } from '@/lib/ui/enter';
 
 type Category = {
@@ -16,13 +15,9 @@ type Category = {
   active: boolean;
   sold?: number;
   released?: number;
-  /** 1 or missing = ordinary ticket. 2+ = one QR that admits that many people. '' while the admin is still typing. */
-  group_size?: number | '';
   /** Created by the box office for complimentary passes; never listed on the public page. */
   comp_only?: boolean | null;
 };
-
-const isGroupRow = (c: Category) => c.group_size === '' || Number(c.group_size) > 1;
 
 export default function TicketConfig({ eventId, eventTitle }: { eventId: string, eventTitle: string }) {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -46,8 +41,6 @@ export default function TicketConfig({ eventId, eventTitle }: { eventId: string,
   }, [eventId]);
 
   const addCategory = () => setCategories([...categories, { name: '', price: '', prefix: '', capacity: 100, active: true }]);
-  // A group block starts with the people count empty: the admin decides it (5, 6, 7... any number).
-  const addGroup = () => setCategories([...categories, { name: '', price: '', prefix: '', capacity: 20, active: true, group_size: '' }]);
 
   const updateCategory = (index: number, patch: Partial<Category>) =>
     setCategories(categories.map((c, i) => (i === index ? { ...c, ...patch } : c)));
@@ -98,14 +91,8 @@ export default function TicketConfig({ eventId, eventTitle }: { eventId: string,
 
       <div className="space-y-4">
         {categories.map((cat, idx) => {
-          const group = isGroupRow(cat);
           return (
-            <div key={cat.id || idx} className={`p-5 border rounded-2xl bg-black/50 space-y-4 ${group ? 'border-brandRed/30' : 'border-white/5'} ${cat.active ? '' : 'opacity-60'}`} onKeyDown={onEnter(saveConfig, !saving)}>
-              {group && (
-                <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-brandRed">
-                  <Users size={14} /> Group ticket: one QR code admits the whole group, and they can enter together or in parts
-                </div>
-              )}
+            <div key={cat.id || idx} className={`p-5 border rounded-2xl bg-black/50 space-y-4 border-white/5 ${cat.active ? '' : 'opacity-60'}`} onKeyDown={onEnter(saveConfig, !saving)}>
               {/* The access pass is created by the box office and is not for sale. Saying so
                   here is what stops someone deleting it on a tidy-up and wondering later why
                   complimentary passes stopped working. */}
@@ -115,26 +102,20 @@ export default function TicketConfig({ eventId, eventTitle }: { eventId: string,
                 </div>
               )}
               <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                <div className={`${group ? 'md:col-span-3' : 'md:col-span-4'} space-y-1`}>
+                <div className="md:col-span-4 space-y-1">
                   <label className={lab}>Category Name</label>
-                  <input placeholder={group ? 'e.g. FRIENDS GROUP' : 'e.g. VIP FULL COVER'} value={cat.name} onChange={(e) => updateCategory(idx, { name: e.target.value.toUpperCase() })} className={`${input} uppercase tracking-widest text-white`} />
+                  <input placeholder="e.g. VIP FULL COVER" value={cat.name} onChange={(e) => updateCategory(idx, { name: e.target.value.toUpperCase() })} className={`${input} uppercase tracking-widest text-white`} />
                 </div>
-                {group && (
-                  <div className="md:col-span-2 space-y-1">
-                    <label className={lab}>People in group</label>
-                    <input type="number" min={2} max={MAX_GROUP_SIZE} placeholder="How many?" value={cat.group_size ?? ''} onChange={(e) => updateCategory(idx, { group_size: e.target.value === '' ? '' : Number(e.target.value) })} className={`${input} text-white`} />
-                  </div>
-                )}
                 <div className="md:col-span-2 space-y-1">
-                  <label className={lab}>{group ? 'Price per group (₹)' : 'Price (₹)'}</label>
+                  <label className={lab}>Price (₹)</label>
                   <input type="number" min={0} placeholder="0" value={cat.price} onChange={(e) => updateCategory(idx, { price: e.target.value === '' ? '' : Number(e.target.value) })} className={`${input} text-brandRed`} />
                 </div>
                 <div className="md:col-span-2 space-y-1">
                   <label className={lab}>Ticket Prefix</label>
-                  <input placeholder={group ? 'e.g. GRP-' : 'e.g. VIP-'} value={cat.prefix} onChange={(e) => updateCategory(idx, { prefix: e.target.value.toUpperCase() })} className={`${input} text-white uppercase`} />
+                  <input placeholder="e.g. VIP-" value={cat.prefix} onChange={(e) => updateCategory(idx, { prefix: e.target.value.toUpperCase() })} className={`${input} text-white uppercase`} />
                 </div>
                 <div className="md:col-span-2 space-y-1">
-                  <label className={lab}>{group ? 'Groups available' : 'Capacity'}</label>
+                  <label className={lab}>Capacity</label>
                   <input type="number" min={1} placeholder="100" value={cat.capacity} onChange={(e) => updateCategory(idx, { capacity: e.target.value === '' ? '' : Number(e.target.value) })} className={`${input} text-white`} />
                 </div>
                 <div className="md:col-span-1 flex justify-end">
@@ -148,8 +129,6 @@ export default function TicketConfig({ eventId, eventTitle }: { eventId: string,
                   <input type="checkbox" className="accent-brandRed w-4 h-4" checked={cat.active} onChange={(e) => updateCategory(idx, { active: e.target.checked })} /> On sale
                 </label>
                 {cat.id && <span>{seatsInUse(cat)} taken</span>}
-                {group && Number(cat.group_size) > 1 && Number(cat.capacity) > 0 && <span>Up to {Number(cat.group_size) * Number(cat.capacity)} people</span>}
-                {group && Number(cat.group_size) > 1 && Number(cat.price) > 0 && <span>₹{(Number(cat.price) / Number(cat.group_size)).toFixed(2)} per person</span>}
               </div>
             </div>
           );
@@ -160,9 +139,6 @@ export default function TicketConfig({ eventId, eventTitle }: { eventId: string,
       <div className="flex flex-col sm:flex-row gap-4 pt-4 border-t border-white/5">
         <button type="button" onClick={addCategory} className="flex-1 py-4 border border-dashed border-white/20 rounded-2xl flex items-center justify-center gap-2 text-zinc-400 hover:text-white hover:border-brandRed hover:bg-brandRed/10 transition-all font-black text-xs uppercase tracking-widest">
           <Plus size={16} /> Add Category
-        </button>
-        <button type="button" onClick={addGroup} className="flex-1 py-4 border border-dashed border-white/20 rounded-2xl flex items-center justify-center gap-2 text-zinc-400 hover:text-white hover:border-brandRed hover:bg-brandRed/10 transition-all font-black text-xs uppercase tracking-widest">
-          <Users size={16} /> Add Group Ticket
         </button>
         {categories.length > 0 && (
           <button type="button" onClick={saveConfig} disabled={saving} className="flex-1 py-4 bg-brandRed text-white font-black uppercase tracking-widest rounded-2xl hover:bg-white hover:text-black transition-all shadow-xl active:scale-95 text-xs flex items-center justify-center gap-2 disabled:opacity-60">

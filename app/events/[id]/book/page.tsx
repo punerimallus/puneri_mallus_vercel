@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo, useRef, use } from 'react';
-import { Mail, ArrowRight, Minus, Plus, Loader2, Ticket, Calendar, Clock, MapPin, Sparkles, Star, ShieldCheck, TrendingUp, ChevronRight, Hourglass, Phone, MessageSquare, Crown, AlarmClock, Info } from 'lucide-react';
+import { Mail, ArrowRight, Minus, Plus, Loader2, Ticket, Calendar, Clock, MapPin, Sparkles, Star, ShieldCheck, TrendingUp, ChevronRight, Hourglass, Phone, MessageSquare, Crown, AlarmClock, Info, Boxes, BadgePercent, Gift, X, Check } from 'lucide-react';
 import { useAlert } from '@/context/AlertContext';
 import { createBrowserClient } from '@supabase/ssr';
 import { useRouter } from 'next/navigation';
@@ -8,9 +8,8 @@ import { waitForOrder, orderRef } from '@/lib/payments/client';
 import { seatsLeft } from '@/lib/payments/seats';
 import MyTickets from '@/components/MyTickets';
 import { maskNumber, normalizeWhatsAppNumber } from '@/lib/whatsapp';
-import { groupSizeOf, isGroup, pricePerPerson } from '@/lib/payments/groups';
 import { salesStatus } from '@/lib/events/sales';
-import { grossUpToPaise, MAX_GROUP_TICKETS_PER_ACCOUNT, MAX_TICKETS_PER_ACCOUNT } from '@/lib/payments/pricing';
+import { bundleAvailability, bundlesLeft, grossUpToPaise, MAX_BUNDLES_PER_ACCOUNT, MAX_TICKETS_PER_ACCOUNT, type TicketBundle } from '@/lib/payments/pricing';
 import { formatAmount, formatRupees } from '@/lib/payments/format';
 import { friendlyError } from '@/lib/user-errors';
 import VenueMap, { type MapZone } from '@/components/VenueMap';
@@ -22,6 +21,8 @@ import { HELP_NOTE, SUPPORT_PHONE, SUPPORT_TEL_HREF, SUPPORT_WHATSAPP_HREF, VIP_
 import { onSale, sortForSale } from '@/lib/events/catalogue';
 import { descriptionBullets } from '@/lib/events/description';
 import { publiclyListed } from '@/lib/payments/comp';
+import { normalizeCode, MAX_CODE_LENGTH } from '@/lib/payments/coupons';
+import { perSeatPrice, bundleSaving } from '@/lib/payments/bundles';
 
 /** Roughly the height of the fixed navbar, so a step heading is not scrolled under it. */
 const NAVBAR_CLEARANCE = 116;
@@ -52,6 +53,14 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
   // "still loading", so the page can say which rather than showing an empty box office.
   const [eventMissing, setEventMissing] = useState(false);
   const [cart, setCart] = useState<Record<string, number>>({});
+  /** Bundle offers on this event, and how many units of each the buyer wants. */
+  const [bundles, setBundles] = useState<TicketBundle[]>([]);
+  const [bundleCart, setBundleCart] = useState<Record<string, number>>({});
+  /** The coupon box: what is typed, what the server said it is worth, and whether it is open. */
+  const [couponOpen, setCouponOpen] = useState(false);
+  const [couponInput, setCouponInput] = useState('');
+  const [couponChecking, setCouponChecking] = useState(false);
+  const [coupon, setCoupon] = useState<{ code: string; summary: string; discount: number; freePasses: number; freeName: string | null; pricedAt: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   // When the seats this checkout reserved are given back, if the payment never completes.
@@ -105,6 +114,14 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
       // database that has not had the access-pass migration, the column does not exist and a
       // .eq() on it would fail the whole fetch — this just keeps everything, which is right.
       if (catData) setCategories(sortForSale(catData.filter(publiclyListed)));
+
+      // Bundle offers. A database without the bundle migration simply has none, and the query
+      // failing is not an error here — the page sells perfectly well one ticket at a time.
+      const { data: bundleData } = await supabase
+        .from('ticket_bundles')
+        .select('id, category_id, name, size, price, max_bundles, sold, active')
+        .eq('event_id', eventId);
+      if (bundleData) setBundles(bundleData.filter((b: TicketBundle) => b.active !== false));
 
       // The room around the zones (stage, doors). A missing row or a database without the table
       // yet is not an error: there is simply no map, and the category list alone still sells.
@@ -170,11 +187,30 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
     return sum + (catPrice * (cart[cat.id] || 0));
   }, 0);
 
+  // Bundles are priced whole, not per seat: the saving is the point of them.
+  const bundleTotal = bundles.reduce((sum, b) => sum + Number(b.price) * (bundleCart[b.id] || 0), 0);
+  const bundleSeats = bundles.reduce((sum, b) => sum + b.size * (bundleCart[b.id] || 0), 0);
+  const bundleUnits = Object.values(bundleCart).reduce((a, b) => a + b, 0);
+
   // 🔥 Calculate actual redemption automatically based on toggle
   // Whole rupees, exactly as the server applies them, always leaving at least Rs 1 to pay.
-  const maxRedeemable = Math.max(0, Math.min(loyaltyBalance, Math.floor(baseDiscountedPrice - 1)));
+  // Shown in the same order the server applies them: member discount, then the coupon, then
+  // points. A cart that reduced them in a different order would quote a different number from
+  // the one that gets charged.
+  const cartSubtotal = baseDiscountedPrice + bundleTotal;
+  const couponOff = Math.min(coupon?.discount ?? 0, cartSubtotal);
+  const afterCoupon = Math.max(0, Math.round((cartSubtotal - couponOff) * 100) / 100);
+  const maxRedeemable = Math.max(0, Math.min(loyaltyBalance, Math.floor(afterCoupon - 1)));
   const pointsToRedeem = applyPoints && loyaltyBalance >= MIN_REDEEM_THRESHOLD && maxRedeemable >= 1 ? maxRedeemable : 0;
-  const totalPrice = baseDiscountedPrice - pointsToRedeem;
+  const totalPrice = afterCoupon - pointsToRedeem;
+  const freePasses = coupon?.freePasses ?? 0;
+  /** Every seat this cart will issue a pass for: singles, bundle seats, and anything free. */
+  const seatsInCart = totalTickets + bundleSeats + freePasses;
+
+  /** Seats this cart's bundles are already taking out of one category. */
+  const seatsHeldByBundles = (categoryId: string) =>
+    bundles.reduce((n, b) => n + (b.category_id === categoryId ? b.size * (bundleCart[b.id] || 0) : 0), 0);
+
   const salesClosed = salesStatus(eventData?.date, eventData?.time) === 'CLOSED';
   // Same formula the server charges with, so the amount shown is the amount debited, to the paisa.
   const chargePaise = grossUpToPaise(totalPrice);
@@ -187,10 +223,40 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
   const venueName = eventData?.location || 'Venue TBA';
   const details = descriptionBullets(eventData?.description);
 
-  // Group tickets and single tickets have their own per-account limits (the server enforces them too).
-  const groupTicketsInCart = categories.reduce((n, c) => n + (isGroup(c.group_size) ? cart[c.id] || 0 : 0), 0);
-  const singleTicketsInCart = totalTickets - groupTicketsInCart;
-  const hasGroupCategory = liveCategories.some((c) => isGroup(c.group_size));
+  /**
+   * The bundles worth drawing, with the figures their cards need.
+   *
+   * A bundle hangs off a category, so one whose category is paused, hidden or complimentary-only
+   * is not offered at all: there is nothing honest to price it against. The saving is measured
+   * against what *this* buyer would otherwise pay, member rate included, so a bundle never
+   * claims to beat a price they were never going to be charged.
+   *
+   * `left` counts BOTH limits — the offer's own run and the seats the category can still fill.
+   * A Group of 10 on a category with nine seats left is finished, whatever its own counter
+   * says, so it greys out here instead of being refused at Proceed to Pay.
+   */
+  const liveBundles = useMemo(() => {
+    return bundles
+      .map((bundle) => {
+        const cat = categories.find((c) => String(c.id) === String(bundle.category_id));
+        if (!cat || !onSale(cat)) return null;
+        const catPrice = isMember && discountPercent > 0
+          ? cat.price - (cat.price * discountPercent) / 100
+          : cat.price;
+        const avail = bundleAvailability(bundle, cat);
+        return {
+          bundle,
+          cat,
+          unitPrice: perSeatPrice(Number(bundle.price), bundle.size),
+          separately: catPrice * bundle.size,
+          saving: Math.max(0, bundleSaving(Number(bundle.price), bundle.size, catPrice)),
+          left: avail.units,
+          avail,
+        };
+      })
+      .filter((b): b is NonNullable<typeof b> => b !== null);
+  }, [bundles, categories, isMember, discountPercent]);
+
 
   // The zones to draw. Only categories an admin has actually placed appear here; anything
   // unplaced still sells from the list below, it is just not on the plan.
@@ -210,7 +276,6 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
         color: zone.color || zoneColor(i),
         left: seatsLeft(cat),
         qty: cart[cat.id] || 0,
-        admits: groupSizeOf(cat.group_size),
         comingSoon: !onSale(cat),
       });
     });
@@ -226,22 +291,65 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
     const currentQty = cart[id] || 0;
     const newQty = currentQty + delta;
     if (newQty < 0) return;
-    if (newQty > remaining) {
-      showAlert(`Only ${remaining} passes left in this category!`, "error");
+    const heldByBundles = seatsHeldByBundles(id);
+    if (newQty + heldByBundles > remaining) {
+      showAlert(
+        heldByBundles > 0
+          ? `Only ${remaining} passes left here, and ${heldByBundles} of them are in your group bundle.`
+          : `Only ${remaining} passes left in this category!`,
+        "error",
+      );
       return;
     }
+    // Bundle seats and free passes are counted apart, exactly as the server counts them.
+    if (delta > 0 && totalTickets >= MAX_TICKETS_PER_ACCOUNT) {
+      showAlert(`Maximum ${MAX_TICKETS_PER_ACCOUNT} passes per account`, "error");
+      return;
+    }
+    setCart({ ...cart, [id]: newQty });
+  };
+
+  /**
+   * Adding or removing one unit of a bundle.
+   *
+   * A bundle draws its seats from an ordinary category, so three things can stop it: the
+   * per-account allowance, the bundle's own run, and the seats actually left in the category
+   * once this cart's singles are counted.
+   */
+  const updateBundle = (b: TicketBundle, delta: number) => {
+    if (salesClosed && delta > 0) { showAlert('Ticket sales for this event have closed.', 'error'); return; }
+    const next = (bundleCart[b.id] || 0) + delta;
+    if (next < 0) return;
     if (delta > 0) {
-      if (isGroup(cat?.group_size)) {
-        if (groupTicketsInCart >= MAX_GROUP_TICKETS_PER_ACCOUNT) {
-          showAlert(`Maximum ${MAX_GROUP_TICKETS_PER_ACCOUNT} group tickets per account`, "error");
-          return;
+      if (bundleUnits >= MAX_BUNDLES_PER_ACCOUNT) {
+        showAlert(`Maximum ${MAX_BUNDLES_PER_ACCOUNT} group tickets per account`, 'error');
+        return;
+      }
+      const cat = categories.find((c) => c.id === b.category_id);
+      // Seats this cart already takes out of the same category, NOT counting this offer's own
+      // units — those are what `next` is about to account for. A second offer drawing on the
+      // same category counts here too, which the per-offer check it replaces missed: a Group of
+      // 5 and a Group of 8 on one category were each measured as if the other were not there.
+      const otherSeats = Math.max(
+        0,
+        (cart[b.category_id] || 0) + seatsHeldByBundles(b.category_id) - (bundleCart[b.id] || 0) * b.size,
+      );
+      const avail = bundleAvailability(b, cat, otherSeats);
+      if (avail.units !== null && next > avail.units) {
+        const run = bundlesLeft(b);
+        if (run !== null && next > run) {
+          showAlert(run === 0 ? `"${b.name}" is sold out.` : `Only ${run} left of "${b.name}".`, 'error');
+        } else {
+          const seatsFree = Math.max(0, (avail.seatsLeft ?? 0) - otherSeats);
+          showAlert(
+            `Only ${seatsFree} ${cat?.name || 'passes'} left — not enough for another "${b.name}".`,
+            'error',
+          );
         }
-      } else if (singleTicketsInCart >= MAX_TICKETS_PER_ACCOUNT) {
-        showAlert(`Maximum ${MAX_TICKETS_PER_ACCOUNT} passes per account`, "error");
         return;
       }
     }
-    setCart({ ...cart, [id]: newQty });
+    setBundleCart({ ...bundleCart, [b.id]: next });
   };
 
   /**
@@ -348,6 +456,69 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
     }).catch(() => undefined);
   };
 
+  /**
+   * Price a code against the cart as it stands. The preview deliberately does NOT claim the
+   * coupon — typing codes to see what sticks must not burn a limited one — so the real claim
+   * happens at Pay, under a lock, and can still refuse.
+   */
+  const checkCoupon = async (code: string, { quiet = false } = {}) => {
+    const pricedAt = JSON.stringify([cart, bundleCart]);
+    const res = await fetch('/api/coupons/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, eventId, cart, bundles: bundleCart }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || 'Could not check that coupon.');
+    setCoupon({
+      code: data.code,
+      summary: data.summary || '',
+      discount: Number(data.discount) || 0,
+      freePasses: Number(data.freePasses) || 0,
+      freeName: data.freeName ?? null,
+      pricedAt,
+    });
+    if (!quiet) showAlert(data.summary ? `Coupon applied — ${data.summary}` : 'Coupon applied.', 'success');
+  };
+
+  const applyCoupon = async () => {
+    const code = normalizeCode(couponInput);
+    if (!code) { showAlert('Enter a coupon code.', 'error'); return; }
+    setCouponChecking(true);
+    try {
+      await checkCoupon(code);
+      setCouponInput(code);
+    } catch (e) {
+      setCoupon(null);
+      showAlert(e instanceof Error ? e.message : 'Could not check that coupon.', 'error');
+    } finally {
+      setCouponChecking(false);
+    }
+  };
+
+  const removeCoupon = () => { setCoupon(null); setCouponInput(''); };
+
+  // A coupon is worth a percentage of *this* cart, so the figure goes stale the moment a pass
+  // is added or removed. Re-price it quietly rather than showing a discount that will not be
+  // the one charged. Debounced, because the +/- buttons are tapped in bursts.
+  const appliedCode = coupon?.code ?? null;
+  const cartSignature = JSON.stringify([cart, bundleCart]);
+  const couponStale = coupon != null && coupon.pricedAt !== cartSignature;
+  useEffect(() => {
+    if (!appliedCode || !couponStale) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      checkCoupon(appliedCode, { quiet: true }).catch((e) => {
+        if (cancelled) return;
+        // It no longer applies to this cart (wrong categories, nothing to discount, used up).
+        setCoupon(null);
+        showAlert(e instanceof Error ? e.message : 'That coupon no longer applies.', 'info');
+      });
+    }, 400);
+    return () => { cancelled = true; clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appliedCode, couponStale, cartSignature, eventId]);
+
   const processPayment = async () => {
     if (processing) return;
     setProcessing(true);
@@ -355,7 +526,16 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
       const orderRes = await fetch('/api/razorpay/order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ paymentType: 'EVENT_TICKET', cart, eventId, pointsToRedeem, email, whatsappOptIn: whatsappAvailable && whatsappOptIn })
+        body: JSON.stringify({
+          paymentType: 'EVENT_TICKET',
+          cart,
+          bundles: bundleCart,
+          couponCode: coupon?.code ?? null,
+          eventId,
+          pointsToRedeem,
+          email,
+          whatsappOptIn: whatsappAvailable && whatsappOptIn,
+        })
       });
       const orderData = await orderRes.json();
       if (!orderRes.ok) throw new Error(orderData.error);
@@ -778,7 +958,7 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
                     <Sparkles size={16} className="text-brandRed shrink-0" /> Select Passes
                   </h2>
                   <p className="self-start sm:self-auto text-[9px] sm:text-[10px] text-brandRed font-black uppercase tracking-widest bg-brandRed/10 border border-brandRed/20 px-3 py-1.5 rounded-full shadow-inner leading-relaxed">
-                    Max {MAX_TICKETS_PER_ACCOUNT} per account{hasGroupCategory ? ` · ${MAX_GROUP_TICKETS_PER_ACCOUNT} group tickets` : ''}
+                    Max {MAX_TICKETS_PER_ACCOUNT} per account{liveBundles.length > 0 ? ` · ${MAX_BUNDLES_PER_ACCOUNT} group tickets` : ''}
                   </p>
                 </div>
 
@@ -811,11 +991,6 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
                             <h3 className={`text-[13px] sm:text-sm font-black uppercase tracking-widest break-words ${live ? 'text-white' : 'text-zinc-400'}`}>{cat.name}</h3>
-                            {isGroup(cat.group_size) && (
-                               <span className="shrink-0 text-[8px] bg-white/10 border border-white/20 text-white px-2 py-0.5 rounded-full font-black uppercase tracking-widest">
-                                 Group of {groupSizeOf(cat.group_size)}
-                               </span>
-                            )}
                             {live && hasActiveDiscount && (
                                <span className="shrink-0 text-[8px] bg-brandRed text-white px-2 py-0.5 rounded-full font-black uppercase tracking-widest flex items-center gap-1 shadow-[0_0_10px_rgba(255,0,0,0.4)]">
                                  <Star size={8} className="fill-white" /> Tribe Rate
@@ -840,7 +1015,6 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
                             ) : (
                                <p className="text-xs font-bold text-brandRed tracking-widest">₹{formatAmount(displayPrice)}</p>
                             )}
-                            {isGroup(cat.group_size) && <p className="text-[10px] font-bold text-zinc-400 tracking-widest">admits {groupSizeOf(cat.group_size)} &middot; ₹{formatAmount(pricePerPerson(displayPrice, cat.group_size))} each</p>}
                             {isFastFilling && <span className="shrink-0 text-[9px] font-black uppercase text-orange-500 bg-orange-500/10 px-2 py-0.5 rounded-full animate-pulse border border-orange-500/20 shadow-[0_0_10px_rgba(249,115,22,0.2)]">Fast Filling</span>}
                             {isSoldOut && <span className="shrink-0 text-[9px] font-black uppercase text-zinc-500 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded-full">Sold Out</span>}
                           </div>
@@ -873,6 +1047,96 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
                   )}
                 </div>
 
+                {/* Group offers. A bundle is not a separate ticket type: it takes its seats out
+                    of one of the categories above, which is why it sits under them rather than
+                    among them, and why its card names the category it draws from. */}
+                {liveBundles.length > 0 && (
+                  <div className="mt-8">
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-3 mb-4 border-b border-white/5 pb-4">
+                      <h2 className="text-lg font-black uppercase tracking-widest text-zinc-200 flex items-center gap-2 shrink-0">
+                        <Boxes size={16} className="text-brandRed shrink-0" /> Group Offers
+                      </h2>
+                      <p className="self-start sm:self-auto text-[9px] sm:text-[10px] text-zinc-400 font-black uppercase tracking-widest bg-white/5 border border-white/10 px-3 py-1.5 rounded-full leading-relaxed">
+                        Max {MAX_BUNDLES_PER_ACCOUNT} groups per account
+                      </p>
+                    </div>
+
+                    <div className="space-y-3">
+                      {liveBundles.map(({ bundle: b, cat, unitPrice, separately, saving, left, avail }) => {
+                        const units = bundleCart[b.id] || 0;
+                        // Nothing left to sell and none in this cart. A group already added
+                        // keeps its full card: it is this buyer's until they remove it.
+                        const closed = left !== null && left <= 0 && units === 0;
+                        // The automatic stop. The offer is open and may be entirely unsold, but
+                        // the category it draws from can no longer fill one group — so it says
+                        // how many seats are left rather than "Sold Out", which on an offer
+                        // reading 0 sold is the sort of thing buyers write in about.
+                        const shortOfSeats = closed && avail.autoPaused;
+                        return (
+                          <div
+                            key={b.id}
+                            className={`bg-black/60 backdrop-blur-md border p-4 sm:p-5 rounded-2xl flex items-center justify-between gap-3 sm:gap-4 transition-all duration-300 ${closed ? 'border-zinc-900 opacity-50 grayscale' : units > 0 ? 'border-white/40 bg-white/[0.04] shadow-lg' : 'border-white/10 hover:border-white/30 hover:bg-white/[0.02] shadow-lg'}`}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                                <h3 className="text-[13px] sm:text-sm font-black uppercase tracking-widest break-words text-white">{b.name}</h3>
+                                <span className="shrink-0 text-[8px] bg-white/10 border border-white/20 text-white px-2 py-0.5 rounded-full font-black uppercase tracking-widest">
+                                  {b.size} &times; {cat.name}
+                                </span>
+                                {saving > 0 && (
+                                  <span className="shrink-0 text-[8px] bg-green-500 text-black px-2 py-0.5 rounded-full font-black uppercase tracking-widest shadow-[0_0_10px_rgba(34,197,94,0.4)]">
+                                    Save ₹{formatAmount(saving)}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-2">
+                                {saving > 0 ? (
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-[10px] font-bold text-zinc-500 tracking-widest line-through">₹{formatAmount(separately)}</p>
+                                    <p className="text-xs font-bold text-brandRed tracking-widest">₹{formatAmount(b.price)}</p>
+                                  </div>
+                                ) : (
+                                  <p className="text-xs font-bold text-brandRed tracking-widest">₹{formatAmount(b.price)}</p>
+                                )}
+                                <p className="text-[10px] font-bold text-zinc-400 tracking-widest">admits {b.size} &middot; ₹{formatAmount(unitPrice)} each</p>
+                                {left !== null && left > 0 && left <= 5 && (
+                                  <span className="shrink-0 text-[9px] font-black uppercase text-orange-500 bg-orange-500/10 px-2 py-0.5 rounded-full animate-pulse border border-orange-500/20">
+                                    Only {left} left
+                                  </span>
+                                )}
+                                {closed && (
+                                  <span className="shrink-0 text-[9px] font-black uppercase text-zinc-500 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded-full">
+                                    {shortOfSeats
+                                      ? `Only ${avail.seatsLeft} ${cat.name} left — needs ${b.size}`
+                                      : 'Sold Out'}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {closed ? (
+                              <button disabled className="shrink-0 bg-zinc-950 text-zinc-600 font-bold text-[10px] uppercase tracking-widest px-5 sm:px-6 py-2.5 rounded-xl border border-zinc-800">
+                                {shortOfSeats ? 'Unavailable' : 'Sold Out'}
+                              </button>
+                            ) : units === 0 ? (
+                              <button onClick={() => updateBundle(b, 1)} className="shrink-0 border border-white/20 bg-white/5 text-white font-bold text-[10px] uppercase tracking-widest px-5 sm:px-6 py-3 rounded-xl hover:bg-white hover:text-black transition-all active:scale-95 shadow-md">
+                                Add
+                              </button>
+                            ) : (
+                              <div className="shrink-0 flex items-center gap-3 sm:gap-4 bg-white text-black rounded-xl px-2 py-1.5 shadow-[0_0_15px_rgba(255,255,255,0.2)] ring-2 ring-white/50">
+                                <button onClick={() => updateBundle(b, -1)} className="p-1.5 hover:text-brandRed transition-colors"><Minus size={14} /></button>
+                                <span className="font-black text-sm w-4 text-center">{units}</span>
+                                <button onClick={() => updateBundle(b, 1)} className="p-1.5 hover:text-brandRed transition-colors"><Plus size={14} /></button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {/* VIP and bulk are arranged by hand, so they are not in the list above. Said
                     here, under the passes, because that is where someone looking for VIP has
                     just finished not finding it. */}
@@ -904,7 +1168,7 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
           </div>
 
           {/* Checkout bar: sits below the pass list instead of floating over it, so it can grow (points, WhatsApp, price breakdown) without hiding anything */}
-          {step === STEP_PASSES && totalTickets > 0 && (
+          {step === STEP_PASSES && seatsInCart > 0 && (
             <div className="shrink-0 bg-zinc-950/95 backdrop-blur-2xl border-t border-white/10 p-5 sm:p-6 md:rounded-br-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
 
               {/* 🔥 THRESHOLD-LOCKED REDEMPTION TOGGLE */}
@@ -956,8 +1220,89 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
                   </span>
                 </label>
               )}
+              {/* Coupons. Folded away by default — most buyers do not have one, and an empty
+                  box above the price is a nagging reminder that somebody else got a better deal. */}
+              {coupon ? (
+                <div className="mb-4 flex items-start gap-3 rounded-2xl border border-green-500/30 bg-green-500/10 p-3.5">
+                  <Check size={14} className="text-green-400 shrink-0 mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-black uppercase tracking-widest text-green-400 break-all">{coupon.code} applied</p>
+                    {coupon.summary && <p className="text-[10px] font-bold text-zinc-300 leading-snug mt-1">{coupon.summary}</p>}
+                  </div>
+                  <button
+                    onClick={removeCoupon}
+                    aria-label="Remove coupon"
+                    className="shrink-0 p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ) : couponOpen ? (
+                /* Wraps on a phone: the field and the button will not sit side by side at
+                   390px once the field is wide enough to read a long code in. */
+                <div className="mb-4 rounded-2xl border border-white/10 bg-black/40 p-3.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      autoFocus
+                      value={couponInput}
+                      onChange={(e) => setCouponInput(normalizeCode(e.target.value))}
+                      onKeyDown={(e) => { if (e.key === 'Enter') applyCoupon(); }}
+                      maxLength={MAX_CODE_LENGTH}
+                      placeholder="COUPON CODE"
+                      spellCheck={false}
+                      autoCapitalize="characters"
+                      autoComplete="off"
+                      className="min-w-0 flex-1 bg-transparent border border-white/15 rounded-xl px-3.5 py-3 text-[12px] font-black uppercase tracking-widest text-white placeholder:text-zinc-600 focus:outline-none focus:border-white/40 transition-colors"
+                    />
+                    <button
+                      onClick={applyCoupon}
+                      disabled={couponChecking || !couponInput}
+                      className="shrink-0 bg-white text-black font-black text-[10px] uppercase tracking-widest px-5 py-3 rounded-xl disabled:opacity-40 hover:bg-zinc-200 transition-all active:scale-95"
+                    >
+                      {couponChecking ? <Loader2 size={13} className="animate-spin" /> : 'Apply'}
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => { setCouponOpen(false); setCouponInput(''); }}
+                    className="mt-2 text-[9px] font-black uppercase tracking-widest text-zinc-500 hover:text-zinc-300 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setCouponOpen(true)}
+                  className="mb-4 w-full flex items-center justify-center gap-2 rounded-2xl border border-dashed border-white/15 bg-black/20 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:text-white hover:border-white/30 transition-all"
+                >
+                  <BadgePercent size={13} /> Have a coupon?
+                </button>
+              )}
+
               <div className="mb-4 space-y-1.5 text-[11px] font-bold tracking-widest text-zinc-400">
-                <div className="flex justify-between"><span>Tickets</span><span className="text-white">{formatRupees(baseDiscountedPrice).replace('Rs. ', '₹')}</span></div>
+                {totalTickets > 0 && <div className="flex justify-between"><span>Tickets</span><span className="text-white">{formatRupees(baseDiscountedPrice).replace('Rs. ', '₹')}</span></div>}
+                {bundleUnits > 0 && (
+                  <div className="flex justify-between">
+                    <span>{bundleUnits === 1 ? 'Group ticket' : `Group tickets (${bundleUnits})`}</span>
+                    <span className="text-white">{formatRupees(bundleTotal).replace('Rs. ', '₹')}</span>
+                  </div>
+                )}
+                {/* The whole point of a coupon is to be seen working, so the old figure stays on
+                    screen with a line through it rather than quietly becoming the new one. */}
+                {couponOff > 0 && coupon && (
+                  <div className="flex justify-between gap-3 text-green-400">
+                    <span className="min-w-0 flex items-center gap-1.5"><BadgePercent size={11} className="shrink-0" /><span className="truncate">{coupon.code}</span></span>
+                    <span className="shrink-0 flex items-center gap-2">
+                      <span className="text-zinc-500 line-through">{formatRupees(cartSubtotal).replace('Rs. ', '₹')}</span>
+                      <span>- {formatRupees(couponOff).replace('Rs. ', '₹')}</span>
+                    </span>
+                  </div>
+                )}
+                {freePasses > 0 && (
+                  <div className="flex justify-between gap-3 text-green-400">
+                    <span className="min-w-0 flex items-center gap-1.5"><Gift size={11} className="shrink-0" /><span className="truncate">{freePasses} &times; {coupon?.freeName || 'free pass'}</span></span>
+                    <span className="shrink-0 font-black uppercase">Free</span>
+                  </div>
+                )}
                 {pointsToRedeem > 0 && <div className="flex justify-between text-amber-400"><span>Tribe points</span><span>- {formatRupees(pointsToRedeem).replace('Rs. ', '₹')}</span></div>}
                 <div className="flex justify-between"><span>Payment gateway fee</span><span className="text-white">{formatRupees(feeAmount).replace('Rs. ', '₹')}</span></div>
               </div>
@@ -967,7 +1312,7 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
                   <Clock size={13} className="text-green-400 shrink-0" />
                   <span className="text-[11px] font-black uppercase tracking-widest text-green-400">
                     {holdSecondsLeft > 0
-                      ? `Your ${totalTickets === 1 ? 'seat is' : 'seats are'} held — ${Math.floor(holdSecondsLeft / 60)}:${String(holdSecondsLeft % 60).padStart(2, '0')} left to pay`
+                      ? `Your ${seatsInCart === 1 ? 'seat is' : 'seats are'} held — ${Math.floor(holdSecondsLeft / 60)}:${String(holdSecondsLeft % 60).padStart(2, '0')} left to pay`
                       : 'Your hold has expired — please start again'}
                   </span>
                 </div>
@@ -981,7 +1326,7 @@ export default function EventBookingPage({ params }: { params: Promise<{ id: str
                 {processing ? <Loader2 className="animate-spin mx-auto" /> : (
                   <>
                     <div className="min-w-0 flex flex-col items-start text-left">
-                      <span className="text-[10px] text-white/80 tracking-widest">{totalTickets} Ticket{totalTickets > 1 ? 's' : ''}</span>
+                      <span className="text-[10px] text-white/80 tracking-widest">{seatsInCart} Ticket{seatsInCart > 1 ? 's' : ''}</span>
                       <span className="text-sm truncate">{formatRupees(chargePaise / 100).replace('Rs. ', '₹')} <span className="text-[9px] lowercase font-normal opacity-80">(inc. fee)</span></span>
                     </div>
                     <span className="shrink-0 flex items-center gap-2 text-[11px] sm:text-sm bg-black/20 px-3 sm:px-4 py-2 rounded-xl backdrop-blur-sm border border-white/10">

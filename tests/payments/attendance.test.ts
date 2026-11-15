@@ -21,19 +21,25 @@ describe('one booking', () => {
     expect(a).toMatchObject({ people: 2, admitted: 1, remaining: 1, passesScanned: 1, state: 'PARTLY_IN' });
   });
 
-  it('counts a group pass as the people it admits, not as one', () => {
-    const a = bookingAttendance([pass({ groupSize: 5 })]);
-    expect(a).toMatchObject({ passes: 1, people: 5, admitted: 0, remaining: 5 });
+  it('counts one person per pass, however many are on the booking', () => {
+    // What a bundle of five looks like at the door: five ordinary passes, five people.
+    const five = Array.from({ length: 5 }, (_, i) => pass({ ticketNumber: `GEN-10${i}` }));
+    expect(bookingAttendance(five)).toMatchObject({ passes: 5, people: 5, admitted: 0, remaining: 5 });
   });
 
-  it('follows a group pass admitted in parts', () => {
-    const a = bookingAttendance([pass({ groupSize: 5, admitted: 2 })]);
-    expect(a).toMatchObject({ passes: 1, people: 5, admitted: 2, remaining: 3, passesScanned: 0, state: 'PARTLY_IN' });
+  it('follows a party arriving in ones and twos', () => {
+    const a = bookingAttendance([
+      pass({ ticketNumber: 'GEN-101', status: 'CHECKED_IN' }),
+      pass({ ticketNumber: 'GEN-102', status: 'CHECKED_IN' }),
+      pass({ ticketNumber: 'GEN-103' }),
+    ]);
+    expect(a).toMatchObject({ passes: 3, people: 3, admitted: 2, remaining: 1, passesScanned: 2, state: 'PARTLY_IN' });
   });
 
-  it('a fully used group pass counts as scanned', () => {
-    const a = bookingAttendance([pass({ groupSize: 5, status: 'CHECKED_IN' })]);
-    expect(a).toMatchObject({ people: 5, admitted: 5, remaining: 0, passesScanned: 1, state: 'ALL_IN' });
+  it('ignores a stale admitted count left by the group model', () => {
+    // An old pass could say "2 of 5 in". It is one seat now, and one person.
+    const a = bookingAttendance([pass({ admitted: 2 })]);
+    expect(a).toMatchObject({ passes: 1, people: 1, admitted: 1, remaining: 0, passesScanned: 1, state: 'ALL_IN' });
   });
 
   it('a voided pass drops out of the expected head count', () => {
@@ -61,15 +67,16 @@ describe('one booking', () => {
 describe('a whole event', () => {
   const bookings = [
     { tickets_data: [pass({ status: 'CHECKED_IN' }), pass({ ticketNumber: 'GEN-002', status: 'CHECKED_IN' })] },
-    { tickets_data: [pass({ ticketNumber: 'GEN-003', groupSize: 5, admitted: 2 })] },
+    { tickets_data: [pass({ ticketNumber: 'GEN-003', admitted: 2 })] },
     { tickets_data: [pass({ ticketNumber: 'GEN-004' })] },
     { tickets_data: [pass({ ticketNumber: 'GEN-005' })], status: 'REFUNDED' },
   ];
 
-  it('adds up people rather than passes', () => {
+  it('adds up the live passes across every booking', () => {
     const a = eventAttendance(bookings);
-    //  2 singles + a group of 5 + 1 single = 8 expected; 2 + 2 in = 4
-    expect(a).toMatchObject({ passes: 4, people: 8, admitted: 4, remaining: 4 });
+    // Four live passes (the refunded booking drops out); two in, and a third whose stale
+    // admitted count from the group model reads as the one person it can now be.
+    expect(a).toMatchObject({ passes: 4, people: 4, admitted: 3, remaining: 1 });
   });
 
   it('counts bookings arrived vs still to come, ignoring refunded ones', () => {

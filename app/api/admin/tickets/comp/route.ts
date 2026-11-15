@@ -6,7 +6,7 @@ import { buildIssuedTickets } from '@/lib/payments/fulfil';
 import { reservationMessage, voidTicketNumber } from '@/lib/payments/inventory';
 import { fulfilmentDeps, releaseReservation, reserveForCheckout, resendBooking, supabaseAdmin } from '@/lib/payments/server';
 import { PaymentInputError, type PaymentOrder } from '@/lib/payments/types';
-import { MAX_GROUP_TICKETS_PER_ACCOUNT, MAX_TICKETS_PER_ACCOUNT } from '@/lib/payments/pricing';
+import { MAX_TICKETS_PER_ACCOUNT } from '@/lib/payments/pricing';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,7 +64,7 @@ export async function PUT(req: Request) {
     const db = supabaseAdmin();
     const { data: existing, error: readError } = await db
       .from('event_ticket_categories')
-      .select('id, name, prefix, price, capacity, active, group_size, comp_only')
+      .select('id, name, prefix, price, capacity, active, comp_only')
       .eq('event_id', eventId);
     if (readError) {
       if (/comp_only/i.test(readError.message)) {
@@ -91,7 +91,7 @@ export async function PUT(req: Request) {
         active: true,
         comp_only: true,
       })
-      .select('id, name, prefix, price, capacity, active, group_size, comp_only')
+      .select('id, name, prefix, price, capacity, active, comp_only')
       .single();
     if (writeError) throw new Error(writeError.message);
 
@@ -134,7 +134,6 @@ export async function POST(req: Request) {
       items: clean.lines.map((l) => ({ categoryId: l.categoryId, qty: l.qty })),
       points: 0,
       maxSingle: MAX_TICKETS_PER_ACCOUNT,
-      maxGroup: MAX_GROUP_TICKETS_PER_ACCOUNT,
     });
 
     // Nothing is being paid for, so the hold has no reason to exist past this moment.

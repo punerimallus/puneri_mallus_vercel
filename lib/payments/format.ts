@@ -92,14 +92,20 @@ export interface Receipt {
  * Otherwise the total is derived with the same formula the checkout uses.
  */
 export function buildReceipt(
-  tickets: { categoryName: string; unitPrice: number }[],
+  tickets: { categoryName: string; unitPrice: number; free?: boolean; couponCode?: string }[],
   pointsApplied: number,
   totalPaidPaise?: number | null,
 ): Receipt {
   const byName = new Map<string, ReceiptLine>();
   for (const t of tickets) {
-    const key = `${t.categoryName}|${t.unitPrice}`;
-    const line = byName.get(key) || { name: t.categoryName, qty: 0, unitPrice: t.unitPrice, amount: 0 };
+    // A coupon's free pass sits in the same category as the paid ones at the same price of
+    // nothing, so without the code in the key two different gifts would merge into one line.
+    // Saying which code paid for it is also the only place the buyer sees their discount land
+    // on a specific seat.
+    const free = t.free === true;
+    const name = free ? `${t.categoryName} (free${t.couponCode ? ` - ${t.couponCode}` : ''})` : t.categoryName;
+    const key = `${name}|${t.unitPrice}|${free ? 'F' : 'P'}`;
+    const line = byName.get(key) || { name, qty: 0, unitPrice: t.unitPrice, amount: 0 };
     line.qty += 1;
     line.amount = Math.round((line.amount + t.unitPrice) * 100) / 100;
     byName.set(key, line);

@@ -229,11 +229,11 @@ describe('a comp pass, end to end', () => {
   it('produces the same numbered, scannable passes a sale does', async () => {
     const eventId = 'evt_comp';
     const gen = await seedCategory(f, { eventId, name: 'GENERAL', prefix: 'GEN-', capacity: 100, price: 500 });
-    const grp = await seedCategory(f, { eventId, name: 'FRIENDS GROUP', prefix: 'GRP-', capacity: 20, price: 2000, groupSize: 5 });
+    const grp = await seedCategory(f, { eventId, name: 'VIP', prefix: 'VIP-', capacity: 20, price: 2000 });
 
     const categories: CompCategory[] = [
       { id: gen, name: 'GENERAL', prefix: 'GEN-', price: 500, capacity: 100, active: true },
-      { id: grp, name: 'FRIENDS GROUP', prefix: 'GRP-', price: 2000, capacity: 20, active: true, group_size: 5 },
+      { id: grp, name: 'VIP', prefix: 'VIP-', price: 2000, capacity: 20, active: true },
     ];
 
     const clean = checkCompRequest(
@@ -250,10 +250,8 @@ describe('a comp pass, end to end', () => {
     );
 
     // Numbered exactly like a sale, in the order they were chosen.
-    expect(tickets.map((t) => t.ticketNumber)).toEqual(['GEN-001', 'GEN-002', 'GRP-001']);
+    expect(tickets.map((t) => t.ticketNumber)).toEqual(['GEN-001', 'GEN-002', 'VIP-001']);
     expect(tickets.every((t) => t.status === 'ISSUED')).toBe(true);
-    // The gate reads groupSize off the pass; losing it would admit one person on a group QR.
-    expect(tickets[2].groupSize).toBe(5);
 
     const bookingId = await booking(eventId, { tickets, email: clean.guestEmail, issuedBy: 'admin@punerimallus.com' });
 

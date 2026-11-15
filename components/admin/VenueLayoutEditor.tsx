@@ -15,7 +15,6 @@ import { createBrowserClient } from '@supabase/ssr';
 import { Loader2, Save, Eraser, Map as MapIcon, Trash2, Plus, Wand2, SlidersHorizontal, Upload, X } from 'lucide-react';
 import { useAlert } from '@/context/AlertContext';
 import { seatsLeft } from '@/lib/payments/seats';
-import { groupSizeOf } from '@/lib/payments/groups';
 import VenueMap, { type MapZone } from '@/components/VenueMap';
 import {
   DEFAULT_COLS,
@@ -44,7 +43,6 @@ interface Cat {
   capacity: number | null;
   sold: number | null;
   released: number | null;
-  group_size: number | null;
   zone: unknown;
 }
 
@@ -285,7 +283,6 @@ export default function VenueLayoutEditor({ eventId, eventTitle }: { eventId: st
         color: colorFor(c.id),
         left: seatsLeft(c),
         qty: 0,
-        admits: groupSizeOf(c.group_size),
       } as MapZone;
     })
     .filter((z): z is MapZone => !!z);

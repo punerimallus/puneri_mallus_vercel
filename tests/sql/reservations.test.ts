@@ -197,20 +197,6 @@ describe('per-account limits', () => {
     await f.close();
   });
 
-  it('limits group passes separately from single ones', async () => {
-    const f = await freshDb();
-    const single = await seedCategory(f, { eventId: 'e1', prefix: 'S-', groupSize: 1, capacity: 100 });
-    const group = await seedCategory(f, { eventId: 'e1', prefix: 'G-', groupSize: 10, capacity: 100 });
-    const user = await seedUser(f);
-
-    await f.val(...reserve('r1', user, [[group, 2]]));
-    expect(await f.fails(...reserve('r2', user, [[group, 1]]))).toContain('LIMIT_GROUP:2');
-    // Singles are unaffected by the group cap.
-    await f.val(...reserve('r3', user, [[single, 5]]));
-    expect(await f.val('select count(*) from ticket_numbers where user_id = $1', [user])).toBe(7);
-    await f.close();
-  });
-
   it('frees the account allowance again when a hold is released', async () => {
     const f = await freshDb();
     const cat = await seedCategory(f, { capacity: 100 });

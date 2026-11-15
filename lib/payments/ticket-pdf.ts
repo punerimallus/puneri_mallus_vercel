@@ -1,8 +1,8 @@
 import jsPDF from 'jspdf';
 import { LOGO_DATA_URI } from './logo-data';
 import QRCode from 'qrcode';
-import { admitsLabel, groupSizeOf, isGroup } from './groups';
 import { buildReceipt, buildScanUrl, formatEventDate, formatEventTime, formatIst, formatRupees, pdfSafe } from './format';
+import { admitsLabel, groupSizeOf, isGroup, seatRangeLabel } from './scan';
 import { TERMS, termsNumber } from '../events/terms';
 import { PDF_SUPPORT_LINE, SUPPORT_EMAIL, SUPPORT_PHONE } from '../events/support';
 import { ticketNotes } from '../events/description';
@@ -11,7 +11,7 @@ export interface TicketPdfInput {
   bookingId: string;
   purchaserEmail: string;
   event: { title?: string; date?: string; time?: string; location?: string; description?: string } | null;
-  tickets: { categoryName: string; ticketNumber: string; unitPrice: number; status?: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED'; groupSize?: number; admitted?: number }[];
+  tickets: { categoryName: string; ticketNumber: string; unitPrice: number; status?: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED'; groupSize?: number; groupSeats?: string[]; admitted?: number; free?: boolean; couponCode?: string }[];
   pointsApplied: number;
   logoBase64: string | null;
   baseUrl: string;
@@ -167,6 +167,18 @@ export async function buildTicketPdf(input: TicketPdfInput): Promise<jsPDF> {
     doc.roundedRect(M, 51, chipW, 7.5, 3.75, 3.75, 'F');
     doc.setTextColor(255, 255, 255);
     doc.text(category, M + 4.5, 56.2); // left-aligned: centred text drifts with letter-spacing
+
+    // A pass given by a coupon says so, in green, beside its category. It is an ordinary pass
+    // and scans like one, but the gate, the buyer and anyone they hand it to should all be able
+    // to see at a glance that nothing was paid for this seat — and under which code.
+    if (ticket.free) {
+      const gift = pdfSafe(ticket.couponCode ? `COMPLIMENTARY - ${ticket.couponCode}` : 'COMPLIMENTARY').toUpperCase();
+      const giftW = spacedWidth(doc, gift, 0.6) + 10;
+      doc.setFillColor(...GREEN);
+      doc.roundedRect(M + chipW + 3, 51, giftW, 7.5, 3.75, 3.75, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.text(gift, M + chipW + 7.5, 56.2);
+    }
     doc.setCharSpace(0);
 
     doc.setFont('helvetica', 'bold');
@@ -223,6 +235,22 @@ export async function buildTicketPdf(input: TicketPdfInput): Promise<jsPDF> {
     doc.setTextColor(...INK);
     doc.text(pdfSafe(ticket.ticketNumber), lx, y + 24);
 
+    // The seats a group pass actually stands for.
+    //
+    // A group of five is ONE pass numbered after the first of its seats, so without this the
+    // buyer reads a single number for five seats they paid for and reasonably concludes they
+    // were sent one ticket. The big number stays the pass number — that is what the gate and
+    // the box office key off — and the range sits under it.
+    const seatRange = seatRangeLabel(ticket.groupSeats);
+    if (seatRange) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(...MUTED);
+      doc.setCharSpace(0.3);
+      doc.text(wrap(doc, pdfSafe(`SEATS ${seatRange}`), perfX - lx - 6, 1), lx, y + 29.5);
+      doc.setCharSpace(0);
+    }
+
     label(doc, 'BOOKING ID', lx, y + 36);
     label(doc, 'ISSUED TO', lx + 36, y + 36);
     doc.setFont('courier', 'bold');
@@ -234,12 +262,15 @@ export async function buildTicketPdf(input: TicketPdfInput): Promise<jsPDF> {
     const holder = wrap(doc, pdfSafe(purchaserEmail), 62, 2);
     doc.text(holder, lx + 36, y + 41.5, { lineHeightFactor: 1.2 });
 
+    // A group part-way in says so, so the person holding it knows the pass is still live.
     const partial = isGroup(ticket.groupSize) && ticket.status !== 'CHECKED_IN' && (ticket.admitted || 0) > 0;
     const status = ticket.status === 'CHECKED_IN'
       ? { text: 'ALREADY CHECKED IN', color: AMBER }
       : partial
         ? { text: `${ticket.admitted} OF ${groupSizeOf(ticket.groupSize)} ADMITTED`, color: AMBER }
-        : { text: 'VALID FOR ENTRY', color: GREEN };
+        : ticket.free
+          ? { text: 'VALID FOR ENTRY - COMPLIMENTARY', color: GREEN }
+          : { text: 'VALID FOR ENTRY', color: GREEN };
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.5);
     doc.setCharSpace(0.4);
@@ -284,7 +315,7 @@ export async function buildTicketPdf(input: TicketPdfInput): Promise<jsPDF> {
     doc.setFontSize(8.5);
 
     const rules = isGroup(ticket.groupSize)
-      ? RULES.map((r, i) => (i === 1 ? `Group ticket: admits ${groupSizeOf(ticket.groupSize)} people together on one scan. Non-refundable, non-transferable.` : r))
+      ? RULES.map((r, i) => (i === 1 ? `Group ticket: admits ${groupSizeOf(ticket.groupSize)} people on one scan. Non-refundable, non-transferable.` : r))
       : RULES;
     const points = [...rules, ...ticketNotes(event?.description).map(pdfSafe).filter(Boolean)];
 

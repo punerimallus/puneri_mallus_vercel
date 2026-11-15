@@ -12,7 +12,7 @@ import { PaymentInputError } from '@/lib/payments/types';
 const CATS: CompCategory[] = [
   { id: 'gen', name: 'GENERAL', prefix: 'GEN-', price: 500, capacity: 100, active: true },
   { id: 'vip', name: 'VIP', prefix: 'VIP-', price: 2000, capacity: 20, active: true },
-  { id: 'grp', name: 'FRIENDS GROUP', prefix: 'GRP-', price: 2000, capacity: 1000, active: true, group_size: 5 },
+  { id: 'grp', name: 'FRIENDS GROUP', prefix: 'GRP-', price: 2000, capacity: 1000, active: true },
   { id: 'paused', name: 'BALCONY', prefix: 'BAL-', price: 800, capacity: 50, active: false },
   { id: 'ap', name: 'ACCESS PASS', prefix: 'AP-', price: 0, capacity: 100, active: true, comp_only: true },
 ];
@@ -108,17 +108,10 @@ describe('which passes', () => {
     expect(line.numberWidth).toBe(3);
   });
 
-  it('remembers a group pass admits several people', () => {
-    const clean = ask({ items: { grp: 2 } });
-    expect(clean.lines[0].groupSize).toBe(5);
-    expect(clean.passes).toBe(2);
-    expect(compAdmits(clean.lines)).toBe(10);
-  });
-
-  it('counts a mixed grant by heads, not by passes', () => {
-    const clean = ask({ items: { gen: 3, grp: 1 } });
+  it('counts a grant across categories as one head per pass', () => {
+    const clean = ask({ items: { gen: 3, vip: 1 } });
     expect(clean.passes).toBe(4);
-    expect(compAdmits(clean.lines)).toBe(8); // 3 singles + one group of 5
+    expect(compAdmits(clean.lines)).toBe(4);
   });
 
   it('ignores a category set to zero', () => {

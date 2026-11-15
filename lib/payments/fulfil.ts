@@ -12,6 +12,7 @@
 
 import {
   Allocation,
+  CartLine,
   FulfilmentSource,
   GatewayPayment,
   IssuedTicket,
@@ -20,7 +21,6 @@ import {
   ReservationLostError,
 
 } from './types';
-import { groupSizeOf } from './groups';
 
 export const STALE_PROCESSING_MS = 5 * 60 * 1000;
 export const MAX_EMAIL_ATTEMPTS = 5;
@@ -72,6 +72,13 @@ export interface FulfilmentDeps {
   activateMembership(order: PaymentOrder, paymentId: string): Promise<void>;
   activateMart(order: PaymentOrder, paymentId: string): Promise<void>;
   recordLedger(order: PaymentOrder, paymentId: string, status: 'SUCCESS' | 'REFUNDED'): Promise<void>;
+  /**
+   * Tie a claimed coupon to the booking it paid for, and record what it gave away.
+   *
+   * Optional: an order with no coupon never calls it, and a deployment whose database predates
+   * the coupon migration simply does not supply it.
+   */
+  confirmCoupon?(reservationId: string, bookingId: string, discount: number, freeNumbers: string[]): Promise<boolean>;
 
   alertAdmin(subject: string, body: string): Promise<void>;
   log(message: string, extra?: unknown): void;
@@ -112,37 +119,91 @@ export function buildIssuedTickets(order: PaymentOrder, allocations: Allocation[
   // Walk the cart, not the allocations: the database hands categories back in id order (it locks
   // them that way to avoid deadlocks), and the buyer's passes should be listed in the order they
   // chose them, the same order the receipt and the PDF use.
-  const byCategory = new Map(allocations.map((a) => [a.categoryId, a]));
+  //
+  // A category can arrive as SEVERAL allocations now — one per bundle unit, plus one for a
+  // coupon's free seats — so they are merged before anything is handed out. Keyed by id alone,
+  // the last one silently replaced the rest and most of the buyer's passes were never issued.
+  const byCategory = new Map<string, Allocation>();
+  for (const a of allocations) {
+    const key = String(a.categoryId);
+    const prev = byCategory.get(key);
+    if (prev) {
+      prev.numbers = [...(prev.numbers ?? []), ...(a.numbers ?? [])].sort((x, y) => x - y);
+      prev.qty = (prev.qty ?? 0) + (a.qty ?? 0);
+    } else {
+      // Copied, never mutated in place: the caller's allocations are also what gets stored on
+      // the order, and rewriting them here would corrupt the record of what was reserved.
+      byCategory.set(key, { ...a, numbers: [...(a.numbers ?? [])] });
+    }
+  }
   const ordered: Allocation[] = [];
   for (const line of order.cart || []) {
-    const a = byCategory.get(line.categoryId);
+    const a = byCategory.get(String(line.categoryId));
     if (a) {
       ordered.push(a);
-      byCategory.delete(line.categoryId);
+      byCategory.delete(String(line.categoryId));
     }
   }
   // Anything allocated that is no longer in the cart still gets its passes.
   ordered.push(...byCategory.values());
 
   for (const a of ordered) {
-    const line = order.cart?.find((l) => l.categoryId === a.categoryId);
-    const prefix = line?.prefix ?? '';
-    const name = line?.name ?? 'General';
-    const groupSize = groupSizeOf(line?.groupSize);
-    // Every pass in a category is the same width, fixed from its capacity at checkout.
-    const width = Math.max(3, Math.floor(Number(line?.numberWidth)) || 0);
     // The reservation always records the exact numbers it took; there is no other source.
     const numbers = a.numbers ?? [];
-    for (const n of numbers) {
+    // A category can have more than one line now: two REGULAR bought and one REGULAR given
+    // away by a coupon arrive as one allocation and two lines. The numbers are shared out in
+    // cart order so the paid passes take theirs first and the free one is identifiable after,
+    // which is what the receipt, the PDF and the box office all key off.
+    const forCategory = (order.cart || []).filter((l) => l.categoryId === a.categoryId);
+    const issue = (line: CartLine | undefined, n: number, admits = 1, seats?: number[]) => {
+      // Every pass in a category is the same width, fixed from its capacity at checkout.
+      const width = Math.max(3, Math.floor(Number(line?.numberWidth)) || 0);
+      const label = (x: number) => `${line?.prefix ?? ''}${String(x).padStart(width, '0')}`;
       tickets.push({
         // Stored so prices and voiding key off the category itself; renaming a category can no
         // longer leave a pass unpriced.
         categoryId: a.categoryId,
-        categoryName: name,
-        ticketNumber: `${prefix}${String(n).padStart(width, '0')}`,
+        categoryName: line?.name ?? 'General',
+        ticketNumber: label(n),
         status: 'ISSUED',
-        ...(groupSize > 1 ? { groupSize } : {}),
+        ...(line?.free ? { free: true as const } : {}),
+        ...(line?.free && line.couponCode ? { couponCode: line.couponCode } : {}),
+        // A seat bought as part of a group, marked so it is never mistaken for one of the
+        // seven a buyer may purchase individually. ticket_numbers records the same thing in
+        // `bundle_ref`, but the per-account pre-check reads the booking, not the seats, and
+        // without this it counted a group of eight as eight personal purchases — refusing the
+        // buyer their own allowance on a sale the database would have allowed.
+        ...(line?.bundleId ? { group: true as const, groupName: line.bundleName } : {}),
+        // What the gate reads: one scan lets this many people in.
+        ...(admits > 1 ? { groupSize: admits } : {}),
+        // And which seats those are, so the pass can show the five numbers it stands for.
+        ...(seats && seats.length > 1 ? { groupSeats: seats.map(label) } : {}),
       });
+    };
+
+    let taken = 0;
+    for (const line of forCategory) {
+      const want = Math.max(0, Math.floor(Number(line.qty)) || 0);
+      if (line.bundleId && want > 0) {
+        // A group ticket is ONE pass with ONE QR that admits the whole party. Its seats still
+        // come out of the category's capacity — all `want` of them are consumed here — but
+        // only the first is printed, and the pass carries how many it admits. Issuing eight
+        // separate passes would mean eight QRs for something sold as one thing.
+        const mine = numbers.slice(taken, taken + want);
+        const first = mine[0];
+        if (first !== undefined) issue(line, first, want, mine);
+        taken += Math.min(want, numbers.length - taken);
+        continue;
+      }
+      for (let k = 0; k < want && taken < numbers.length; k += 1, taken += 1) {
+        issue(line, numbers[taken]);
+      }
+    }
+    // Numbers the cart does not account for are still issued rather than dropped: a pass that
+    // exists in the reservation and not on the booking is a seat nobody can ever use.
+    while (taken < numbers.length) {
+      issue(forCategory[0], numbers[taken]);
+      taken += 1;
     }
   }
   return tickets;
@@ -356,6 +417,32 @@ export async function fulfilOrder(
           tickets_data: buildIssuedTickets(order, allocations),
         });
         await deps.updateOrder(orderId, { booking_id: bookingId });
+
+        // A coupon claimed at checkout now belongs to a real booking. The discount is derived
+        // rather than stored: base_amount is already net of it, so what came off is whatever
+        // the cart was worth less the points and less what was charged. Recording the free
+        // numbers here is what lets the box office answer "which REGULAR-n went out free".
+        //
+        // Never allowed to fail the fulfilment. The passes are issued and the money is taken;
+        // losing a bookkeeping row is the lesser of the two problems by a long way.
+        if (deps.confirmCoupon && reservationId) {
+          try {
+            const passes = buildIssuedTickets(order, allocations);
+            const cartWorth = (order.cart || []).reduce((sum, l) => sum + l.unitPrice * l.qty, 0);
+            const discount = Math.max(
+              0,
+              Math.round((cartWorth - (order.points_to_redeem || 0) - order.base_amount) * 100) / 100,
+            );
+            await deps.confirmCoupon(
+              reservationId,
+              bookingId,
+              discount,
+              passes.filter((t) => t.free).map((t) => t.ticketNumber),
+            );
+          } catch (e) {
+            deps.log('COUPON_CONFIRM_FAILED', { orderId, e });
+          }
+        }
       }
 
       // Only the points this order EARNED. The ones it redeemed were spent by confirming the

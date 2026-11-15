@@ -1,6 +1,5 @@
 // Validation for the admin "Configure Tickets" form, kept pure so every bad input can be tested.
 
-import { MAX_GROUP_SIZE, groupSizeOf } from './groups';
 import { seatsInUse } from './seats';
 
 export interface CategoryInput {
@@ -10,7 +9,6 @@ export interface CategoryInput {
   prefix?: unknown;
   capacity?: unknown;
   active?: unknown;
-  group_size?: unknown;
 }
 
 export interface ExistingCategory {
@@ -41,7 +39,6 @@ export interface CleanCategory {
   prefix: string;
   capacity: number;
   active: boolean;
-  group_size: number;
 }
 
 export type ConfigCheck =
@@ -78,22 +75,12 @@ export function checkCategoryConfig(input: unknown, existing: ExistingCategory[]
     const inUse = raw.id ? inUseById.get(String(raw.id)) || 0 : 0;
     if (capacity < inUse) return { ok: false, error: `"${label}": ${inUse} seats are already taken, so capacity cannot go below ${inUse}.` };
 
-    // A blank group size means an ordinary ticket; anything else must be a real group (2 or more).
-    const rawGroup = raw.group_size;
-    const isBlank = rawGroup === undefined || rawGroup === null || rawGroup === '';
-    let group_size = 1;
-    if (!isBlank) {
-      const g = Number(rawGroup);
-      if (!Number.isInteger(g) || g < 1 || g > MAX_GROUP_SIZE) return { ok: false, error: `"${label}": people per ticket must be a whole number from 1 to ${MAX_GROUP_SIZE}.` };
-      group_size = groupSizeOf(g);
-    }
-
     if (seenNames.has(name)) return { ok: false, error: `Two categories are both called "${name}". Names must be different.` };
     if (seenPrefixes.has(prefix)) return { ok: false, error: `Two categories use the prefix "${prefix}". Each needs its own so ticket numbers never repeat.` };
     seenNames.add(name);
     seenPrefixes.add(prefix);
 
-    clean.push({ ...(raw.id ? { id: String(raw.id) } : {}), name, price, prefix, capacity, active: raw.active !== false, group_size });
+    clean.push({ ...(raw.id ? { id: String(raw.id) } : {}), name, price, prefix, capacity, active: raw.active !== false });
   }
 
   // Anything the form no longer lists: delete if never sold, otherwise just take it off sale so past tickets keep their meaning.

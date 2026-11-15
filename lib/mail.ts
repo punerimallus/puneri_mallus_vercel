@@ -1,3 +1,4 @@
+import { seatRangeLabel } from './payments/scan';
 import { Resend } from 'resend';
 
 // Created on first send, not at import: `new Resend()` throws without an API key,
@@ -503,8 +504,65 @@ export async function sendBatch(messages: BatchMessage[]): Promise<{ ids: string
 // "766" for whole rupees, "766.40" when there are paise.
 const inr = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 });
 
-export async function sendEventTicketEmail(to: string, bookingId: string, tickets: { categoryName: string; ticketNumber: string; groupSize?: number }[], totalAmount: number, pdfBase64: string, eventData: { title?: string; location?: string } | null) {
-  const ticketNumbers = tickets.map(t => t.ticketNumber).join(', ');
+export interface EmailedPass {
+  categoryName: string;
+  ticketNumber: string;
+  /** People this one pass admits. Absent or 1 means one. */
+  groupSize?: number;
+  /** The seats a group pass stands for, so the buyer can see all five they paid for. */
+  groupSeats?: string[];
+  free?: boolean;
+}
+
+/**
+ * How many people one pass lets in, for the email.
+ *
+ * A group ticket is EIGHT seats sold as ONE pass with one QR. Without this the buyer of a group
+ * of eight opened an email showing a single pass number and no mention of eight anywhere, which
+ * reads exactly like being short-changed — and the first thing they do is write in. The PDF
+ * said it; the email did not.
+ */
+export const passAdmits = (t: EmailedPass): number => {
+  const n = Math.floor(Number(t.groupSize));
+  return Number.isFinite(n) && n > 1 ? n : 1;
+};
+
+/** The "Your access" block: one entry per pass, saying what each one is worth at the door. */
+export function passLinesHtml(tickets: EmailedPass[]): string {
+  return tickets
+    .map((t) => {
+      const admits = passAdmits(t);
+      return `
+                <div style="margin-bottom: 12px;">
+                  <p style="margin: 0; color: #6b7280; font-size: 11px; letter-spacing: 0.5px;">Category</p>
+                  <p style="margin: 2px 0 0; color: #dc2626; font-size: 15px; font-weight: 600;">${esc(t.categoryName)}</p>
+                  ${admits > 1
+                    ? `<p style="margin: 4px 0 0; color: #111827; font-size: 12px; font-weight: 600;">Group pass ${esc(t.ticketNumber)} — one scan admits all ${admits} of you</p>`
+                      + (seatRangeLabel(t.groupSeats)
+                        ? `<p style="margin: 2px 0 0; color: #6b7280; font-size: 12px;">Seats ${esc(seatRangeLabel(t.groupSeats)!)}</p>`
+                        : '')
+                    : t.free
+                      ? `<p style="margin: 4px 0 0; color: #15803d; font-size: 12px; font-weight: 600;">${esc(t.ticketNumber)} — complimentary</p>`
+                      : ''}
+                </div>
+              `;
+    })
+    .join('');
+}
+
+/** The one-line summary under the passes. A group pass says what it admits here too. */
+export function passSummaryLine(tickets: EmailedPass[]): string {
+  return tickets
+    .map((t) => {
+      const admits = passAdmits(t);
+      return admits > 1 ? `${t.ticketNumber} (admits ${admits})` : t.ticketNumber;
+    })
+    .join(', ');
+}
+
+export async function sendEventTicketEmail(to: string, bookingId: string, tickets: EmailedPass[], totalAmount: number, pdfBase64: string, eventData: { title?: string; location?: string } | null) {
+  const ticketNumbers = passSummaryLine(tickets);
+  const people = tickets.reduce((n, t) => n + passAdmits(t), 0);
 
   const calTitle = encodeURIComponent(eventData?.title || 'Puneri Mallus Event');
   const calLocation = encodeURIComponent(eventData?.location || 'Pune');
@@ -516,7 +574,7 @@ export async function sendEventTicketEmail(to: string, bookingId: string, ticket
       from: FROM,
       to: to,
       subject: `Your passes are confirmed — ${eventData?.title || 'Puneri Mallus'}`,
-      text: `Your passes are ready! Booking ID: ${bookingId.split('-')[0].toUpperCase()}. Total paid: ₹${inr(totalAmount)}. Please open the attached PDF to view and scan your passes. You can also see your tickets anytime in your profile: ${profileUrl}`,
+      text: `Your passes are ready! Booking ID: ${bookingId.split('-')[0].toUpperCase()}. ${tickets.length === people ? `${people} ${people === 1 ? 'person' : 'people'}` : `${tickets.length} ${tickets.length === 1 ? 'pass' : 'passes'} admitting ${people} people`}: ${ticketNumbers}. Total paid: ₹${inr(totalAmount)}. Please open the attached PDF to view and scan your passes. You can also see your tickets anytime in your profile: ${profileUrl}`,
       html: `
         <div style="font-family: 'Segoe UI', Helvetica, Arial, sans-serif; background-color: #f4f5f9; padding: 40px 20px; color: #111827;">
           <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06);">
@@ -527,12 +585,7 @@ export async function sendEventTicketEmail(to: string, bookingId: string, ticket
             </div>
             <div style="margin: 20px; background-color: #f9fafb; border-radius: 14px; padding: 22px; border: 1px solid #e5e7eb;">
               <h3 style="margin: 0 0 14px; font-size: 15px; color: #111827; font-weight: 600;">Your access</h3>
-              ${tickets.map(t => `
-                <div style="margin-bottom: 12px;">
-                  <p style="margin: 0; color: #6b7280; font-size: 11px; letter-spacing: 0.5px;">Category</p>
-                  <p style="margin: 2px 0 0; color: #dc2626; font-size: 15px; font-weight: 600;">${t.categoryName}${(t.groupSize || 1) > 1 ? ` <span style="color: #6b7280; font-weight: 500; font-size: 13px;">&middot; admits ${t.groupSize} people on one pass</span>` : ''}</p>
-                </div>
-              `).join('')}
+              ${passLinesHtml(tickets)}
               <div style="margin-top: 20px; padding-top: 16px; border-top: 1px dashed #e5e7eb;">
                 <p style="margin: 0; color: #6b7280; font-size: 11px; letter-spacing: 0.5px;">Pass identifiers</p>
                 <p style="margin: 5px 0 0; color: #111827; font-size: 16px; font-weight: 600;">${ticketNumbers}</p>

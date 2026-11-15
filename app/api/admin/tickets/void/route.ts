@@ -67,20 +67,33 @@ export async function POST(req: Request) {
   }
 
   // Now give the seat and the number back, so the next buyer can have them.
+  //
+  // A GROUP pass is one QR over several seats, and voiding it is all or nothing — so every
+  // seat it holds goes back, not just the one its number names. Freeing only the first would
+  // strand the other seven: held by nobody, never on sale again, and still counted against the
+  // group offer's run.
   let seatFreed = false;
+  let seatsFreed = 0;
   const number = pass.categoryId ? ticketNumberValue(ticketNumber, prefixOf(ticketNumber)) : null;
   if (pass.categoryId && number !== null) {
     const reservationId = await findReservation(db, bookingId, pass.categoryId, number);
     if (reservationId) {
-      try {
-        seatFreed = await voidTicketNumber(
-          { rpc: (fn, args) => db.rpc(fn, args) },
-          reservationId,
-          pass.categoryId,
-          number,
-        );
-      } catch (e) {
-        console.error('VOID_SEAT_RELEASE_FAILED:', e);
+      const numbers = await groupSeatNumbers(db, pass.categoryId, number, reservationId);
+      for (const n of numbers) {
+        try {
+          const freed = await voidTicketNumber(
+            { rpc: (fn, args) => db.rpc(fn, args) },
+            reservationId,
+            pass.categoryId,
+            n,
+          );
+          if (freed) seatsFreed += 1;
+          if (n === number) seatFreed = freed;
+        } catch (e) {
+          // Logged, never thrown: the pass is already marked refunded, and a seat that could
+          // not be released is a counting problem, not a reason to leave the pass valid.
+          console.error('VOID_SEAT_RELEASE_FAILED:', n, e);
+        }
       }
     }
   }
@@ -99,10 +112,47 @@ export async function POST(req: Request) {
   return NextResponse.json({
     success: true,
     seatFreed,
-    note: seatFreed
-      ? 'Pass voided and its seat put back on sale. No money has been refunded.'
-      : 'Pass voided. Its seat could not be returned automatically (older booking) — check capacity by hand. No money has been refunded.',
+    seatsFreed,
+    note: !seatFreed
+      ? 'Pass voided. Its seat could not be returned automatically (older booking) — check capacity by hand. No money has been refunded.'
+      : seatsFreed > 1
+        // A group goes back whole, and saying how many makes that visible rather than surprising.
+        ? `Group pass voided and all ${seatsFreed} of its seats put back on sale. No money has been refunded.`
+        : 'Pass voided and its seat put back on sale. No money has been refunded.',
   });
+}
+
+/**
+ * Every seat the voided pass holds.
+ *
+ * An ordinary pass holds one. A group pass holds all the seats sharing its bundle reference —
+ * the same reference the reservation stamped on them when the group was bought.
+ */
+async function groupSeatNumbers(
+  db: ReturnType<typeof supabaseAdmin>,
+  categoryId: string,
+  number: number,
+  reservationId: string,
+): Promise<number[]> {
+  const { data: seat } = await db
+    .from('ticket_numbers')
+    .select('bundle_ref')
+    .eq('category_id', categoryId)
+    .eq('number', number)
+    .maybeSingle();
+
+  const ref = (seat as { bundle_ref?: string | null } | null)?.bundle_ref;
+  if (!ref) return [number];
+
+  const { data: siblings } = await db
+    .from('ticket_numbers')
+    .select('number')
+    .eq('category_id', categoryId)
+    .eq('reservation_id', reservationId)
+    .eq('bundle_ref', ref);
+
+  const all = (siblings || []).map((r) => Number((r as { number: number }).number));
+  return all.length ? all.sort((a, b) => a - b) : [number];
 }
 
 /** The non-numeric lead of a pass number, used to read its number off ("GA-013" -> "GA-"). */

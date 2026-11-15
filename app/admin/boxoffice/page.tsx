@@ -3,15 +3,18 @@ import { useState, useEffect } from 'react';
 import { 
   Ticket, Loader2, ArrowLeft, Users, 
   PauseCircle, PlayCircle, IndianRupee, ShieldCheck, Search, Mail,
-  DoorOpen, UserCheck, UserX, CircleDashed, ScanLine, Gift
+  DoorOpen, UserCheck, UserX, CircleDashed, ScanLine, Gift, BadgePercent, Boxes, Check
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAlert } from '@/context/AlertContext';
 import { seatsInUse } from '@/lib/payments/seats';
 import { ATTENDANCE_LABEL, AttendanceState, admittedBy, attendancePercent, bookingAttendance, eventAttendance, type ScanLogRow } from '@/lib/payments/attendance';
+import { progressOf, seatRangeLabel } from '@/lib/payments/scan';
 import { ALL_TYPES, ledgerTypeCounts, matchesType } from '@/lib/payments/ledger';
 import CompPassIssuer from '@/components/admin/CompPassIssuer';
 import SalePhaseControl from '@/components/admin/SalePhaseControl';
+import BundleManager from '@/components/admin/BundleManager';
+import CouponManager from '@/components/admin/CouponManager';
 
 export default function BoxOfficeDashboard() {
   const [events, setEvents] = useState<any[]>([]);
@@ -54,7 +57,17 @@ export default function BoxOfficeDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /**
+   * Pause or resume a ticket type.
+   *
+   * The spinner matters more than it looks: this fires a request and then re-reads the whole
+   * dashboard, so the card sat unchanged for a second with nothing to say it had heard — and an
+   * admin pausing a type mid-rush would press it again. The group cards already showed their
+   * work; this now does the same.
+   */
+  const [togglingCategory, setTogglingCategory] = useState<string | null>(null);
   const toggleCategoryStatus = async (categoryId: string, currentStatus: boolean) => {
+    setTogglingCategory(categoryId);
     try {
       const res = await fetch('/api/admin/boxoffice', {
         method: 'PATCH',
@@ -63,10 +76,14 @@ export default function BoxOfficeDashboard() {
       });
       if (res.ok) {
         showAlert(currentStatus ? "Category Paused" : "Category Resumed", "success");
-        if (selectedEventId) fetchDashboard(selectedEventId);
+        if (selectedEventId) await fetchDashboard(selectedEventId);
+      } else {
+        showAlert("Status override failed", "error");
       }
     } catch (err) {
       showAlert("Status override failed", "error");
+    } finally {
+      setTogglingCategory(null);
     }
   };
 
@@ -102,6 +119,30 @@ export default function BoxOfficeDashboard() {
     return Object.entries(counts).map(([name, qty]) => `${qty}x ${name}`).join(' | ');
   };
 
+  /** The coupon codes that gave a pass away on this booking, each named once. */
+  const couponsOn = (booking: any): string[] =>
+    [...new Set<string>(
+      (booking.tickets_data || [])
+        .filter((t: any) => t.free && t.couponCode)
+        .map((t: any) => String(t.couponCode)),
+    )];
+
+  /**
+   * Replace one booking's passes in state.
+   *
+   * It has to go through the bookings ARRAY. The rows the table renders are shallow copies made
+   * by withAttendance ({ ...b, door }), so assigning `booking.tickets_data` on one of those sets
+   * a field on the copy and leaves the source untouched — the screen then re-renders from the
+   * original and the change appears to have been ignored. That is what voiding a pass used to
+   * do: it worked on the server and looked like it had not.
+   */
+  const applyTickets = (bookingId: string, tickets: unknown[]) =>
+    setDashboardData((prev: any) =>
+      prev
+        ? { ...prev, bookings: (prev.bookings || []).map((b: any) => (b.id === bookingId ? { ...b, tickets_data: tickets } : b)) }
+        : prev,
+    );
+
   /**
    * Void a single pass: it stops scanning and its seat goes back on sale. Deliberately separate
    * from refunding — an admin may want one without the other — so the confirmation says so.
@@ -127,15 +168,77 @@ export default function BoxOfficeDashboard() {
         return;
       }
       showAlert(data.note || `${ticketNumber} voided.`, 'success');
-      // Reflect it immediately rather than making them reload.
-      booking.tickets_data = (booking.tickets_data || []).map((t: any) =>
+      // Shown at once, then confirmed: the seat has gone back on sale, so the inventory cards
+      // above are out of date until the dashboard is read again.
+      applyTickets(booking.id, (booking.tickets_data || []).map((t: any) =>
         t.ticketNumber === ticketNumber ? { ...t, status: 'REFUNDED' } : t,
-      );
-      setDashboardData((prev: any) => (prev ? { ...prev } : prev));
+      ));
+      if (selectedEventId) fetchDashboard(selectedEventId);
     } catch {
       showAlert('Could not void that pass.', 'error');
     } finally {
       setVoiding(null);
+    }
+  };
+
+  /**
+   * Let somebody in from here, with no QR involved.
+   *
+   * The case it exists for: the pass never arrived, the phone is flat, the screenshot is of
+   * somebody else's ticket. The alternative an organiser is left with otherwise is waving them
+   * through unrecorded — and an unrecorded entry is worse than none, because the pass still
+   * reads valid afterwards and whoever turns up with it next gets in on it too.
+   *
+   * It is confirmed rather than instant: there is no un-admitting anyone.
+   */
+  const [checkingIn, setCheckingIn] = useState<string | null>(null);
+  const checkIn = async (booking: any, opts: { ticket?: any; busyKey: string }) => {
+    const { ticket, busyKey } = opts;
+    const remaining = ticket ? progressOf(ticket).remaining : booking.door.remaining;
+    if (remaining <= 0) return;
+
+    let count: number | undefined;
+    // A group pass is one QR over several people and they do not always arrive together, so
+    // this asks rather than assuming. An ordinary pass is one person and is never asked about.
+    if (ticket && remaining > 1) {
+      const typed = window.prompt(`How many of the ${remaining} on ${ticket.ticketNumber} are coming in now?`, String(remaining));
+      if (typed === null) return;
+      count = Number(typed.trim());
+      if (!Number.isInteger(count) || count < 1 || count > remaining) {
+        showAlert(`Enter a whole number between 1 and ${remaining}.`, 'error');
+        return;
+      }
+    }
+
+    const who = booking.full_name || booking.email;
+    const what = ticket
+      ? `${count ?? remaining} on ${ticket.ticketNumber}`
+      : `all ${remaining} on this booking`;
+    if (!confirm(`Check in ${what} for ${who}?\n\nThis admits them as if they had been scanned, and it cannot be undone.\n\nYour name goes on the entry.`)) return;
+
+    setCheckingIn(busyKey);
+    try {
+      const res = await fetch('/api/admin/tickets/checkin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          ticket ? { bookingId: booking.id, ticketNumber: ticket.ticketNumber, count } : { bookingId: booking.id, all: true },
+        ),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showAlert(data.error || 'Could not check them in.', 'error');
+        return;
+      }
+      showAlert(data.message || 'Checked in.', 'success');
+      // Shown at once — at a gate the queue is waiting — and then confirmed from the server,
+      // which also picks up anyone a scanner admitted while this was in flight.
+      if (Array.isArray(data.tickets)) applyTickets(booking.id, data.tickets);
+      if (selectedEventId) fetchDashboard(selectedEventId);
+    } catch {
+      showAlert('Could not check them in.', 'error');
+    } finally {
+      setCheckingIn(null);
     }
   };
 
@@ -163,7 +266,12 @@ export default function BoxOfficeDashboard() {
       || b.full_name?.toLowerCase().includes(q)
       || b.email?.toLowerCase().includes(q)
       // Searching by pass number is how you find one person at a busy gate.
-      || (b.tickets_data || []).some((t: any) => String(t.ticketNumber).toLowerCase().includes(q));
+      // Any seat, not just the number the pass is filed under: somebody at the gate reading out
+      // REGULAR-055 is holding a group pass numbered REGULAR-053, and searching it has to find
+      // them rather than tell them they do not exist.
+      || (b.tickets_data || []).some((t: any) =>
+        String(t.ticketNumber).toLowerCase().includes(q)
+        || (t.groupSeats || []).some((n: string) => String(n).toLowerCase().includes(q)));
     if (!matchesSearch) return false;
     // A booking can hold more than one type, so it appears under each of them.
     if (!matchesType(b, typeFilter)) return false;
@@ -226,18 +334,21 @@ export default function BoxOfficeDashboard() {
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {dashboardData.categories.map((cat: any) => (
-                  <div key={cat.id} className={`p-6 rounded-[30px] border transition-all ${cat.active ? 'bg-zinc-950 border-white/5 hover:border-brandRed/30' : 'bg-brandRed/5 border-brandRed/30 opacity-80'}`}>
+                  <div key={cat.id} className={`p-6 rounded-[30px] border transition-all duration-300 ${togglingCategory === cat.id ? 'opacity-50' : ''} ${cat.active ? 'bg-zinc-950 border-white/5 hover:border-brandRed/30' : 'bg-brandRed/5 border-brandRed/30 opacity-80'}`}>
                     <div className="flex justify-between items-start mb-6">
                       <div>
                         <h4 className="font-black uppercase text-xl">{cat.name}</h4>
                         <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-1">₹{cat.price} per pass</p>
                       </div>
-                      <button 
+                      <button
                         onClick={() => toggleCategoryStatus(cat.id, cat.active)}
-                        className={`p-3 rounded-full flex items-center justify-center transition-all ${cat.active ? 'bg-brandRed/10 text-brandRed hover:bg-brandRed hover:text-white' : 'bg-green-500/10 text-green-500 hover:bg-green-500 hover:text-white'}`}
+                        disabled={togglingCategory === cat.id}
+                        className={`p-3 rounded-full flex items-center justify-center transition-all disabled:cursor-wait ${cat.active ? 'bg-brandRed/10 text-brandRed hover:bg-brandRed hover:text-white' : 'bg-green-500/10 text-green-500 hover:bg-green-500 hover:text-white'}`}
                         title={cat.active ? "Pause Category" : "Resume Category"}
                       >
-                        {cat.active ? <PauseCircle size={24} /> : <PlayCircle size={24} />}
+                        {togglingCategory === cat.id
+                          ? <Loader2 size={24} className="animate-spin" />
+                          : cat.active ? <PauseCircle size={24} /> : <PlayCircle size={24} />}
                       </button>
                     </div>
                     
@@ -254,6 +365,21 @@ export default function BoxOfficeDashboard() {
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* BUNDLES AND COUPONS
+                Both sit above the complimentary passes because both are things an admin sets
+                up BEFORE a sale rather than during one. */}
+            <div className="pt-8 border-t border-white/5">
+              <BundleManager
+                eventId={selectedEventId!}
+                categories={dashboardData.categories}
+                onChanged={() => selectedEventId && fetchDashboard(selectedEventId)}
+              />
+            </div>
+
+            <div className="pt-8 border-t border-white/5">
+              <CouponManager eventId={selectedEventId!} categories={dashboardData.categories} />
             </div>
 
             {/* COMPLIMENTARY PASSES */}
@@ -391,6 +517,11 @@ export default function BoxOfficeDashboard() {
                               <Gift size={8} /> Comp · {booking.comp.reason}
                             </span>
                           )}
+                          {couponsOn(booking).map((code: string) => (
+                            <span key={code} className="mt-1.5 ml-1.5 inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-green-400 border border-green-500/30 bg-green-500/10 px-2 py-0.5 rounded-full">
+                              <BadgePercent size={8} /> {code}
+                            </span>
+                          ))}
                         </td>
                         <td className="p-6">
                           <span className="bg-brandRed/10 text-brandRed border border-brandRed/20 px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-widest inline-block">
@@ -402,22 +533,62 @@ export default function BoxOfficeDashboard() {
                               {(booking.tickets_data || []).map((t: any) => (
                                 <span key={t.ticketNumber} className="inline-flex items-center gap-1">
                                   <span
-                                    className={`font-mono text-[9px] tracking-widest px-1.5 py-1 rounded border ${
+                                    // A pass a coupon gave away is green. It is an ordinary pass in
+                                    // every other way, and the only record of that fact per seat is
+                                    // here — so "which REGULAR went out free?" is answerable at the
+                                    // door rather than by reading order rows.
+                                    title={[
+                                      t.free ? `Free pass${t.couponCode ? ` - coupon ${t.couponCode}` : ''}` : '',
+                                      t.group ? `${t.groupName || 'Group ticket'} — admits ${t.groupSize || 1}` : '',
+                                      // The seats behind one group QR, so a dispute at the door
+                                      // about how many this pass is worth has an answer here.
+                                      seatRangeLabel(t.groupSeats) ? `Seats ${seatRangeLabel(t.groupSeats)}` : '',
+                                    ].filter(Boolean).join(' · ') || undefined}
+                                    // Read at a gate, in a hurry, on a phone: the pass number is
+                                    // the thing being matched against what the guest is showing,
+                                    // so it is the one piece here that has to be legible first.
+                                    className={`font-mono text-[11px] font-bold tracking-widest px-2 py-1 rounded border ${
                                       t.status === 'REFUNDED'
                                         ? 'text-zinc-600 border-white/5 line-through'
                                         : t.status === 'CHECKED_IN'
                                           ? 'text-amber-400 border-amber-500/25'
-                                          : 'text-zinc-300 border-white/10'
+                                          : t.free
+                                            ? 'text-green-400 border-green-500/30 bg-green-500/10'
+                                            : t.group
+                                              ? 'text-sky-400 border-sky-500/30 bg-sky-500/10'
+                                              : 'text-zinc-200 border-white/15'
                                     }`}
                                   >
-                                    {t.ticketNumber}
+                                    {t.free && <BadgePercent size={10} className="inline mr-1 -mt-0.5" />}
+                                    {!t.free && t.group && <Boxes size={10} className="inline mr-1 -mt-0.5" />}
+                                    {/* A group pass is one QR over several seats, so the chip
+                                        shows the seats it took — "REGULAR-053 – 057" — rather
+                                        than the single number it is filed under. Compact, so a
+                                        row of them still fits: the prefix is said once. */}
+                                    {seatRangeLabel(t.groupSeats, { compact: true }) || t.ticketNumber}
                                   </span>
+                                  {/* Check this one pass in by hand. Next to the pass rather than
+                                      in its own column: at a gate you are looking at the number
+                                      the guest read out, and the action belongs where your eye
+                                      already is. */}
+                                  {t.status !== 'REFUNDED' && progressOf(t).remaining > 0 && (
+                                    <button
+                                      onClick={() => checkIn(booking, { ticket: t, busyKey: t.ticketNumber })}
+                                      disabled={checkingIn === t.ticketNumber}
+                                      title={`Check in ${t.ticketNumber} without a QR`}
+                                      className="text-green-500/70 hover:text-green-400 disabled:opacity-40 transition-colors"
+                                    >
+                                      {checkingIn === t.ticketNumber
+                                        ? <Loader2 size={12} className="animate-spin" />
+                                        : <Check size={13} />}
+                                    </button>
+                                  )}
                                   {t.status !== 'REFUNDED' && (
                                     <button
                                       onClick={() => voidPass(booking, t.ticketNumber)}
                                       disabled={voiding === t.ticketNumber}
                                       title={`Void ${t.ticketNumber} (no refund)`}
-                                      className="text-[9px] text-zinc-600 hover:text-brandRed disabled:opacity-40 transition-colors"
+                                      className="text-[11px] text-zinc-600 hover:text-brandRed disabled:opacity-40 transition-colors"
                                     >
                                       {voiding === t.ticketNumber ? '...' : '×'}
                                     </button>
@@ -432,6 +603,21 @@ export default function BoxOfficeDashboard() {
                         </td>
                         <td className="p-6">
                           <DoorCell door={booking.door} scans={booking.scans} />
+                          {/* The whole party in one press — the common case, because the guest
+                              without a pass is usually standing there with everyone on it. */}
+                          {booking.door.state !== 'REFUNDED' && booking.door.remaining > 0 && (
+                            <button
+                              onClick={() => checkIn(booking, { busyKey: booking.id })}
+                              disabled={checkingIn === booking.id}
+                              title="Admit everyone still outside on this booking, without a QR"
+                              className="mt-2.5 flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-green-400 border border-green-500/30 bg-green-500/10 rounded-lg px-3 py-1.5 hover:bg-green-500 hover:text-black hover:border-green-500 disabled:opacity-40 transition-all active:scale-95"
+                            >
+                              {checkingIn === booking.id
+                                ? <Loader2 size={11} className="animate-spin" />
+                                : <UserCheck size={11} />}
+                              Check in {booking.door.remaining}
+                            </button>
+                          )}
                         </td>
                         <td className="p-6">
                           <span className="font-mono text-[10px] text-zinc-500 block">
@@ -503,6 +689,13 @@ function DoorCell({ door, scans }: { door: ReturnType<typeof bookingAttendance>;
               <UserCheck size={9} className={w.role === 'ADMIN' ? 'text-brandRed shrink-0' : 'text-sky-400 shrink-0'} />
               <span className="truncate max-w-[130px]">{w.by}</span>
               <span className="text-zinc-600 shrink-0">+{w.admitted}</span>
+              {/* Nobody scanned this one. Worth seeing the morning after, when a count is being
+                  argued about and the question is which entries anyone actually verified. */}
+              {w.manual && (
+                <span className="shrink-0 text-[8px] font-black uppercase tracking-widest text-amber-400/80 border border-amber-500/25 rounded px-1">
+                  by hand
+                </span>
+              )}
             </span>
           ))}
           {workedBy[0]?.at && (

@@ -3,12 +3,14 @@ import { useState, useEffect, use } from 'react';
 import { CheckCircle2, MapPin, Calendar, Clock, Mail, Smartphone, Loader2, ArrowRight, Download, ChevronLeft, ChevronRight, LogIn, BookmarkCheck, User } from 'lucide-react';
 import Link from 'next/link';
 import QRCode from 'qrcode';
-import { admitsLabel, isGroup } from '@/lib/payments/groups';
+import { admitsLabel, isGroup, seatRangeLabel } from '@/lib/payments/scan';
 import { buildReceipt, formatEventDate, formatEventTime, formatIst, formatRupees } from '@/lib/payments/format';
 
 type Pass = {
   categoryName: string; ticketNumber: string; unitPrice: number;
   status: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED'; groupSize: number; admitted: number;
+  /** The seats one group pass stands for: five seats, one QR, one number printed. */
+  groupSeats?: string[];
   /** Built and signed by the server — the browser cannot sign, and must not try. */
   scanUrl: string;
 };
@@ -197,6 +199,13 @@ export default function TicketSuccessPage({ params }: { params: Promise<{ bookin
             </div>
 
             <p className="text-2xl font-black text-white tracking-widest mb-2">{pass.ticketNumber}</p>
+            {/* One pass, five seats. Without the range the buyer of a group reads a single
+                number for everything they paid for, and reasonably wonders where the rest is. */}
+            {seatRangeLabel(pass.groupSeats) && (
+              <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-2">
+                Seats {seatRangeLabel(pass.groupSeats)}
+              </p>
+            )}
             <span className={`text-[9px] font-black uppercase tracking-widest border rounded-full px-3 py-1 mb-6 ${st.cls}`}>{st.label}</span>
 
             <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-600 text-center leading-relaxed">

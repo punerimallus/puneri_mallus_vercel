@@ -7,8 +7,7 @@
 //     -> print the link -> scan it at the gate -> admit -> box office sees who admitted
 //
 // The things that only break at a join are what this is for: a pass number that reads right in
-// the PDF but not at the gate, a QR the scanner builds but the parser cannot read, a group the
-// volunteer cannot admit.
+// the PDF but not at the gate, or a QR the scanner builds but the parser cannot read.
 //
 // Nothing here touches production. PGlite is a real Postgres in this process, and the Razorpay
 // and email steps are stand-ins — the sequence is real, the money is not.
@@ -44,23 +43,23 @@ describe('a buyer, from picking passes to walking through the gate', () => {
 
     // --- 1. The event is on sale --------------------------------------------------------
     const general = await seedCategory(f, { name: 'GENERAL', prefix: 'GEN-', capacity: 100, price: 500 });
-    const group = await seedCategory(f, { name: 'GENERAL GROUP', prefix: 'GRPGEN-', capacity: 20, price: 2000, groupSize: 5 });
+    const vip = await seedCategory(f, { name: 'VIP', prefix: 'VIP-', capacity: 20, price: 2000 });
 
-    // --- 2. They pick two singles and one group pass ------------------------------------
+    // --- 2. They pick two generals and a VIP --------------------------------------------
     const cart: CartLine[] = [
       { categoryId: general, name: 'GENERAL', prefix: 'GEN-', qty: 2, unitPrice: 500, numberWidth: 3 },
-      { categoryId: group, name: 'GENERAL GROUP', prefix: 'GRPGEN-', qty: 1, unitPrice: 2000, groupSize: 5, numberWidth: 3 },
+      { categoryId: vip, name: 'VIP', prefix: 'VIP-', qty: 1, unitPrice: 2000, numberWidth: 3 },
     ];
 
     // --- 3. Seats are held BEFORE payment -----------------------------------------------
-    const allocations = await reserve(f, 'res_journey', user, [[general, 2], [group, 1]]);
+    const allocations = await reserve(f, 'res_journey', user, [[general, 2], [vip, 1]]);
     expect(allocations).toHaveLength(2);
 
     // The very first sale of the event starts at 1, not 3.
     const forGeneral = allocations.find((a) => a.categoryId === general)!;
-    const forGroup = allocations.find((a) => a.categoryId === group)!;
+    const forVip = allocations.find((a) => a.categoryId === vip)!;
     expect(forGeneral.numbers).toEqual([1, 2]);
-    expect(forGroup.numbers).toEqual([1]);
+    expect(forVip.numbers).toEqual([1]);
 
     // --- 4. Payment succeeds; the hold becomes a sale -----------------------------------
     const confirmed = await f.val<{ alreadyConfirmed: boolean }>(`select confirm_order_inventory($1) as r`, ['res_journey']);
@@ -69,10 +68,10 @@ describe('a buyer, from picking passes to walking through the gate', () => {
 
     // --- 5. The passes are issued -------------------------------------------------------
     const issued = buildIssuedTickets(orderWith(cart, allocations), allocations);
-    expect(issued.map((t) => t.ticketNumber)).toEqual(['GEN-001', 'GEN-002', 'GRPGEN-001']);
+    expect(issued.map((t) => t.ticketNumber)).toEqual(['GEN-001', 'GEN-002', 'VIP-001']);
     // Cart order, not database order: the receipt, the PDF and the email all read this way.
     expect(issued[0].categoryName).toBe('GENERAL');
-    expect(issued[2].groupSize).toBe(5);
+    expect(issued[2].categoryName).toBe('VIP');
 
     const bookingId = '11111111-2222-3333-4444-555555555555';
 
@@ -103,50 +102,35 @@ describe('a buyer, from picking passes to walking through the gate', () => {
       categoryName: t.categoryName,
       ticketNumber: t.ticketNumber,
       status: 'ISSUED',
-      ...(t.groupSize ? { groupSize: t.groupSize } : {}),
     }));
 
-    const VOLUNTEER = { allowPartial: false };
-    const ADMIN = { allowPartial: true };
-
-    const first = applyScan(passes, 'GEN-001', undefined, new Date(), VOLUNTEER);
+    const first = applyScan(passes, 'GEN-001', undefined, new Date());
     expect(first.ok).toBe(true);
     if (first.ok) passes = first.tickets;
 
     // The same QR a second time is refused rather than admitting twice.
-    expect(applyScan(passes, 'GEN-001', undefined, new Date(), VOLUNTEER).ok).toBe(false);
+    expect(applyScan(passes, 'GEN-001', undefined, new Date()).ok).toBe(false);
 
-    // The group turns up three-of-five: the volunteer may not split them.
-    const split = applyScan(passes, 'GRPGEN-001', 3, new Date(), VOLUNTEER);
-    expect(split.ok).toBe(false);
-    if (!split.ok) expect(split.code).toBe('PARTIAL_NOT_ALLOWED');
-
-    // An organiser can.
-    const admin = applyScan(passes, 'GRPGEN-001', 3, new Date(), ADMIN);
-    expect(admin.ok).toBe(true);
-    if (admin.ok) passes = admin.tickets;
-
-    // The last two arrive later; the volunteer takes them, because two is all that is left.
-    const rest = applyScan(passes, 'GRPGEN-001', 2, new Date(), VOLUNTEER);
-    expect(rest.ok).toBe(true);
-    if (rest.ok) passes = rest.tickets;
-    expect(passes.find((p) => p.ticketNumber === 'GRPGEN-001')!.status).toBe('CHECKED_IN');
+    // The rest of the party arrive separately, each on their own pass.
+    // The second of the party arrives later, on their own pass. The third never turns up.
+    const second = applyScan(passes, 'GEN-002', undefined, new Date());
+    expect(second.ok).toBe(true);
+    if (second.ok) passes = second.tickets;
 
     // --- 9. The box office sees the night as it happened --------------------------------
     const door = bookingAttendance(passes, 'CONFIRMED');
-    // 2 singles + 5 in the group = 7 people expected; 1 single + 5 group = 6 came in.
-    expect(door.people).toBe(7);
-    expect(door.admitted).toBe(6);
+    // Three passes sold, two of them walked in, the VIP never came.
+    expect(door.people).toBe(3);
+    expect(door.admitted).toBe(2);
     expect(door.remaining).toBe(1);
     expect(door.state).toBe('PARTLY_IN');
 
     const who = admittedBy([
-      { ticket_number: 'GRPGEN-001', admitted: 2, action: 'ADMIT', actor_email: '9307658864@punerimallus.com', actor_role: 'SCANNER', at: '2026-11-03T18:40:00Z' },
-      { ticket_number: 'GRPGEN-001', admitted: 3, action: 'ADMIT', actor_email: 'rohitanish86@gmail.com', actor_role: 'ADMIN', at: '2026-11-03T18:20:00Z' },
-      { ticket_number: 'GEN-001', admitted: 1, action: 'ADMIT', actor_email: '9307658864@punerimallus.com', actor_role: 'SCANNER', at: '2026-11-03T18:00:00Z' },
+      { ticket_number: 'GEN-002', admitted: 1, action: 'ADMIT', actor_email: '9307658864@punerimallus.com', actor_role: 'SCANNER', at: '2026-11-03T18:40:00Z' },
+      { ticket_number: 'GEN-001', admitted: 1, action: 'ADMIT', actor_email: 'rohitanish86@gmail.com', actor_role: 'ADMIN', at: '2026-11-03T18:20:00Z' },
     ]);
-    expect(who[0]).toMatchObject({ by: '9307658864', role: 'SCANNER', admitted: 3 });
-    expect(who[1]).toMatchObject({ by: 'rohitanish86@gmail.com', role: 'ADMIN', admitted: 3 });
+    expect(who[0]).toMatchObject({ by: '9307658864', role: 'SCANNER', admitted: 1 });
+    expect(who[1]).toMatchObject({ by: 'rohitanish86@gmail.com', role: 'ADMIN', admitted: 1 });
 
     await f.close();
   });

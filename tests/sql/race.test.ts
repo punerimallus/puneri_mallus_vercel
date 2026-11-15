@@ -164,7 +164,7 @@ describe('the last seat', () => {
   });
 
   it('makes a group pass and a single compete for the same stock', async () => {
-    const cat = await seedCategory(f, { capacity: 2, name: 'MIX', prefix: 'M-', groupSize: 5 });
+    const cat = await seedCategory(f, { capacity: 2, name: 'MIX', prefix: 'M-' });
     const a = await seedUser(f);
     const b = await seedUser(f);
 
@@ -390,19 +390,6 @@ describe('per-account limits under load', () => {
     await expectSound();
   });
 
-  it('counts single and group allowances separately', async () => {
-    const user = await seedUser(f);
-    const single = await seedCategory(f, { capacity: 100, name: 'S', prefix: 'S-' });
-    const group = await seedCategory(f, { capacity: 100, name: 'G', prefix: 'G-', groupSize: 5 });
-
-    await reserve('r1', user, [[single, 7], [group, 2]], { maxSingle: 7, maxGroup: 2 });
-    expect(await f.fails(`select reserve_order_inventory('r2', $1, $2::jsonb, 0, 900, 7, 2)`, [user, items([[single, 1]])]))
-      .toContain('LIMIT_SINGLE:7');
-    expect(await f.fails(`select reserve_order_inventory('r3', $1, $2::jsonb, 0, 900, 7, 2)`, [user, items([[group, 1]])]))
-      .toContain('LIMIT_GROUP:2');
-    await expectSound();
-  });
-
   it('does not let one account\'s limit refuse anybody else', async () => {
     const hog = await seedUser(f);
     const others = await Promise.all(Array.from({ length: 5 }, () => seedUser(f)));
@@ -496,7 +483,7 @@ describe('a full storm, and the books afterwards', () => {
   it('survives sixty mixed operations with every invariant intact', async () => {
     const ga = await seedCategory(f, { capacity: 20, name: 'GA', prefix: 'GA-', price: 500 });
     const vip = await seedCategory(f, { capacity: 5, name: 'VIP', prefix: 'VIP-', price: 2000 });
-    const grp = await seedCategory(f, { capacity: 4, name: 'GRP', prefix: 'GRP-', price: 2000, groupSize: 5 });
+    const grp = await seedCategory(f, { capacity: 4, name: 'GRP', prefix: 'GRP-', price: 2000 });
     const users = await Promise.all(Array.from({ length: 20 }, () => seedUser(f, 200)));
 
     // Deterministic, so a failure is reproducible.

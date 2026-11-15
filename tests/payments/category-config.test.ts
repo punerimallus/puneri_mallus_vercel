@@ -7,20 +7,14 @@ const check = (cats: unknown, existing: any[] = []) => checkCategoryConfig(cats,
 describe('ticket category validation', () => {
   it('accepts a normal category and tidies it', () => {
     const r = check([ok]);
-    expect(r.ok && r.categories[0]).toMatchObject({ name: 'GENERAL', prefix: 'GEN-', price: 500, capacity: 100, group_size: 1, active: true });
+    expect(r.ok && r.categories[0]).toMatchObject({ name: 'GENERAL', prefix: 'GEN-', price: 500, capacity: 100, active: true });
   });
-  it('accepts group tickets of any size and keeps the number the admin typed', () => {
-    for (const n of [2, 5, 6, 7, 20]) {
-      const r = check([{ ...ok, name: `g${n}`, prefix: `G${n}-`, group_size: n }]);
-      expect(r.ok && r.categories[0].group_size).toBe(n);
-    }
-  });
-  it('rejects a group block left without a people count, or with a silly one', () => {
-    for (const bad of [0, -2, 1.5, 51, 'many']) expect(check([{ ...ok, group_size: bad }])).toMatchObject({ ok: false });
-  });
-  it('treats a blank people count as an ordinary ticket', () => {
-    const r = check([{ ...ok, group_size: '' }]);
-    expect(r.ok && r.categories[0].group_size).toBe(1);
+  it('ignores a group size left over from the old model', () => {
+    // The form no longer sends one, but a stale tab or a saved payload might. It is dropped,
+    // not stored: there is nowhere left for it to go.
+    const r = check([{ ...ok, group_size: 5 }]);
+    expect(r.ok).toBe(true);
+    expect(r.ok && 'group_size' in r.categories[0]).toBe(false);
   });
   it('rejects missing names, bad prices, bad prefixes and bad capacity', () => {
     expect(check([{ ...ok, name: '  ' }])).toMatchObject({ ok: false });

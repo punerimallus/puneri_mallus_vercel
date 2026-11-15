@@ -302,6 +302,36 @@ describe("the event's own points, on the pass", () => {
     expect(text).not.toContain(`Note ${MAX_TICKET_NOTES + 1}`);
   });
 
+  it('marks a pass a coupon gave away, and names the code that gave it', async () => {
+    // The pass scans like any other, so nothing on the gate's side changes. What changes is
+    // that the buyer, the gate and anyone the pass is forwarded to can all see that this seat
+    // was not paid for — which is the whole point of letting an admin hand them out.
+    const { drawn } = captureText();
+    await buildTicketPdf({
+      ...base,
+      tickets: [
+        { categoryName: 'REGULAR', ticketNumber: 'REGULAR-061', unitPrice: 1049 },
+        { categoryName: 'REGULAR', ticketNumber: 'REGULAR-062', unitPrice: 0, free: true, couponCode: 'TRIBE20' },
+      ],
+    });
+    const all = drawn.join(' ').replace(/\s+/g, ' ');
+    expect(all).toContain('COMPLIMENTARY - TRIBE20');
+    expect(all).toContain('VALID FOR ENTRY - COMPLIMENTARY');
+    // and the receipt says which seat was the gift rather than merging it into the paid line
+    expect(all).toContain('REGULAR (FREE - TRIBE20)');
+  });
+
+  it('says COMPLIMENTARY even when no code is recorded', async () => {
+    const { drawn } = captureText();
+    await buildTicketPdf({
+      ...base,
+      tickets: [{ categoryName: 'REGULAR', ticketNumber: 'REGULAR-063', unitPrice: 0, free: true }],
+    });
+    const all = drawn.join(' ').replace(/\s+/g, ' ');
+    expect(all).toContain('COMPLIMENTARY');
+    expect(all).not.toContain('COMPLIMENTARY -');
+  });
+
   it('keeps the box above the footer rule, however much is written', async () => {
     // The clamp is the only thing standing between a chatty admin and a panel drawn over the
     // booking reference, so it is measured rather than trusted. Every full-width panel in the
@@ -319,5 +349,117 @@ describe("the event's own points, on the pass", () => {
     expect(await panelsEndBefore(long)).toBeLessThanOrEqual(281);
     const essay = Array.from({ length: 20 }, (_, i) => `Point ${i + 1} ` + 'x'.repeat(200)).join(' - ');
     expect(await panelsEndBefore(essay)).toBeLessThanOrEqual(281);
+  });
+});
+
+describe('a group pass on the PDF', () => {
+  // Eight seats sold as ONE pass with one QR. The buyer has to be able to see, from the pass
+  // alone, that it is worth eight people — otherwise the first thing they do is write in asking
+  // where the other seven are.
+  const group: TicketPdfInput = {
+    ...base,
+    tickets: [{ categoryName: 'REGULAR', ticketNumber: 'REGULAR-001', unitPrice: 875, groupSize: 8 }],
+  };
+
+  it('is one page, not eight', async () => {
+    const { drawn } = captureText();
+    const doc = await buildTicketPdf(group);
+    // One pass page, plus the receipt and the terms.
+    expect(doc.getNumberOfPages()).toBe(3);
+    expect(drawn.join('\n')).toContain('Pass 1 of 1');
+  });
+
+  it('says how many it admits, in both places a reader looks', async () => {
+    const { drawn } = captureText();
+    await buildTicketPdf(group);
+    const all = drawn.join('\n');
+    expect(all).toContain('8 People');                 // the admits column
+    expect(all).toContain('One scan admits all 8');    // under the QR
+  });
+
+  it('spells the rule out in the terms on the pass', async () => {
+    const { drawn } = captureText();
+    await buildTicketPdf(group);
+    expect(drawn.join('\n')).toMatch(/Group ticket: admits 8 people on one scan/);
+  });
+
+  it('carries exactly one QR, for the whole party', async () => {
+    const qr = vi.spyOn(QRCode, 'toDataURL');
+    await buildTicketPdf(group);
+    expect(qr.mock.calls).toHaveLength(1);
+    expect(qr.mock.calls[0][0]).toContain('tno=REGULAR-001');
+  });
+
+  it('shows a half-admitted group as still live, and says how far in it is', async () => {
+    const { drawn } = captureText();
+    await buildTicketPdf({
+      ...group,
+      tickets: [{ categoryName: 'REGULAR', ticketNumber: 'REGULAR-001', unitPrice: 875, groupSize: 8, admitted: 3, status: 'ISSUED' }],
+    });
+    const all = drawn.join('\n');
+    expect(all).toContain('3 OF 8 ADMITTED');
+    expect(all).not.toContain('VALID FOR ENTRY');
+  });
+
+  it('shows a fully admitted group as used up', async () => {
+    const { drawn } = captureText();
+    await buildTicketPdf({
+      ...group,
+      tickets: [{ categoryName: 'REGULAR', ticketNumber: 'REGULAR-001', unitPrice: 875, groupSize: 8, admitted: 8, status: 'CHECKED_IN' }],
+    });
+    expect(drawn.join('\n')).not.toContain('VALID FOR ENTRY');
+  });
+
+  it('prints an ordinary pass as one person, with no group wording', async () => {
+    const { drawn } = captureText();
+    await buildTicketPdf(base);
+    const all = drawn.join('\n');
+    expect(all).toContain('1 Person');
+    expect(all).toContain('One scan, one person');
+    expect(all).not.toMatch(/admits all/i);
+  });
+});
+
+describe('the seats a group pass holds, on the PDF', () => {
+  it('prints the range under the pass number', async () => {
+    const { drawn } = captureText();
+    await buildTicketPdf({
+      ...base,
+      tickets: [{
+        categoryName: 'REGULAR', ticketNumber: 'REGULAR-055', unitPrice: 875, groupSize: 5,
+        groupSeats: ['REGULAR-055', 'REGULAR-056', 'REGULAR-057', 'REGULAR-058', 'REGULAR-059'],
+      }],
+    });
+    const all = drawn.join('\n');
+    expect(all).toContain('SEATS REGULAR-055 – REGULAR-059');
+    // The big number stays the PASS number: that is what the gate and the box office key off.
+    expect(all).toContain('REGULAR-055');
+  });
+
+  it('lists the runs when a void left a gap, rather than claiming seats in between', async () => {
+    const { drawn } = captureText();
+    await buildTicketPdf({
+      ...base,
+      tickets: [{
+        categoryName: 'REGULAR', ticketNumber: 'REGULAR-055', unitPrice: 875, groupSize: 4,
+        groupSeats: ['REGULAR-055', 'REGULAR-056', 'REGULAR-057', 'REGULAR-061'],
+      }],
+    });
+    expect(drawn.join('\n')).toContain('SEATS REGULAR-055 – REGULAR-057, REGULAR-061');
+  });
+
+  it('prints no seat line on an ordinary pass', async () => {
+    const { drawn } = captureText();
+    await buildTicketPdf(base);
+    expect(drawn.join('\n')).not.toContain('SEATS');
+  });
+
+  it('prints none on a pass issued before the seats were recorded', async () => {
+    const { drawn } = captureText();
+    await buildTicketPdf({
+      ...base,
+      tickets: [{ categoryName: 'REGULAR', ticketNumber: 'REGULAR-055', unitPrice: 875, groupSize: 5 }],
+    });
+    expect(drawn.join('\n')).not.toContain('SEATS');
   });
 });

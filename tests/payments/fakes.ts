@@ -64,9 +64,15 @@ interface Reservation {
   expiresAt: number;
 }
 
+/** One row of ticket_numbers: who holds it, and what kind of seat it is. */
+export interface Seat {
+  res: string;
+  bundleRef?: string;
+  free?: boolean;
+}
+
 export interface WorldCategory {
   capacity: number | null;
-  groupSize: number;
   eventId: string;
   /** Numbers already printed on passes before this world started. */
   preHeld?: number;
@@ -84,15 +90,18 @@ export function makeWorld(
   initial: PaymentOrder[] = [makeOrder()],
   payments: GatewayPayment[] = [payment()],
   categories: Record<string, WorldCategory> = {
-    cat_vip: { capacity: 50, groupSize: 1, eventId: 'evt_1', preHeld: 10 },
-    cat_ga: { capacity: 100, groupSize: 1, eventId: 'evt_1', preHeld: 41 },
+    cat_vip: { capacity: 50, eventId: 'evt_1', preHeld: 10 },
+    cat_ga: { capacity: 100, eventId: 'evt_1', preHeld: 41 },
   },
 ) {
   const orders = new Map(initial.map((o) => [o.razorpay_order_id, { ...o }]));
   const bookings = new Map<string, BookingInsert & { id: string; status: string }>();
   const reservations = new Map<string, Reservation>();
-  /** categoryId -> number -> reservationId that holds it. The unique key of the real table. */
-  const numbers = new Map<string, Map<number, string>>();
+  /**
+   * categoryId -> number -> the seat, as ticket_numbers stores it. The number is the unique key
+   * of the real table; `bundleRef` and `free` are what the two per-account allowances count.
+   */
+  const numbers = new Map<string, Map<number, Seat>>();
   const loyalty: Record<string, number> = { user_1: 100 };
   const loyaltyHeld: Record<string, number> = {};
   const alerts: string[] = [];
@@ -102,8 +111,8 @@ export function makeWorld(
   let refundShouldFail = false;
 
   for (const [id, cat] of Object.entries(categories)) {
-    const m = new Map<number, string>();
-    for (let n = 1; n <= (cat.preHeld || 0); n++) m.set(n, `legacy-${id}`);
+    const m = new Map<number, Seat>();
+    for (let n = 1; n <= (cat.preHeld || 0); n++) m.set(n, { res: `legacy-${id}` });
     numbers.set(id, m);
     if (cat.preHeld) {
       reservations.set(`legacy-${id}`, {
@@ -117,7 +126,7 @@ export function makeWorld(
     }
   }
 
-  const held = (categoryId: string) => numbers.get(categoryId) ?? new Map<number, string>();
+  const held = (categoryId: string) => numbers.get(categoryId) ?? new Map<number, Seat>();
   /** Seats in use, which is what the `sold` column now reports. */
   const inUse = (categoryId: string) => held(categoryId).size;
 
@@ -137,7 +146,7 @@ export function makeWorld(
     if (reservations.has(req.reservationId)) {
       const mine: Allocation[] = [];
       for (const [categoryId, m] of numbers) {
-        const ns = [...m.entries()].filter(([, r]) => r === req.reservationId).map(([n]) => n).sort((a, b) => a - b);
+        const ns = [...m.entries()].filter(([, s]) => s.res === req.reservationId).map(([n]) => n).sort((a, b) => a - b);
         if (ns.length) mine.push({ categoryId, qty: ns.length, endSold: inUse(categoryId), numbers: ns });
       }
       return mine;
@@ -148,7 +157,7 @@ export function makeWorld(
     const eventId = categories[items[0].categoryId]?.eventId ?? null;
 
     // Everything below must either all happen or none of it; build up and only then commit.
-    const take: { categoryId: string; ns: number[] }[] = [];
+    const take: { categoryId: string; ns: number[]; bundleRef?: string; free?: boolean }[] = [];
     for (const i of [...items].sort((a, b) => a.categoryId.localeCompare(b.categoryId))) {
       const cat = categories[i.categoryId];
       if (!cat) throw new Error(`UNKNOWN_CATEGORY:${i.categoryId}`);
@@ -157,27 +166,28 @@ export function makeWorld(
       if (cat.capacity != null && m.size + i.qty > cat.capacity) throw new SoldOutError(i.categoryId);
       const ns: number[] = [];
       for (let n = 1; ns.length < i.qty; n++) if (!m.has(n)) ns.push(n);
-      take.push({ categoryId: i.categoryId, ns });
+      take.push({ categoryId: i.categoryId, ns, bundleRef: i.bundleRef, free: i.free === true });
     }
 
     // Per-account limits, counted over held AND issued, exactly like the SQL.
     if (req.userId && eventId) {
       let singles = 0;
-      let groups = 0;
-      const countFor = (categoryId: string, count: number) => {
-        if ((categories[categoryId]?.groupSize ?? 1) > 1) groups += count;
-        else singles += count;
+      const bundleRefs = new Set<string>();
+      const countSeat = (seat: Pick<Seat, 'bundleRef' | 'free'>) => {
+        if (seat.bundleRef) bundleRefs.add(seat.bundleRef);
+        else if (!seat.free) singles += 1;
       };
       for (const [categoryId, m] of numbers) {
         if (categories[categoryId]?.eventId !== eventId) continue;
-        for (const [, resId] of m) {
-          const r = reservations.get(resId);
-          if (r?.userId === req.userId) countFor(categoryId, 1);
+        for (const [, seat] of m) {
+          const r = reservations.get(seat.res);
+          if (r?.userId === req.userId) countSeat(seat);
         }
       }
-      for (const t of take) countFor(t.categoryId, t.ns.length);
+      for (const t of take) t.ns.forEach(() => countSeat(t));
       if (singles > req.maxSingle) throw new TicketLimitError('SINGLE', req.maxSingle);
-      if (groups > req.maxGroup) throw new TicketLimitError('GROUP', req.maxGroup);
+      const maxBundles = req.maxBundles ?? 2;
+      if (bundleRefs.size > maxBundles) throw new TicketLimitError('BUNDLES', maxBundles);
     }
 
     const points = Math.max(0, Math.floor(req.points || 0));
@@ -201,7 +211,7 @@ export function makeWorld(
     const out: Allocation[] = [];
     for (const t of take) {
       const m = held(t.categoryId);
-      t.ns.forEach((n) => m.set(n, req.reservationId));
+      t.ns.forEach((n) => m.set(n, { res: req.reservationId, bundleRef: t.bundleRef, free: t.free }));
       numbers.set(t.categoryId, m);
       out.push({ categoryId: t.categoryId, qty: t.ns.length, endSold: m.size, numbers: t.ns });
     }
@@ -226,8 +236,8 @@ export function makeWorld(
     if (!r || r.state === 'RELEASED') return 0;
     let freed = 0;
     for (const [, m] of numbers) {
-      for (const [n, resId] of [...m.entries()]) {
-        if (resId === reservationId) {
+      for (const [n, seat] of [...m.entries()]) {
+        if (seat.res === reservationId) {
           m.delete(n);
           freed++;
         }
@@ -364,7 +374,7 @@ export function makeWorld(
 export function checkout(
   world: ReturnType<typeof makeWorld>,
   order: PaymentOrder,
-  opts: { points?: number; maxSingle?: number; maxGroup?: number; ttlSeconds?: number } = {},
+  opts: { points?: number; maxSingle?: number; maxBundles?: number; ttlSeconds?: number } = {},
 ): string {
   const reservationId = `res_${order.razorpay_order_id}`;
   const allocations = world.reserve({
@@ -374,7 +384,6 @@ export function checkout(
     points: opts.points ?? order.points_to_redeem ?? 0,
     ttlSeconds: opts.ttlSeconds,
     maxSingle: opts.maxSingle ?? 7,
-    maxGroup: opts.maxGroup ?? 2,
   });
   const stored = world.orders.get(order.razorpay_order_id);
   if (stored) {

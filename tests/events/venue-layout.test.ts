@@ -27,8 +27,8 @@ import {
   type ZoneCategory,
 } from '@/lib/events/venue-layout';
 
-const cat = (id: string, price: number, capacity = 100, group_size = 1): ZoneCategory =>
-  ({ id, name: id.toUpperCase(), price, capacity, group_size });
+const cat = (id: string, price: number, capacity = 100): ZoneCategory =>
+  ({ id, name: id.toUpperCase(), price, capacity });
 
 describe('normalizeLayout', () => {
   it('fills in a sane grid when nothing is stored', () => {
@@ -169,10 +169,9 @@ describe('shareRows', () => {
     expect(ga).toBeGreaterThan(vip);
   });
 
-  it('counts a group pass as the people it admits', () => {
-    // 20 group passes of 10 is 200 people; 50 singles is 50. The group zone should be bigger.
-    const [grp, single] = shareRows([cat('grp', 500, 20, 10), cat('one', 200, 50, 1)], 12);
-    expect(grp).toBeGreaterThan(single);
+  it('gives the bigger share of the room to the bigger category', () => {
+    const [big, small] = shareRows([cat('big', 500, 200), cat('one', 200, 50)], 12);
+    expect(big).toBeGreaterThan(small);
   });
 
   it('copes with no categories', () => {

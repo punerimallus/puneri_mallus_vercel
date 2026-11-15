@@ -1,22 +1,23 @@
 import { getRequestUser } from '@/lib/admin';
 import { NextResponse } from 'next/server';
-import { razorpay, supabaseAdmin, getEventSnapshot, reserveForCheckout, releaseReservation } from '@/lib/payments/server';
+import { razorpay, supabaseAdmin, getEventSnapshot, reserveForCheckout, releaseReservation, claimCoupon, releaseCoupon } from '@/lib/payments/server';
 import {
   grossUpToPaise,
   martPlanPrice,
   membershipPrice,
   quoteEventCart,
-  MAX_GROUP_TICKETS_PER_ACCOUNT,
+  MAX_BUNDLES_PER_ACCOUNT,
   MAX_TICKETS_PER_ACCOUNT,
   TicketCategory,
 } from '@/lib/payments/pricing';
 import { CartLine, EventSnapshot, PaymentInputError, PaymentType } from '@/lib/payments/types';
+import { normalizeCode, type Coupon } from '@/lib/payments/coupons';
+import type { TicketBundle } from '@/lib/payments/pricing';
 import { HOLD_TTL_SECONDS, reservationMessage } from '@/lib/payments/inventory';
 import { asMarkerDb, checkSchema, SCHEMA_BEHIND_MESSAGE } from '@/lib/payments/schema-check';
 import { RATE_RULES, rateKey, rateLimit } from '@/lib/rate-limit';
 import { salesStatus } from '@/lib/events/sales';
 import { isOldEnough } from '@/lib/dob';
-import { groupSizeOf } from '@/lib/payments/groups';
 import { normalizeWhatsAppNumber, whatsappEnabled } from '@/lib/whatsapp';
 import { randomUUID } from 'crypto';
 
@@ -103,6 +104,9 @@ export async function POST(req: Request) {
     let eventSnapshot: EventSnapshot | null = null;
     let pointsApplied = 0;
     let allocations: unknown = null;
+    /** Set once a coupon has been claimed, so the catch below knows to give it back. */
+    let claimedCoupon: Coupon | null = null;
+    let couponDiscount = 0;
     // WhatsApp copy of the tickets: only when the buyer opted in, the feature is configured, and the profile has a valid mobile.
     // The number always comes from the verified profile phone, never from the request.
     const whatsappTo = body.whatsappOptIn === true && whatsappEnabled() ? normalizeWhatsAppNumber(profile?.phone_number) : null;
@@ -156,6 +160,13 @@ export async function POST(req: Request) {
       const { data: categories } = await db.from('event_ticket_categories').select('*').eq('event_id', eventId);
       if (!categories || categories.length === 0) throw new PaymentInputError('Categories not found', 404);
 
+      // Bundle offers, read whether or not the cart uses one: the quote needs them to price
+      // what was asked for and to refuse an id that is not on this event.
+      const { data: bundleOffers } = await db
+        .from('ticket_bundles')
+        .select('id, category_id, name, size, price, max_bundles, sold, active')
+        .eq('event_id', eventId);
+
       // A fast, friendly pre-check against what this account already has. The real limit is
       // enforced inside the reservation, which also counts passes being held by another open
       // checkout — two tabs can no longer both slip past it.
@@ -166,13 +177,34 @@ export async function POST(req: Request) {
         .eq('user_id', user.id);
       const heldTickets = (existingBookings || [])
         .filter((b) => b.status !== 'REFUNDED')
-        .flatMap((b) => (b.tickets_data || []) as { groupSize?: number; status?: string }[])
+        .flatMap((b) => (b.tickets_data || []) as { status?: string; free?: boolean; group?: boolean }[])
         .filter((t) => t.status !== 'REFUNDED');
-      const previouslyBoughtGroups = heldTickets.filter((t) => groupSizeOf(t.groupSize) > 1).length;
-      const previouslyBought = heldTickets.length - previouslyBoughtGroups;
+      // Counted exactly the way reserve_order_inventory counts it, and for the same reason:
+      // the cap is on what a buyer may BUY INDIVIDUALLY. A gift is not a purchase, and a group
+      // of eight is one decision on its own allowance, not eight personal passes. Counting
+      // either here would refuse a sale the database would happily have taken.
+      const previouslyBought = heldTickets.filter((t) => t.free !== true && t.group !== true).length;
 
       // Points already promised to another open checkout of theirs are not available here.
       const availablePoints = Math.max(0, (profile?.loyalty_points || 0) - (profile?.loyalty_points_held || 0));
+
+      // --- the coupon ---------------------------------------------------------------------
+      // Claimed BEFORE the quote, because the quote prices an offer and must only ever price
+      // one this buyer is actually entitled to. claim_coupon checks and increments the use
+      // under a row lock, so a ten-use code typed by forty people in the same minute is
+      // granted exactly ten times. The reservation id is generated here so the claim can be
+      // tied to it and handed back by the same paths that hand back seats.
+      reservationId = randomUUID();
+      const typedCode = normalizeCode(body.couponCode);
+      if (typedCode) {
+        claimedCoupon = await claimCoupon({
+          code: typedCode,
+          reservationId,
+          userId: user.id,
+          eventId,
+          email: receiptEmail,
+        });
+      }
 
       const quote = quoteEventCart({
         cart,
@@ -183,25 +215,61 @@ export async function POST(req: Request) {
         pointsToRedeem,
         loyaltyBalance: availablePoints,
         previouslyBought,
-        previouslyBoughtGroups,
+        coupon: claimedCoupon,
+        bundles: (bundleOffers || []) as TicketBundle[],
+        bundleCart: body.bundles,
       });
       lines = quote.lines;
       pointsApplied = quote.pointsApplied;
+      couponDiscount = quote.couponDiscount;
       basePrice = quote.total;
       receiptEmail = cleanEmail(body.email) || receiptEmail;
       if (!receiptEmail) throw new PaymentInputError('A valid email is required to deliver your passes.');
 
       // THE important change: take the seats, the ticket numbers and the points now, before the
       // buyer is sent to Razorpay. If this throws, nobody has been charged a paisa.
-      reservationId = randomUUID();
+      //
+      // Merged by category first. A coupon can add a free line in a category the buyer is
+      // already paying for, and the reservation expects one entry per category — two would be
+      // allocated correctly but reported as two allocations, which its own completeness check
+      // then reads as a short delivery and refuses.
+      // Individual seats merge per category; bundle units deliberately do not. Each unit
+      // carries its own reference so the seats it takes can be told apart afterwards, which is
+      // what keeps "seven singles" and "two bundles" as two separate allowances rather than
+      // one pool of fifteen.
+      //
+      // The reference is unique across reservations, not just within one: two checkouts each
+      // holding "unit 1" of the same offer would otherwise count as a single unit sold.
+      const wanted = new Map<string, number>();
+      const bundleItems: { categoryId: string; qty: number; bundleRef: string }[] = [];
+      const freeItems: { categoryId: string; qty: number; free: true }[] = [];
+      let unitSeq = 0;
+      for (const l of lines) {
+        if (l.bundleId) {
+          unitSeq += 1;
+          l.bundleRef = `${l.bundleId}:${reservationId}:${unitSeq}`;
+          bundleItems.push({ categoryId: l.categoryId, qty: l.qty, bundleRef: l.bundleRef });
+        } else if (l.free) {
+          // Kept out of the merge as well: a gift must reach the reservation flagged, or the
+          // seats it takes would be counted against the allowance it is meant to be exempt from.
+          freeItems.push({ categoryId: l.categoryId, qty: l.qty, free: true });
+        } else {
+          wanted.set(l.categoryId, (wanted.get(l.categoryId) ?? 0) + l.qty);
+        }
+      }
+
       allocations = await reserveForCheckout({
         reservationId,
         userId: user.id,
-        items: lines.map((l) => ({ categoryId: l.categoryId, qty: l.qty })),
+        items: [
+          ...[...wanted.entries()].map(([categoryId, qty]) => ({ categoryId, qty })),
+          ...bundleItems,
+          ...freeItems,
+        ],
         points: pointsApplied,
         ttlSeconds: HOLD_TTL_SECONDS,
         maxSingle: MAX_TICKETS_PER_ACCOUNT,
-        maxGroup: MAX_GROUP_TICKETS_PER_ACCOUNT,
+        maxBundles: MAX_BUNDLES_PER_ACCOUNT,
       });
     } else {
       // FOOTBALL registration no longer takes payment; anything else is not a product we sell.
@@ -216,7 +284,13 @@ export async function POST(req: Request) {
       currency: 'INR',
       receipt: `rcpt_${type}_${Date.now()}`.slice(0, 40),
       // Notes travel with every webhook, which helps when tracing a payment in the Razorpay dashboard.
-      notes: { paymentType: type, plan: martPlan || plan || 'NONE', userId: user.id, eventId: eventId || '' },
+      notes: {
+        paymentType: type,
+        plan: martPlan || plan || 'NONE',
+        userId: user.id,
+        eventId: eventId || '',
+        ...(claimedCoupon ? { coupon: claimedCoupon.code } : {}),
+      },
     });
 
     // The server's own record of what this order is for. Fulfilment reads this, never the browser.
@@ -242,8 +316,14 @@ export async function POST(req: Request) {
     const { error: insertErr } = await db.from('payment_orders').insert(orderRow);
     if (insertErr) {
       // Without this row we could not fulfil the payment, so don't let the user pay.
+      //
+      // THROWN, not returned. A return here leaves the try block without unwinding anything:
+      // the seats stay held and — worse — the coupon stays claimed, so the buyer retrying
+      // immediately is told their own code is already used, until the sweeper catches up a
+      // quarter of an hour later. Throwing hands it to the catch below, which gives back the
+      // seats and the coupon at once and still says this to the buyer.
       console.error('PAYMENT_ORDER_RECORD_ERROR:', insertErr);
-      return NextResponse.json({ error: 'Could not start checkout. Please try again.' }, { status: 500 });
+      throw new PaymentInputError('Could not start checkout. Please try again.', 500);
     }
 
     reservationId = null; // Handed over to the order; no longer ours to roll back.
@@ -260,6 +340,11 @@ export async function POST(req: Request) {
     // or an abandoned attempt would hold inventory until the sweeper caught up.
     if (reservationId) {
       await releaseReservation(reservationId).catch((e) => console.error('RESERVATION_ROLLBACK_FAILED:', e));
+      // Separately, and deliberately. release_order_inventory returns early when there is no
+      // reservation row to release — which is exactly the window between claiming the coupon
+      // and creating the reservation, so relying on it alone would leak a use on every failed
+      // quote. Calling both is harmless: releasing a coupon twice is a no-op.
+      await releaseCoupon(reservationId).catch((e) => console.error('COUPON_ROLLBACK_FAILED:', e));
     }
 
     // Sold out / per-account limit / points held elsewhere: all expected, all before payment.

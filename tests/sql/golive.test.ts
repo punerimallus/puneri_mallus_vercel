@@ -531,21 +531,24 @@ describe('the gate', () => {
     expect(await f.val(`select count(*) from scan_log where booking_id = $1`, [booking])).toBe(1);
   });
 
-  it('adds up a group pass by heads, not by passes', () => {
+  it('counts a party of five as five passes and five people', () => {
     const att = bookingAttendance([
-      { categoryName: 'GROUP', ticketNumber: 'GRP-001', status: 'ISSUED', groupSize: 5, admitted: 3 },
+      { categoryName: 'GENERAL', ticketNumber: 'GEN-001', status: 'CHECKED_IN' },
+      { categoryName: 'GENERAL', ticketNumber: 'GEN-002', status: 'CHECKED_IN' },
+      { categoryName: 'GENERAL', ticketNumber: 'GEN-003', status: 'CHECKED_IN' },
+      { categoryName: 'GENERAL', ticketNumber: 'GEN-004', status: 'ISSUED' },
+      { categoryName: 'GENERAL', ticketNumber: 'GEN-005', status: 'ISSUED' },
     ]);
-    expect(att).toMatchObject({ passes: 1, people: 5, admitted: 3, remaining: 2, passesScanned: 0 });
+    expect(att).toMatchObject({ passes: 5, people: 5, admitted: 3, remaining: 2, passesScanned: 3 });
     expect(att.state).toBe('PARTLY_IN');
   });
 
-  it('counts a checked-in group as everybody in, even with no running tally', () => {
-    // CHECKED_IN on a group with no `admitted` recorded is legacy data; reading it as one
-    // person would under-report the room.
+  it('reads a pass left half-admitted by the old group model as simply used', () => {
+    // A row could say "3 of 5 in". The seat admits one person now, and the pass is spent.
     const att = bookingAttendance([
-      { categoryName: 'GROUP', ticketNumber: 'GRP-001', status: 'CHECKED_IN', groupSize: 5 },
+      { categoryName: 'GENERAL', ticketNumber: 'GEN-001', status: 'ISSUED', admitted: 3 },
     ]);
-    expect(att).toMatchObject({ people: 5, admitted: 5, remaining: 0 });
+    expect(att).toMatchObject({ passes: 1, people: 1, admitted: 1, remaining: 0, passesScanned: 1 });
   });
 
   it('names who let each person in', () => {

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { buildReceipt, buildScanUrl, formatAmount, formatEventDate, formatIst, formatRupees, pdfSafe } from '@/lib/payments/format';
-import { pricePerPerson } from '@/lib/payments/groups';
 import { grossUpToPaise } from '@/lib/payments/pricing';
 
 describe('formatEventDate', () => {
@@ -52,6 +51,30 @@ describe('buildReceipt', () => {
       { name: 'General', qty: 1, unitPrice: 200, amount: 200 },
     ]);
     expect(r.subtotal).toBe(1200);
+  });
+
+  it("keeps a coupon's free pass on its own line, named after the code", () => {
+    // Same category, same price of nothing: without the code in the key, two gifts from two
+    // different coupons would merge, and the buyer would never see which code paid for what.
+    const r = buildReceipt([
+      vip(500),
+      { categoryName: 'VIP', unitPrice: 0, free: true, couponCode: 'TRIBE20' },
+      { categoryName: 'VIP', unitPrice: 0, free: true, couponCode: 'FOUNDER' },
+    ], 0);
+    expect(r.lines).toEqual([
+      { name: 'VIP', qty: 1, unitPrice: 500, amount: 500 },
+      { name: 'VIP (free - TRIBE20)', qty: 1, unitPrice: 0, amount: 0 },
+      { name: 'VIP (free - FOUNDER)', qty: 1, unitPrice: 0, amount: 0 },
+    ]);
+    expect(r.subtotal).toBe(500);
+  });
+
+  it('still groups several passes from the same coupon together', () => {
+    const r = buildReceipt([
+      { categoryName: 'VIP', unitPrice: 0, free: true, couponCode: 'TRIBE20' },
+      { categoryName: 'VIP', unitPrice: 0, free: true, couponCode: 'TRIBE20' },
+    ], 0);
+    expect(r.lines).toEqual([{ name: 'VIP (free - TRIBE20)', qty: 2, unitPrice: 0, amount: 0 }]);
   });
 
   it('derives the total with the same formula as checkout when the charge is unknown', () => {
@@ -108,14 +131,5 @@ describe('formatAmount', () => {
     expect(formatAmount(0)).toBe('0');
     expect(formatAmount(NaN)).toBe('0');
     expect(formatAmount(Infinity)).toBe('0');
-  });
-});
-
-describe('per-person price, as the card shows it', () => {
-  it('reads properly for the prices actually configured', () => {
-    // Rs.2 group of 5 -> the case in the screenshot.
-    expect(`₹${formatAmount(pricePerPerson(2, 5))} each`).toBe('₹0.40 each');
-    expect(`₹${formatAmount(pricePerPerson(2000, 5))} each`).toBe('₹400 each');
-    expect(`₹${formatAmount(pricePerPerson(500, 3))} each`).toBe('₹166.67 each');
   });
 });

@@ -187,9 +187,9 @@ describe('refunds undo loyalty points', () => {
 });
 
 describe('everything that counts seats uses seats in use', () => {
-  const cats = (over: Record<string, unknown> = {}) => [{ id: 'c1', name: 'VIP', prefix: 'VIP', price: 500, capacity: 100, sold: 60, released: 0, group_size: 1, active: true, ...over }];
+  const cats = (over: Record<string, unknown> = {}) => [{ id: 'c1', name: 'VIP', prefix: 'VIP', price: 500, capacity: 100, sold: 60, released: 0, active: true, ...over }];
   const quote = (qty: number, over: Record<string, unknown> = {}) =>
-    quoteEventCart({ cart: { c1: qty }, categories: cats(over), isLoggedIn: true, isMember: false, memberDiscountPercent: 0, pointsToRedeem: 0, loyaltyBalance: 0, previouslyBought: 0, previouslyBoughtGroups: 0 });
+    quoteEventCart({ cart: { c1: qty }, categories: cats(over), isLoggedIn: true, isMember: false, memberDiscountPercent: 0, pointsToRedeem: 0, loyaltyBalance: 0, previouslyBought: 0 });
 
   it('checkout sees freed seats as available', () => {
     expect(quote(3).lines[0].qty).toBe(3);
@@ -263,7 +263,7 @@ describe('ticket numbers: lowest free number, never a duplicate', () => {
     const w = makeWorld(
       orders,
       orders.map((o, i) => payment({ id: `p${i + 1}`, order_id: o.razorpay_order_id })),
-      { cat_vip: { capacity: 50, groupSize: 1, eventId: 'evt_1' }, cat_ga: { capacity: 100, groupSize: 1, eventId: 'evt_1' } },
+      { cat_vip: { capacity: 50, eventId: 'evt_1' }, cat_ga: { capacity: 100, eventId: 'evt_1' } },
     );
     const numberOf = async (i: number) => {
       const r = await checkoutAndBuy(w, `o${i}`, `p${i}`);

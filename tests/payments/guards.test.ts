@@ -175,7 +175,7 @@ describe('reservation failures become things we can say to a buyer', () => {
     expect(translateInventoryError('SOLD_OUT:FRONT ROW')).toBeInstanceOf(SoldOutError);
     expect((translateInventoryError('SOLD_OUT:FRONT ROW') as SoldOutError).categoryName).toBe('FRONT ROW');
     expect(translateInventoryError('LIMIT_SINGLE:7')).toBeInstanceOf(TicketLimitError);
-    expect(translateInventoryError('LIMIT_GROUP:2')).toBeInstanceOf(TicketLimitError);
+    expect(translateInventoryError('LIMIT_BUNDLES:2')).toBeInstanceOf(TicketLimitError);
     expect(translateInventoryError('POINTS_UNAVAILABLE:40')).toBeInstanceOf(PointsUnavailableError);
     expect(translateInventoryError('RESERVATION_LOST:res_1')).toBeInstanceOf(ReservationLostError);
   });
@@ -183,7 +183,7 @@ describe('reservation failures become things we can say to a buyer', () => {
   it('explains sold out, the per-account cap and held points in plain words', () => {
     expect(reservationMessage(new SoldOutError('VIP'))?.message).toMatch(/just sold out.*Nothing has been charged/i);
     expect(reservationMessage(new TicketLimitError('SINGLE', 7))?.message).toMatch(/at most 7 passes/i);
-    expect(reservationMessage(new TicketLimitError('GROUP', 2))?.message).toMatch(/at most 2 group passes/i);
+    expect(reservationMessage(new TicketLimitError('BUNDLES', 2))?.message).toMatch(/at most 2 group tickets/i);
     expect(reservationMessage(new PointsUnavailableError(40))?.message).toMatch(/Only 40 points/i);
     expect(reservationMessage(new PointsUnavailableError(0))?.message).toMatch(/held by another checkout/i);
     expect(reservationMessage(new Error('something else'))).toBeNull();
@@ -279,7 +279,7 @@ describe('a reservation that did not fully succeed never reaches payment', () =>
   const req = {
     reservationId: 'r1', userId: 'u1',
     items: [{ categoryId: 'cat_a', qty: 2 }, { categoryId: 'cat_b', qty: 1 }],
-    maxSingle: 7, maxGroup: 2,
+    maxSingle: 7,
   };
 
   it('accepts a result that matches the cart exactly', async () => {

@@ -246,7 +246,6 @@ export interface ZoneCategory {
   capacity?: number | null;
   sold?: number | null;
   released?: number | null;
-  group_size?: number | null;
 }
 
 export type ZoneState = 'available' | 'filling' | 'sold-out';
@@ -293,7 +292,7 @@ export function shareRows(cats: ZoneCategory[], total: number): number[] {
   const n = cats.length;
   if (n === 0) return [];
   if (total <= n) return cats.map(() => 1);
-  const weights = cats.map((c) => Math.max(1, Number(c.capacity) || 1) * Math.max(1, Number(c.group_size) || 1));
+  const weights = cats.map((c) => Math.max(1, Number(c.capacity) || 1));
   const sum = weights.reduce((a, b) => a + b, 0);
   const spare = total - n;
   const extra = weights.map((w) => Math.floor((w / sum) * spare));

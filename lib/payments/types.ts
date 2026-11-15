@@ -23,14 +23,21 @@ export interface CartLine {
   prefix: string;
   qty: number;
   unitPrice: number; // rupees, after member discount, before gateway fee
-  /** People admitted by one ticket of this category. Absent means 1. */
-  groupSize?: number;
   /**
    * How many digits a pass number is padded to, fixed at checkout from the category's capacity
    * so every pass in a category is the same width: GEN-001 at capacity 100, GEN-0001 at 1000.
    * Absent means three.
    */
   numberWidth?: number;
+  /** A line added by a coupon, priced at zero. See lib/payments/coupons.ts. */
+  free?: boolean;
+  /** One unit of this bundle offer. Set only on bundle lines. */
+  bundleId?: string;
+  bundleName?: string;
+  /** Stamped on the seats this unit takes, so the two account allowances stay apart. */
+  bundleRef?: string;
+  /** The coupon that added it. */
+  couponCode?: string;
 }
 
 export interface EventSnapshot {
@@ -52,8 +59,32 @@ export interface IssuedTicket {
   categoryName: string;
   ticketNumber: string;
   status: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED';
-  /** Only stored for group tickets (more than one person). Absent means 1. */
+  /**
+   * Given away by a coupon rather than paid for.
+   *
+   * Carried on the pass itself, not inferred from the price, because the price is looked up by
+   * category and a coupon puts a free pass in the SAME category as the paid ones — one lookup,
+   * two answers. The flag is the only thing that can tell them apart afterwards, on the
+   * receipt, on the PDF and in the box office.
+   */
+  free?: boolean;
+  /** Bought as part of a group ticket, and which one. Counted on the group allowance, not the individual one. */
+  group?: boolean;
+  groupName?: string;
+  /** People this one pass admits at the gate. Absent means one. */
   groupSize?: number;
+  /**
+   * Every seat this group pass holds, by pass number.
+   *
+   * A group of five takes REGULAR-055 to REGULAR-059 but prints ONE pass, numbered after the
+   * first of them. Without this the buyer's PDF shows a single number for five seats they paid
+   * for, and nothing anywhere tells them which five — so the pass reads as one ticket. The
+   * numbers are recorded rather than derived because the allocator takes the lowest FREE seats,
+   * which after a void or a refund are not always consecutive.
+   */
+  groupSeats?: string[];
+  /** The coupon that gave it, for the box office. Only set on a free pass. */
+  couponCode?: string;
 }
 
 export interface Allocation {
@@ -141,7 +172,7 @@ export class ReservationLostError extends Error {
 
 /** The buyer already holds as many passes for this event as the rules allow. */
 export class TicketLimitError extends Error {
-  constructor(public kind: 'SINGLE' | 'GROUP', public max: number) {
+  constructor(public kind: 'SINGLE' | 'BUNDLES', public max: number) {
     super(`LIMIT_${kind}:${max}`);
     this.name = 'TicketLimitError';
   }

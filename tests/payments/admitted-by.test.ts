@@ -17,7 +17,7 @@ const scan = (over: Partial<ScanLogRow> = {}): ScanLogRow => ({
 describe('admissions', () => {
   it('reads the rows the gate wrote', () => {
     expect(admissions([scan({ admitted: 3, at: '2026-10-30T14:05:00.000Z' })])).toEqual([
-      { ticketNumber: 'GRP001', admitted: 3, by: 'volunteer@example.com', role: 'SCANNER', at: '2026-10-30T14:05:00.000Z' },
+      { ticketNumber: 'GRP001', admitted: 3, by: 'volunteer@example.com', role: 'SCANNER', at: '2026-10-30T14:05:00.000Z', manual: false },
     ]);
   });
 
@@ -80,7 +80,7 @@ describe('admittedBy', () => {
       scan({ admitted: 3, actor_email: 'anna@x.com', at: '2026-10-30T14:30:00.000Z' }),
     ];
     expect(admittedBy(rows)).toEqual([
-      { by: 'anna@x.com', role: 'SCANNER', admitted: 5, at: '2026-10-30T14:30:00.000Z' },
+      { by: 'anna@x.com', role: 'SCANNER', admitted: 5, at: '2026-10-30T14:30:00.000Z', manual: false },
     ]);
   });
 
@@ -117,8 +117,8 @@ describe('admittedBy', () => {
       { booking_id: '0ab8e020', ticket_number: 'GEN-001', admitted: 1, action: 'ADMIT', actor_email: 'rohitanish86@gmail.com', actor_role: 'ADMIN', at: '2026-10-28 09:49:51.7331+00' } as ScanLogRow,
     ];
     expect(admittedBy(rows)).toEqual([
-      { by: '9307658864', role: 'SCANNER', admitted: 1, at: '2026-10-28 09:55:25.274327+00' },
-      { by: 'rohitanish86@gmail.com', role: 'ADMIN', admitted: 1, at: '2026-10-28 09:49:51.7331+00' },
+      { by: '9307658864', role: 'SCANNER', admitted: 1, at: '2026-10-28 09:55:25.274327+00', manual: false },
+      { by: 'rohitanish86@gmail.com', role: 'ADMIN', admitted: 1, at: '2026-10-28 09:49:51.7331+00', manual: false },
     ]);
   });
 
@@ -137,6 +137,6 @@ describe('admittedBy', () => {
       scan({ admitted: 1, actor_email: '8669865623@punerimallus.com', at: '2026-10-30T14:00:00.000Z' }),
       scan({ admitted: 1, actor_email: '8669865623@punerimallus.com', at: '2026-10-30T14:01:00.000Z' }),
     ];
-    expect(admittedBy(rows)).toEqual([{ by: '8669865623', role: 'SCANNER', admitted: 2, at: '2026-10-30T14:01:00.000Z' }]);
+    expect(admittedBy(rows)).toEqual([{ by: '8669865623', role: 'SCANNER', admitted: 2, at: '2026-10-30T14:01:00.000Z', manual: false }]);
   });
 });

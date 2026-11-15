@@ -13,7 +13,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // than quietly writing over the other. There is no acceptable third outcome where the guest is
 // recorded as admitted on a booking that no longer exists, or where the seat is freed twice.
 
-interface Pass { categoryId?: string; ticketNumber: string; status?: string; groupSize?: number; admitted?: number }
+interface Pass { categoryId?: string; ticketNumber: string; status?: string; admitted?: number }
 interface Booking {
   id: string;
   event_id: string;
@@ -392,7 +392,7 @@ describe('a group pass part-way through the door', () => {
     world.bookings.set(id, {
       id, event_id: 'evt_tonight', email: 'g@x.com', source: 'COMP', status: 'CONFIRMED',
       scan_version: 0,
-      tickets_data: [{ categoryId: 'cat1', ticketNumber: 'GRP-001', status: 'CHECKED_IN', groupSize: 5 }],
+      tickets_data: [{ categoryId: 'cat1', ticketNumber: 'GRP-001', status: 'CHECKED_IN' }],
     });
     world.grants.set(id, { guest_name: 'Family' });
     world.numbers.set('cat1:1', 'comp_abc');
@@ -409,7 +409,7 @@ describe('a group pass part-way through the door', () => {
     world.bookings.set(id, {
       id, event_id: 'evt_tonight', email: 'g@x.com', source: 'COMP', status: 'CONFIRMED',
       scan_version: 0,
-      tickets_data: [{ categoryId: 'cat1', ticketNumber: 'GRP-001', status: 'ISSUED', groupSize: 5, admitted: 2 }],
+      tickets_data: [{ categoryId: 'cat1', ticketNumber: 'GRP-001', status: 'ISSUED', admitted: 2 }],
     });
     world.grants.set(id, { guest_name: 'Family' });
     world.numbers.set('cat1:1', 'comp_abc');
@@ -424,7 +424,7 @@ describe('a group pass part-way through the door', () => {
     world.bookings.set(id, {
       id, event_id: 'evt_tonight', email: 'g@x.com', source: 'COMP', status: 'CONFIRMED',
       scan_version: 0,
-      tickets_data: [{ categoryId: 'cat1', ticketNumber: 'GRP-001', status: 'ISSUED', groupSize: 5, admitted: 2 }],
+      tickets_data: [{ categoryId: 'cat1', ticketNumber: 'GRP-001', status: 'ISSUED', admitted: 2 }],
     });
     world.grants.set(id, { guest_name: 'Family' });
     world.numbers.set('cat1:1', 'comp_abc');

@@ -11,7 +11,6 @@ import { useEffect, useState } from 'react';
 import { DoorOpen, Gift, Loader2, Mail, Plus, Send, Ticket, Trash2, UserPlus } from 'lucide-react';
 import { useAlert } from '@/context/AlertContext';
 import { seatsLeft } from '@/lib/payments/seats';
-import { groupSizeOf, isGroup } from '@/lib/payments/groups';
 import { ACCESS_PASS, COMP_REASONS, MAX_COMP_PASSES, MAX_NOTE_LENGTH, isAccessPass } from '@/lib/payments/comp';
 import { formatAmount } from '@/lib/payments/format';
 
@@ -99,7 +98,7 @@ export default function CompPassIssuer({ eventId, categories, grants, onIssued }
   const sellable = categories.filter((c) => c.active !== false);
   const accessPass = categories.find((c) => isAccessPass(c));
   const chosen = Object.values(items).reduce((a, b) => a + b, 0);
-  const admits = sellable.reduce((n, c) => n + (items[c.id] || 0) * groupSizeOf(c.group_size), 0);
+  const admits = sellable.reduce((n, c) => n + (items[c.id] || 0), 0);
   const faceValue = sellable.reduce((n, c) => n + (items[c.id] || 0) * (Number(c.price) || 0), 0);
 
   const bump = (cat: any, delta: number) => {
@@ -270,7 +269,6 @@ export default function CompPassIssuer({ eventId, categories, grants, onIssued }
                     </p>
                     <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 mt-1">
                       ₹{formatAmount(cat.price)}
-                      {isGroup(cat.group_size) ? ` · admits ${groupSizeOf(cat.group_size)}` : ''}
                       {left !== null ? ` · ${left} left` : ''}
                     </p>
                   </div>

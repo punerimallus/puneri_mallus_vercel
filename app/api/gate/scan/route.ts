@@ -49,11 +49,10 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const { bookingId, ticketNumber, sig } = body as { bookingId?: string; ticketNumber?: string; sig?: string };
     const action = body.action === 'lookup' ? 'lookup' : 'admit';
+    const count = body.count === undefined || body.count === null ? undefined : Number(body.count);
     if (!bookingId || !ticketNumber || typeof bookingId !== 'string' || typeof ticketNumber !== 'string') {
       return NextResponse.json({ error: 'Missing scan data' }, { status: 400 });
     }
-    const count = body.count === undefined || body.count === null ? undefined : Number(body.count);
-
     // Is this QR really ours?
     const signature = verifyTicketSignature(bookingId, ticketNumber, sig);
     if (signature === 'INVALID') {

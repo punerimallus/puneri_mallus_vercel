@@ -23,11 +23,12 @@ export const HOLD_TTL_SECONDS = 15 * 60;
 export interface ReserveRequest {
   reservationId: string;
   userId: string | null;
-  items: { categoryId: string; qty: number }[];
+  items: { categoryId: string; qty: number; bundleRef?: string; free?: boolean }[];
   points?: number;
   ttlSeconds?: number;
   maxSingle: number;
-  maxGroup: number;
+  /** Bundle units one account may hold. Defaults to the database's own 2 when not given. */
+  maxBundles?: number;
 }
 
 export interface InventoryDb {
@@ -46,8 +47,8 @@ export function translateInventoryError(message: string): Error {
   const single = /LIMIT_SINGLE:(\d+)/.exec(message);
   if (single) return new TicketLimitError('SINGLE', Number(single[1]));
 
-  const group = /LIMIT_GROUP:(\d+)/.exec(message);
-  if (group) return new TicketLimitError('GROUP', Number(group[1]));
+  const bundles = /LIMIT_BUNDLES:(\d+)/.exec(message);
+  if (bundles) return new TicketLimitError('BUNDLES', Number(bundles[1]));
 
   const points = /POINTS_UNAVAILABLE:(\d+)/.exec(message);
   if (points) return new PointsUnavailableError(Number(points[1]));
@@ -68,9 +69,13 @@ export function reservationMessage(e: unknown): { message: string; status: numbe
     return { message: `"${e.categoryName}" just sold out. Nothing has been charged.`, status: 409 };
   }
   if (e instanceof TicketLimitError) {
-    return e.kind === 'SINGLE'
-      ? { message: `You can hold at most ${e.max} passes for this event on one account.`, status: 409 }
-      : { message: `You can hold at most ${e.max} group passes for this event on one account.`, status: 409 };
+    if (e.kind === 'BUNDLES') {
+      return {
+        message: `You can buy at most ${e.max} group ticket${e.max === 1 ? '' : 's'} for this event on one account. Individual tickets are counted separately.`,
+        status: 409,
+      };
+    }
+    return { message: `You can hold at most ${e.max} passes for this event on one account.`, status: 409 };
   }
   if (e instanceof PointsUnavailableError) {
     return {
@@ -95,7 +100,7 @@ export async function reserveInventory(db: InventoryDb, req: ReserveRequest): Pr
     p_points: Math.max(0, Math.floor(req.points || 0)),
     p_ttl_seconds: req.ttlSeconds ?? HOLD_TTL_SECONDS,
     p_max_single: req.maxSingle,
-    p_max_group: req.maxGroup,
+    p_max_bundles: req.maxBundles ?? 2,
   });
   if (error) throw translateInventoryError(`${error.message}`);
 
@@ -104,15 +109,43 @@ export async function reserveInventory(db: InventoryDb, req: ReserveRequest): Pr
   // to Razorpay, so the sale is refused rather than taken and then refunded.
   const allocations = (data || []) as Allocation[];
   const wanted = req.items.filter((i) => i.qty > 0);
-  if (allocations.length !== wanted.length) {
-    throw new Error(`RESERVATION_INCOMPLETE: asked for ${wanted.length} categories, got ${allocations.length}`);
+
+  // Counted per CATEGORY, not per item.
+  //
+  // One item used to mean one category, so each could be matched to its allocation by id. A
+  // bundle unit and a coupon's free pass broke that: both are separate items in the SAME
+  // category, so the second one found the first one's allocation, compared its 1 seat against
+  // the other's 8, and threw RESERVATION_INCOMPLETE — which the order route could only report
+  // as "Failed to create order", after the seats had already been taken.
+  const totals = (pairs: { categoryId: string; n: number }[]) => {
+    const m = new Map<string, number>();
+    for (const p of pairs) m.set(p.categoryId, (m.get(p.categoryId) ?? 0) + p.n);
+    return m;
+  };
+  const want = totals(wanted.map((i) => ({ categoryId: String(i.categoryId), n: i.qty })));
+  const got = totals(allocations.map((a) => ({
+    categoryId: String(a.categoryId),
+    n: Array.isArray(a.numbers) ? a.numbers.length : 0,
+  })));
+
+  for (const [categoryId, qty] of want) {
+    const delivered = got.get(categoryId) ?? 0;
+    if (delivered !== qty) {
+      throw new Error(`RESERVATION_INCOMPLETE: ${categoryId} wanted ${qty}, got ${delivered}`);
+    }
   }
-  for (const want of wanted) {
-    const got = allocations.find((a) => String(a.categoryId) === String(want.categoryId));
-    if (!got || !Array.isArray(got.numbers) || got.numbers.length !== want.qty) {
-      throw new Error(
-        `RESERVATION_INCOMPLETE: ${want.categoryId} wanted ${want.qty}, got ${got?.numbers?.length ?? 0}`,
-      );
+  for (const categoryId of got.keys()) {
+    if (!want.has(categoryId)) throw new Error(`RESERVATION_UNEXPECTED: ${categoryId} was not asked for`);
+  }
+
+  // No seat may appear twice across the allocations. Cheap to check and the one mistake that
+  // would hand two buyers the same pass number.
+  const seen = new Set<string>();
+  for (const a of allocations) {
+    for (const n of a.numbers ?? []) {
+      const seat = `${a.categoryId}:${n}`;
+      if (seen.has(seat)) throw new Error(`RESERVATION_DUPLICATE: ${seat} allocated twice`);
+      seen.add(seat);
     }
   }
   return allocations;

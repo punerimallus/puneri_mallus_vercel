@@ -16,12 +16,12 @@ import {
 import { BookingInsert, FulfilmentDeps, fulfilOrder } from './fulfil';
 import { DeliveryDeps, DeliveryOptions, deliverOrderEmail } from './delivery';
 import { nextMartExpiry } from './pricing';
-import { groupSizeOf } from './groups';
 import { whatsappConfig, whatsappEnabled, sendTicketOnWhatsApp, maskNumber } from '@/lib/whatsapp';
 import { formatEventDate } from './format';
-import { progressOf } from './scan';
+import { groupSizeOf, progressOf } from './scan';
 import { fetchLogoBase64, generateTicketPdf } from './ticket-pdf';
-import { EventSnapshot, FulfilmentSource, GatewayPayment, OrderStatus, PaymentOrder } from './types';
+import { EventSnapshot, FulfilmentSource, GatewayPayment, OrderStatus, PaymentInputError, PaymentOrder } from './types';
+import { couponError, type Coupon } from './coupons';
 import { confirmInventory, expireStaleHolds, releaseInventory, reserveInventory, ReserveRequest } from './inventory';
 import { signTicket } from './ticket-signature';
 import { buildScanUrl } from './format';
@@ -119,6 +119,61 @@ export async function getEventSnapshot(eventId: string): Promise<EventSnapshot |
 }
 
 const log = (message: string, extra?: unknown) => console.error(`[payments] ${message}`, extra ?? '');
+
+/**
+ * Claim a coupon for this checkout.
+ *
+ * The usage cap lives in the database and is checked and incremented under a row lock, so a
+ * ten-use code typed by forty people in the same minute is granted exactly ten times. Anything
+ * the function raises is turned into a sentence the buyer can act on; a raise this layer does
+ * not recognise is a real fault and is left alone rather than dressed up as a bad code.
+ */
+export async function claimCoupon(req: {
+  code: string;
+  reservationId: string;
+  userId: string | null;
+  eventId: string;
+  email?: string | null;
+}): Promise<Coupon> {
+  const { data, error } = await supabaseAdmin().rpc('claim_coupon', {
+    p_code: req.code,
+    p_reservation_id: req.reservationId,
+    p_user_id: req.userId,
+    p_event_id: req.eventId,
+    p_email: req.email ?? null,
+  });
+  if (error) {
+    const friendly = couponError(error.message);
+    if (friendly) throw friendly;
+    throw new Error(error.message);
+  }
+  if (!data) throw new PaymentInputError('That coupon code is not recognised.', 404);
+  return data as Coupon;
+}
+
+/** Hand a claimed coupon back. Safe from any state and safe to call more than once. */
+export async function releaseCoupon(reservationId: string): Promise<boolean> {
+  const { data, error } = await supabaseAdmin().rpc('release_coupon', { p_reservation_id: reservationId });
+  if (error) throw new Error(error.message);
+  return data === true;
+}
+
+/** The payment landed: tie the claim to the booking and record what it actually gave away. */
+export async function confirmCoupon(
+  reservationId: string,
+  bookingId: string,
+  discountAmount: number,
+  freeNumbers: string[],
+): Promise<boolean> {
+  const { data, error } = await supabaseAdmin().rpc('confirm_coupon', {
+    p_reservation_id: reservationId,
+    p_booking_id: bookingId,
+    p_discount_amount: discountAmount,
+    p_free_numbers: freeNumbers,
+  });
+  if (error) throw new Error(error.message);
+  return data === true;
+}
 
 /** Reserve seats, numbers and points for a checkout. Sweeps expired holds first, in its own transaction. */
 export async function reserveForCheckout(req: ReserveRequest) {
@@ -354,6 +409,10 @@ export const fulfilmentDeps: FulfilmentDeps = {
     if (ledgerErr) throw new Error(ledgerErr.message);
   },
 
+  async confirmCoupon(reservationId, bookingId, discount, freeNumbers) {
+    return confirmCoupon(reservationId, bookingId, discount, freeNumbers);
+  },
+
   async alertAdmin(subject, body) {
     await sendAdminPaymentAlert(subject, body);
   },
@@ -365,7 +424,7 @@ export const fulfilmentDeps: FulfilmentDeps = {
 async function buildAndSendTickets(
   bookingId: string,
   to: string,
-  tickets: { categoryName: string; ticketNumber: string; unitPrice: number; groupSize?: number }[],
+  tickets: { categoryName: string; ticketNumber: string; unitPrice: number; groupSize?: number; groupSeats?: string[]; free?: boolean; couponCode?: string }[],
   event: EventSnapshot | null,
   pointsApplied: number,
   totalAmount: number,
@@ -395,13 +454,17 @@ export const deliveryDeps: DeliveryDeps = {
   async sendTicketEmail(order, to) {
     const booking = (await must(
       supabaseAdmin().from('ticket_bookings').select('id, tickets_data').eq('id', order.booking_id).single(),
-    )) as { id: string; tickets_data: { categoryId?: string; categoryName: string; ticketNumber: string; groupSize?: number }[] };
+    )) as { id: string; tickets_data: { categoryId?: string; categoryName: string; ticketNumber: string; groupSize?: number; groupSeats?: string[]; free?: boolean; couponCode?: string }[] };
     // By category id first, name only as a fallback, so a renamed category cannot zero a price.
     const byId = new Map((order.cart || []).map((l) => [l.categoryId, l.unitPrice]));
     const byName = new Map((order.cart || []).map((l) => [l.name, l.unitPrice]));
     const tickets = (booking.tickets_data || []).map((t) => ({
       ...t,
-      unitPrice: (t.categoryId !== undefined ? byId.get(t.categoryId) : undefined) ?? byName.get(t.categoryName) ?? 0,
+      // Free first: a coupon's pass shares its category with the paid ones, so the price
+      // lookup below cannot distinguish them and would charge for a gift.
+      unitPrice: (t as { free?: boolean }).free
+        ? 0
+        : (t.categoryId !== undefined ? byId.get(t.categoryId) : undefined) ?? byName.get(t.categoryName) ?? 0,
     }));
     await buildAndSendTickets(booking.id, to, tickets, order.event_snapshot, order.points_to_redeem, order.base_amount, {
       orderId: order.razorpay_order_id,
@@ -512,7 +575,7 @@ export async function resendBooking(bookingId: string, opts: { overrideEmail?: s
     status?: string;
     last_emailed_at?: string | null;
     email_attempts?: number;
-    tickets_data: { categoryId?: string; categoryName: string; ticketNumber: string; groupSize?: number }[];
+    tickets_data: { categoryId?: string; categoryName: string; ticketNumber: string }[];
   } | null;
   if (!booking) return { status: 'NOT_READY' as const };
   if (booking.status === 'REFUNDED') return { status: 'NOT_READY' as const, error: 'Booking was refunded' };
@@ -528,7 +591,10 @@ export async function resendBooking(bookingId: string, opts: { overrideEmail?: s
   const byName = new Map(categories.map((c) => [c.name, c.price]));
   const tickets = (booking.tickets_data || []).map((t) => ({
     ...t,
-    unitPrice: (t.categoryId !== undefined ? byId.get(t.categoryId) : undefined) ?? byName.get(t.categoryName) ?? 0,
+    // See above: a pass a coupon gave away is worth nothing whatever its category costs.
+    unitPrice: (t as { free?: boolean }).free
+      ? 0
+      : (t.categoryId !== undefined ? byId.get(t.categoryId) : undefined) ?? byName.get(t.categoryName) ?? 0,
   }));
   const attempts = (booking.email_attempts || 0) + 1;
   const at = new Date().toISOString();
@@ -555,8 +621,17 @@ export interface BookingView {
     ticketNumber: string;
     unitPrice: number;
     status: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED';
+    /** People this one pass admits at the gate. */
     groupSize: number;
     admitted: number;
+    /** Given by a coupon rather than bought, and the code that gave it. */
+    free: boolean;
+    couponCode?: string;
+    /** Bought as part of a group ticket, and which one. */
+    group?: boolean;
+    groupName?: string;
+    /** The seats one group pass stands for, so the buyer can see all of what they paid for. */
+    groupSeats?: string[];
     /** The signed link this pass's QR encodes. Built here because signing needs a server secret. */
     scanUrl: string;
   }[];
@@ -579,7 +654,7 @@ export async function loadBookingView(bookingId: string): Promise<(BookingView &
     event_id: string;
     status?: string;
     created_at?: string | null;
-    tickets_data: { categoryId?: string; categoryName: string; ticketNumber: string; status?: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED'; groupSize?: number; admitted?: number }[] | null;
+    tickets_data: { categoryId?: string; categoryName: string; ticketNumber: string; status?: 'ISSUED' | 'CHECKED_IN' | 'REFUNDED'; groupSize?: number; admitted?: number; free?: boolean; couponCode?: string; group?: boolean; groupName?: string; groupSeats?: string[] }[] | null;
   } | null;
   if (!booking) return null;
 
@@ -604,8 +679,8 @@ export async function loadBookingView(bookingId: string): Promise<(BookingView &
       priceByName.set(c.name, c.price);
     }
   }
-  const priceOf = (t: { categoryId?: string; categoryName: string }) =>
-    (t.categoryId !== undefined ? priceById.get(t.categoryId) : undefined) ?? priceByName.get(t.categoryName) ?? 0;
+  const priceOf = (t: { categoryId?: string; categoryName: string; free?: boolean }) =>
+    t.free ? 0 : (t.categoryId !== undefined ? priceById.get(t.categoryId) : undefined) ?? priceByName.get(t.categoryName) ?? 0;
 
   return {
     id: booking.id,
@@ -619,6 +694,11 @@ export async function loadBookingView(bookingId: string): Promise<(BookingView &
       categoryName: t.categoryName,
       ticketNumber: t.ticketNumber,
       unitPrice: priceOf(t),
+      free: t.free === true,
+      couponCode: t.couponCode,
+      group: t.group === true ? true : undefined,
+      groupName: t.groupName,
+      groupSeats: t.groupSeats,
       status: t.status || 'ISSUED',
       groupSize: groupSizeOf(t.groupSize),
       admitted: progressOf({ status: t.status || 'ISSUED', groupSize: t.groupSize, admitted: t.admitted }).admitted,
@@ -644,7 +724,7 @@ export async function renderBookingPdf(bookingId: string): Promise<{ base64: str
     bookingId: view.id,
     purchaserEmail: view.email || '',
     event: view.event,
-    tickets: view.tickets.map((t) => ({ categoryName: t.categoryName, ticketNumber: t.ticketNumber, unitPrice: t.unitPrice, status: t.status, groupSize: t.groupSize, admitted: t.admitted })),
+    tickets: view.tickets.map((t) => ({ categoryName: t.categoryName, ticketNumber: t.ticketNumber, unitPrice: t.unitPrice, status: t.status, groupSize: t.groupSize, admitted: t.admitted, free: t.free, couponCode: t.couponCode })),
     pointsApplied: view.pointsApplied,
     logoBase64: await fetchLogoBase64(baseUrl()),
     baseUrl: baseUrl(),

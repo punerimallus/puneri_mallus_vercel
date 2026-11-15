@@ -26,8 +26,8 @@ const GA_CAPACITY = 90;
 const VIP_CAPACITY = 20;
 
 const CATEGORIES: Record<string, WorldCategory> = {
-  cat_ga: { capacity: GA_CAPACITY, groupSize: 1, eventId: 'evt_rush' },
-  cat_vip: { capacity: VIP_CAPACITY, groupSize: 1, eventId: 'evt_rush' },
+  cat_ga: { capacity: GA_CAPACITY, eventId: 'evt_rush' },
+  cat_vip: { capacity: VIP_CAPACITY, eventId: 'evt_rush' },
 };
 
 /** Deterministic pseudo-randomness, so a failure is reproducible. */
@@ -120,7 +120,6 @@ describe(`${BUYERS} buyers at once`, () => {
             items: [{ categoryId: b.categoryId, qty: b.qty }],
             points: b.points,
             maxSingle: 7,
-            maxGroup: 2,
           });
           const order = w.orders.get(b.orderId)!;
           order.reservation_id = `res_${b.orderId}`;
@@ -274,7 +273,7 @@ describe(`${BUYERS} buyers at once`, () => {
         cart: [{ categoryId: 'cat_tiny', name: 'TINY', prefix: 'T', qty: 1, unitPrice: 100 }],
       })),
       buyers.map((b) => payment({ id: `p_${b.orderId}`, order_id: b.orderId, amount: 122904 })),
-      { cat_tiny: { capacity: 10, groupSize: 1, eventId: 'evt_tiny' } },
+      { cat_tiny: { capacity: 10, eventId: 'evt_tiny' } },
     );
 
     let won = 0;
@@ -283,7 +282,7 @@ describe(`${BUYERS} buyers at once`, () => {
       buyers.map(async (b) => {
         await Promise.resolve();
         try {
-          w.reserve({ reservationId: `r_${b.orderId}`, userId: b.userId, items: [{ categoryId: 'cat_tiny', qty: 1 }], maxSingle: 7, maxGroup: 2 });
+          w.reserve({ reservationId: `r_${b.orderId}`, userId: b.userId, items: [{ categoryId: 'cat_tiny', qty: 1 }], maxSingle: 7 });
           won++;
         } catch (e) {
           expect(e).toBeInstanceOf(SoldOutError);
@@ -308,7 +307,7 @@ describe(`${BUYERS} buyers at once`, () => {
     const w = makeWorld(
       [],
       [],
-      { cat_big: { capacity: 1000, groupSize: 1, eventId: 'evt_big' } },
+      { cat_big: { capacity: 1000, eventId: 'evt_big' } },
     );
     w.loyalty.greedy = 1000;
 
@@ -317,7 +316,7 @@ describe(`${BUYERS} buyers at once`, () => {
       tabs.map(async (id) => {
         await Promise.resolve();
         try {
-          w.reserve({ reservationId: id, userId: 'greedy', items: [{ categoryId: 'cat_big', qty: 1 }], maxSingle: 7, maxGroup: 2 });
+          w.reserve({ reservationId: id, userId: 'greedy', items: [{ categoryId: 'cat_big', qty: 1 }], maxSingle: 7 });
           accepted++;
         } catch (e) {
           expect(e).toBeInstanceOf(TicketLimitError);
@@ -330,7 +329,7 @@ describe(`${BUYERS} buyers at once`, () => {
   });
 
   it('one account spending the same points in a hundred tabs spends them once', async () => {
-    const w = makeWorld([], [], { cat_big: { capacity: 1000, groupSize: 1, eventId: 'evt_big' } });
+    const w = makeWorld([], [], { cat_big: { capacity: 1000, eventId: 'evt_big' } });
     w.loyalty.saver = 500;
 
     let accepted = 0;
@@ -338,7 +337,7 @@ describe(`${BUYERS} buyers at once`, () => {
       Array.from({ length: BUYERS }, (_, i) => `t_${i}`).map(async (id) => {
         await Promise.resolve();
         try {
-          w.reserve({ reservationId: id, userId: 'saver', items: [{ categoryId: 'cat_big', qty: 1 }], points: 500, maxSingle: 1000, maxGroup: 2 });
+          w.reserve({ reservationId: id, userId: 'saver', items: [{ categoryId: 'cat_big', qty: 1 }], points: 500, maxSingle: 1000 });
           accepted++;
         } catch (e) {
           expect(e).toBeInstanceOf(PointsUnavailableError);

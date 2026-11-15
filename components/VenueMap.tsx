@@ -38,7 +38,6 @@ export interface MapZone {
    * People admitted per pass. Anything above 1 is printed on the zone, because a group pass at
    * Rs.1200 and a single at Rs.1200 are otherwise the same label for very different things.
    */
-  admits?: number;
   /**
    * The category exists but is not on sale yet (an admin has it paused). Drawn like a sold-out
    * zone - unavailable, same hatch - but labelled so a buyer knows the room has a VIP block
@@ -162,7 +161,6 @@ export default function VenueMap({ layout, zones, onPick, activeId }: Props) {
             const runs = rowRuns(z.cells);
             const at = labelPoint(z.cells);
             const pickable = !soldOut && !!onPick;
-            const admits = Math.max(1, Math.floor(z.admits || 1));
             const box = boundsOf(z.cells);
             const badge = { x: box.x + box.w - 0.42, y: box.y + 0.42 };
 
@@ -255,9 +253,7 @@ export default function VenueMap({ layout, zones, onPick, activeId }: Props) {
                       ? 'COMING SOON'
                       : soldOut
                         ? 'SOLD OUT'
-                        : admits > 1
-                          ? `₹${formatAmount(z.price)} · ${admits} people`
-                          : `₹${formatAmount(z.price)}`}
+                        : `₹${formatAmount(z.price)}`}
                   </text>
                 </g>
 

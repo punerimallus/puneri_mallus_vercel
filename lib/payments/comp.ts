@@ -10,7 +10,6 @@
 // gate change had two code paths, and the one nobody tested would be the one a VIP turns up on.
 
 import { PaymentInputError, type CartLine } from './types';
-import { groupSizeOf } from './groups';
 import { ticketNumberValue } from './inventory';
 import { ticketNumberWidth } from './pricing';
 
@@ -32,7 +31,6 @@ export interface CompCategory {
   price: number;
   capacity: number | null;
   active?: boolean | null;
-  group_size?: number | null;
   /** Issued by an admin only; never shown on the public booking page. */
   comp_only?: boolean | null;
 }
@@ -129,7 +127,6 @@ export function checkCompRequest(input: CompRequest, categories: CompCategory[])
       throw new PaymentInputError(`"${cat.name}" is paused. Resume it in Inventory Control to issue passes from it.`);
     }
 
-    const groupSize = groupSizeOf(cat.group_size);
     lines.push({
       categoryId,
       name: cat.name,
@@ -138,7 +135,6 @@ export function checkCompRequest(input: CompRequest, categories: CompCategory[])
       // Zero: the pass is free, and this is the price the PDF receipt prints.
       unitPrice: 0,
       numberWidth: ticketNumberWidth(cat.capacity),
-      ...(groupSize > 1 ? { groupSize } : {}),
     });
     passes += qty;
     faceValue += (Number(cat.price) || 0) * qty;
@@ -176,9 +172,9 @@ export const compReservationId = (id: string): string => `comp_${id}`;
 export const isCompReservation = (reservationId: string | null | undefined): reservationId is string =>
   typeof reservationId === 'string' && reservationId.startsWith('comp_');
 
-/** How many people a grant actually admits, counting group passes properly. */
+/** How many people a grant admits. One per pass. */
 export function compAdmits(lines: CartLine[]): number {
-  return lines.reduce((n, l) => n + l.qty * groupSizeOf(l.groupSize), 0);
+  return lines.reduce((n, l) => n + l.qty, 0);
 }
 
 
