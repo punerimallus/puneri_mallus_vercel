@@ -23,6 +23,20 @@ import {
 } from './types';
 
 export const STALE_PROCESSING_MS = 5 * 60 * 1000;
+
+/**
+ * How old an unpaid order must be before "no payment at Razorpay" is read as abandonment.
+ *
+ * Matches the seat hold: until it lapses the buyer may genuinely still be on a bank page with
+ * nothing recorded yet, and calling that abandoned would take their seats mid-payment.
+ */
+export const ABANDONED_AFTER_MS = 15 * 60 * 1000;
+
+/** True when the order was created longer ago than `ms`. */
+const olderThan = (order: { created_at?: string }, ms: number, deps: { now(): Date }): boolean => {
+  const created = order.created_at ? new Date(order.created_at).getTime() : NaN;
+  return Number.isFinite(created) && deps.now().getTime() - created > ms;
+};
 export const MAX_EMAIL_ATTEMPTS = 5;
 
 export interface BookingInsert {
@@ -111,6 +125,25 @@ export function pickSettlingPayment(payments: GatewayPayment[]): GatewayPayment 
     payments.find((p) => p.status === 'authorized') ||
     null
   );
+}
+
+/**
+ * Is money still on its way for this order?
+ *
+ * The case this exists for: a buyer scans the UPI QR, approves it in their banking app, and
+ * closes the checkout window a second later. Razorpay has the attempt — but as a payment in
+ * `created`/`pending`, not yet captured, so pickSettlingPayment above reports nothing and the
+ * browser concludes "they cancelled". Releasing the seats then means the money lands a moment
+ * later with nowhere to go, and the buyer is auto-refunded for a ticket they thought they had
+ * bought.
+ *
+ * A UPI collect can sit pending for tens of seconds, far longer than the checkout window polls
+ * for. So anything that is not an outright FAILURE counts as live, and the seats stay put: the
+ * hold lapses on its own if the payment never completes, which costs a few minutes of stock
+ * rather than somebody's ticket.
+ */
+export function hasLivePaymentAttempt(payments: GatewayPayment[]): boolean {
+  return (payments || []).some((p) => p.status !== 'failed');
 }
 
 export function buildIssuedTickets(order: PaymentOrder, allocations: Allocation[]): IssuedTicket[] {
@@ -324,6 +357,15 @@ export async function fulfilOrder(
         status_reason: payment.error_description || 'Payment failed',
         razorpay_payment_id: payment.id,
       });
+    } else if (!payment && existing.status === 'CREATED' && olderThan(existing, ABANDONED_AFTER_MS, deps)) {
+      // Razorpay has no payment against this order at all, and its seat hold ran out long ago:
+      // the buyer opened the checkout and walked away without even trying to pay.
+      //
+      // Saying so matters. While the order sits at CREATED the sweeper treats it as "the money
+      // might still be coming" and will not touch its seats — correctly, because it cannot know
+      // otherwise. This is the one place that CAN know, because it has just asked. Marking it
+      // FAILED lets the seats go back on the next sweep instead of waiting for the backstop.
+      await deps.updateOrder(orderId, { status: 'FAILED', status_reason: 'No payment was attempted' });
     }
     return { outcome: 'NOT_PAID', order: existing, reason: payment?.error_description || undefined };
   }

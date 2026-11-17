@@ -28,10 +28,6 @@ export async function reconcilePayments(opts: { maxAgeDays?: number; limit?: num
   const db = supabaseAdmin();
   const summary: ReconcileSummary = { checked: 0, fulfilled: [], needsAttention: [], errors: [], emailsRetried: 0, emailsSent: 0, holdsExpired: 0 };
 
-  // Seats and points held by checkouts nobody finished. Cheap, and the only thing that keeps an
-  // abandoned cart from sitting on inventory indefinitely.
-  summary.holdsExpired = await expireStaleHolds({ rpc: (fn, args) => db.rpc(fn, args) }).catch(() => 0);
-
   const staleIso = new Date(now - STALE_PROCESSING_MS).toISOString();
   const { data: pending, error } = await db
     .from('payment_orders')
@@ -53,6 +49,17 @@ export async function reconcilePayments(opts: { maxAgeDays?: number; limit?: num
       summary.errors.push({ orderId: row.razorpay_order_id, error: e instanceof Error ? e.message : String(e) });
     }
   }
+
+  // Only NOW are the seats of unfinished checkouts given back.
+  //
+  // This used to run FIRST, and that ordering refunded a real buyer: it released the hold of an
+  // order it was about to fulfil in the same pass, and fulfilment then found the seats gone and
+  // auto-refunded ₹1074.35 to somebody who had paid (order_TzwewUnX87HTKb, 14 Nov). Sweeping
+  // after the loop means every order that could still be paid has already been checked against
+  // Razorpay and confirmed — and a CONFIRMED reservation is not reachable by the sweeper at all.
+  //
+  // Anything still held at this point either never reached Razorpay or was refused by it.
+  summary.holdsExpired = await expireStaleHolds({ rpc: (fn, args) => db.rpc(fn, args) }).catch(() => 0);
 
   const { data: unsent, error: unsentErr } = await db
     .from('payment_orders')

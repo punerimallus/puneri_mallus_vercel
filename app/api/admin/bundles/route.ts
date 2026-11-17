@@ -48,7 +48,53 @@ export async function GET(req: Request) {
 
   // A database without the bundle migration must not break the box office it sits on.
   if (error) return NextResponse.json({ bundles: [], ready: false });
-  return NextResponse.json({ bundles: data || [], ready: true });
+
+  const bundles = await withHoldBreakdown(db, data || []);
+  return NextResponse.json({ bundles, ready: true });
+}
+
+/**
+ * Split each offer's `sold` into what was PAID FOR and what is merely HELD.
+ *
+ * `sold` counts bundle references on seats, and a seat held by a checkout in flight is still a
+ * seat — it has to be, or two buyers could be sold the last unit of the same offer. But that
+ * makes the number read as a sale when it is only a hold, which on 2026-11-17 had a run of two
+ * reading "2 sold" after one purchase and one abandoned checkout.
+ *
+ * Both numbers are reported so the card can say which is which. Nothing here changes the cap:
+ * held units still count against the run, exactly as before.
+ */
+async function withHoldBreakdown(
+  db: ReturnType<typeof supabaseAdmin>,
+  bundles: { id: string; sold?: number | null }[],
+): Promise<unknown[]> {
+  if (bundles.length === 0) return bundles;
+
+  // One read of the seats carrying any of these offers' references, with the state of the
+  // reservation holding them.
+  const { data: seats, error } = await db
+    .from('ticket_numbers')
+    .select('bundle_ref, reservation_id, inventory_reservations!inner(state)')
+    .not('bundle_ref', 'is', null);
+
+  // The breakdown is a nicety; failing to read it must never hide the offers themselves.
+  if (error || !seats) return bundles.map((b) => ({ ...b, paid: null, held: null }));
+
+  const paid = new Map<string, Set<string>>();
+  const held = new Map<string, Set<string>>();
+  for (const row of seats as unknown as { bundle_ref: string; inventory_reservations: { state: string } }[]) {
+    const offerId = String(row.bundle_ref).split(':')[0];
+    const confirmed = row.inventory_reservations?.state === 'CONFIRMED';
+    const bucket = confirmed ? paid : held;
+    if (!bucket.has(offerId)) bucket.set(offerId, new Set());
+    bucket.get(offerId)!.add(row.bundle_ref);
+  }
+
+  return bundles.map((b) => ({
+    ...b,
+    paid: paid.get(String(b.id))?.size ?? 0,
+    held: held.get(String(b.id))?.size ?? 0,
+  }));
 }
 
 export async function POST(req: Request) {

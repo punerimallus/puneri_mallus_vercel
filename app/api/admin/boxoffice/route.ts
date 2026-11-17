@@ -28,6 +28,26 @@ export async function GET(req: Request) {
         .eq('event_id', eventId)
         .order('price', { ascending: false });
 
+      // Seats a checkout is holding right now, per category.
+      //
+      // `sold` on a category counts every seat taken, held ones included — it has to, or two
+      // buyers could be sold the same seat. But that makes the dashboard read high whenever
+      // somebody is at the payment screen, and read WRONG for as long as a dead checkout's
+      // hold lasts: on 17 Nov REGULAR showed 83 of 100 gone when 72 had actually been bought.
+      //
+      // So the held figure is reported separately and the card shows both. The number an
+      // organiser is asked at the door — how many are really sold — stops depending on who
+      // happens to have a checkout open.
+      const heldByCategory = new Map<string, number>();
+      const { data: heldSeats } = await supabaseAdmin
+        .from('ticket_numbers')
+        .select('category_id, inventory_reservations!inner(state)')
+        .eq('inventory_reservations.state', 'HELD');
+      for (const row of (heldSeats || []) as unknown as { category_id: string }[]) {
+        const key = String(row.category_id);
+        heldByCategory.set(key, (heldByCategory.get(key) ?? 0) + 1);
+      }
+
       const { data: bookings } = await supabaseAdmin
         .from('ticket_bookings')
         .select('*')
@@ -85,7 +105,9 @@ export async function GET(req: Request) {
       const grantByBooking = new Map((grants || []).map((g) => [String(g.booking_id), g]));
 
       return NextResponse.json({
-        categories: categories || [],
+        // `held` is how many of this type's taken seats belong to a checkout still in progress
+        // rather than to a sale. See heldByCategory above.
+        categories: (categories || []).map((c) => ({ ...c, held: heldByCategory.get(String(c.id)) ?? 0 })),
         bookings: enrichedBookings.map((b) => {
           const grant = grantByBooking.get(String(b.id));
           return {

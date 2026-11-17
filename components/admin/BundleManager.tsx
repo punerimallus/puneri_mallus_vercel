@@ -26,6 +26,9 @@ interface Bundle {
   max_bundles: number | null;
   sold: number;
   active: boolean;
+  /** Of `sold`, how many were actually paid for and how many are only held by a live checkout. */
+  paid?: number | null;
+  held?: number | null;
 }
 
 interface Props {
@@ -305,6 +308,14 @@ export default function BundleManager({ eventId, categories, onChanged }: Props)
                   <span className="px-2.5 py-1 rounded-lg border border-white/10 text-zinc-400">
                     {b.sold || 0} sold{left !== null ? ` · ${left} left` : ''}
                   </span>
+                  {/* A checkout in flight holds its unit, and the hold counts against the run —
+                      it has to, or two buyers could be sold the same last one. Saying so stops
+                      "2 sold" reading as two sales when one is a cart nobody has paid for. */}
+                  {(b.held || 0) > 0 && (
+                    <span className="px-2.5 py-1 rounded-lg border border-sky-500/40 bg-sky-500/10 text-sky-400">
+                      {b.paid || 0} paid · {b.held} held in checkout
+                    </span>
+                  )}
                   {!b.active && <span className="px-2.5 py-1 rounded-lg border border-amber-500/30 text-amber-400">Paused</span>}
                   {/* Said separately from a hand pause, because they undo differently: this one
                       lifts itself the moment seats come back from a refund, a void or an

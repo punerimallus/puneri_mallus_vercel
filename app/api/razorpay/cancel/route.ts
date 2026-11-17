@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getRequestUser } from '@/lib/admin';
-import { getOrder, releaseReservation, supabaseAdmin, updateOrderIfStatus } from '@/lib/payments/server';
+import { fulfilmentDeps, getOrder, releaseReservation, supabaseAdmin, updateOrderIfStatus } from '@/lib/payments/server';
+import { hasLivePaymentAttempt } from '@/lib/payments/fulfil';
 import { RATE_RULES, rateKey, rateLimit } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
@@ -37,6 +38,29 @@ export async function POST(req: Request) {
   // Only an untouched order. Anything else means money may be in flight.
   if (order.status !== 'CREATED') {
     return NextResponse.json({ released: false, status: order.status });
+  }
+
+  // Ask Razorpay before believing the browser.
+  //
+  // "The window closed" is not the same as "nobody paid". Somebody who scans the UPI QR,
+  // approves it in their banking app and then closes the window has a payment ALREADY ON ITS
+  // WAY — sitting at Razorpay as created/pending, which is invisible to the captured-or-
+  // authorized check the status poll uses. Releasing their seats here means the money arrives a
+  // moment later with nowhere to go, and they are auto-refunded for a ticket they believe they
+  // bought.
+  //
+  // So anything that is not an outright failed attempt stops the release. The seats then go
+  // back on the hold's own expiry instead of instantly, which costs a few minutes of stock
+  // rather than somebody's ticket. A Razorpay outage is treated the same way: if we cannot
+  // find out, we do not take the seats.
+  try {
+    const attempts = await fulfilmentDeps.fetchOrderPayments(orderId);
+    if (hasLivePaymentAttempt(attempts)) {
+      return NextResponse.json({ released: false, status: 'PAYMENT_IN_FLIGHT' });
+    }
+  } catch (e) {
+    console.error('CANCEL_PAYMENT_CHECK_FAILED:', e);
+    return NextResponse.json({ released: false, status: 'UNVERIFIED' });
   }
 
   const moved = await updateOrderIfStatus(orderId, ['CREATED'], {

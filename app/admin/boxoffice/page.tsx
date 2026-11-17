@@ -354,8 +354,21 @@ export default function BoxOfficeDashboard() {
                     
                     <div className="flex justify-between items-end border-t border-white/5 pt-4">
                       <div>
-                        <p className="text-[9px] text-zinc-600 font-black uppercase tracking-widest mb-1">Seats Taken</p>
-                        <p className="text-2xl font-black text-white">{seatsInUse(cat)} <span className="text-sm text-zinc-600">/ {cat.capacity}</span></p>
+                        {/* SOLD, not "taken". The counter behind this includes seats a checkout
+                            is holding, and an organiser asked how many are sold needs the number
+                            that money has been paid for — the held ones are called out below
+                            rather than quietly folded in. */}
+                        <p className="text-[9px] text-zinc-600 font-black uppercase tracking-widest mb-1">
+                          {(cat.held || 0) > 0 ? 'Sold' : 'Seats Taken'}
+                        </p>
+                        <p className="text-2xl font-black text-white">
+                          {seatsInUse(cat) - (cat.held || 0)} <span className="text-sm text-zinc-600">/ {cat.capacity}</span>
+                        </p>
+                        {(cat.held || 0) > 0 && (
+                          <p className="text-[9px] font-bold uppercase tracking-widest mt-1 text-sky-400">
+                            + {cat.held} held in checkout · not sold yet
+                          </p>
+                        )}
                         {(cat.released || 0) > 0 && <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest mt-1">{Math.min(cat.released, cat.sold)} refunded, seats freed</p>}
                       </div>
                       <div className={`text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-full ${cat.active ? 'bg-white/5 text-zinc-400' : 'bg-brandRed text-white animate-pulse'}`}>
